@@ -1,0 +1,8 @@
+{
+  "name": "KCA- MMS-DB",
+  "description": "Comprehensive membership data management, ID card generator with QR verification, AED fee tracking, admin account management, and offline/cloud backups for Kairali Cultural Association Fujairah.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

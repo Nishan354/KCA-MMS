@@ -1,0 +1,225 @@
+@import "tailwindcss";
+
+:root {
+  --color-primary: #881337;
+  --color-primary-hover: #700c2b;
+  --color-primary-light: #fff1f2;
+  --color-primary-border: #9f1239;
+  --color-primary-accent: #f59e0b;
+  --color-primary-rgb: 136, 19, 55;
+  --color-surface-bg: #f8fafc;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-surface-bg, #f8fafc);
+    color: #0f172a;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    letter-spacing: -0.015em;
+  }
+
+  .font-display {
+    font-family: 'Outfit', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.025em;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-feature-settings: "tnum";
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+}
+
+.theme-bg-primary {
+  background-color: var(--color-primary, #881337) !important;
+}
+
+.theme-bg-hover:hover {
+  background-color: var(--color-primary-hover, #700c2b) !important;
+}
+
+.theme-border-primary {
+  border-color: var(--color-primary, #881337) !important;
+}
+
+.theme-text-primary {
+  color: var(--color-primary, #881337) !important;
+}
+
+/* Modern, elegant card surfaces */
+.sleek-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
+}
+
+.sleek-card-hover {
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sleek-card-hover:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.06), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+  transform: translateY(-1px);
+}
+
+.sleek-surface {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+/* Subtle focus indicators */
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--color-primary, #881337);
+  outline-offset: 1px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* Break out modal dialog for full A4 page printing */
+  .fixed.inset-0 {
+    position: static !important;
+    background: transparent !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    max-height: none !important;
+    width: 100% !important;
+    height: auto !important;
+    display: block !important;
+  }
+
+  .batch-print-modal-container {
+    max-width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  .print-card-sheet {
+    display: grid !important;
+    grid-template-columns: repeat(2, 85.6mm) !important;
+    column-gap: 10mm !important;
+    row-gap: 6mm !important;
+    justify-content: center !important;
+    padding: 6mm 0 !important;
+    margin: 0 auto !important;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    width: 181.2mm !important;
+    max-width: 100% !important;
+    page-break-inside: auto !important;
+  }
+
+  .batch-card-cell {
+    width: 85.6mm !important;
+    height: 54.0mm !important;
+    max-width: 85.6mm !important;
+    max-height: 54.0mm !important;
+    overflow: hidden !important;
+    position: relative !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+    border: 1px dashed #cbd5e1 !important;
+  }
+
+  .batch-card-cell .id-card-print-target {
+    width: 480px !important;
+    height: 300px !important;
+    max-width: none !important;
+    max-height: none !important;
+    transform: scale(0.674) !important;
+    transform-origin: top left !important;
+    box-shadow: none !important;
+    border: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .id-card-print-target {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+}
+
+/* Crisp rendering of CR80 ID Cards */
+.id-card-container {
+  width: 3.375in;
+  height: 2.125in;
+  aspect-ratio: 85.6 / 53.98;
+}
+
+.id-card-large {
+  width: 420px;
+  height: 265px;
+}
