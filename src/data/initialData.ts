@@ -11,11 +11,12 @@ export const INITIAL_PORTAL_CONFIG: PortalBrandingConfig = {
   customLogoUrl: null,
 };
 
+// Plain text password matching login component check
 export const INITIAL_ADMIN_ACCOUNTS = [
   {
     id: 'usr_admin_main',
     username: 'admin',
-    passwordHash: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', // SHA-256 for 12345 or handle authentication via runtime state
+    password: '12345',
     role: 'admin',
     createdAt: new Date().toISOString(),
   },
