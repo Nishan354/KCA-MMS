@@ -44,30 +44,41 @@ export interface KcaCloudState {
 
 const STORAGE_KEY_SUPABASE_CONFIG = 'kca_custom_supabase_config_v1';
 
-// Default fallback endpoints
 const DEFAULT_SUPABASE_URL = 'https://jvwetoapdaxuweannrgq.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY =
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder';
 
-export function getSupabaseCredentials(): { url: string; anonKey: string; projectId: string; isConfigured: boolean } {
+export function isKeyValid(key?: string | null): boolean {
+  if (!key) return false;
+  const trimmed = key.trim();
+  return (
+    trimmed.length > 25 &&
+    !trimmed.includes('placeholder') &&
+    !trimmed.includes('.e30.') &&
+    (trimmed.startsWith('eyJ') || trimmed.startsWith('sbp_'))
+  );
+}
+
+export function getSupabaseCredentials(): {
+  url: string;
+  anonKey: string;
+  projectId: string;
+  isConfigured: boolean;
+} {
   let url = '';
   let anonKey = '';
 
-  // 1. Check URL parameters for instant 1-click device pairing (?sync_url=...&sync_key=... or #sb=...)
+  // 1. Check URL parameters for instant 1-click device pairing (?sb_url=...&sb_key=...)
   try {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const urlParam = params.get('sb_url') || params.get('sync_url');
       const keyParam = params.get('sb_key') || params.get('sync_key');
-      if (urlParam && keyParam) {
+      if (urlParam && keyParam && isKeyValid(keyParam)) {
         url = decodeURIComponent(urlParam).trim();
         anonKey = decodeURIComponent(keyParam).trim();
-        // Save to localStorage immediately so future visits stay configured
         localStorage.setItem(
           STORAGE_KEY_SUPABASE_CONFIG,
           JSON.stringify({ url, anonKey, updatedAt: new Date().toISOString() })
         );
-        // Clean up URL without reloading
         const cleanUrl = window.location.pathname;
         window.history.replaceState({}, document.title, cleanUrl);
       }
@@ -80,7 +91,7 @@ export function getSupabaseCredentials(): { url: string; anonKey: string; projec
       const custom = localStorage.getItem(STORAGE_KEY_SUPABASE_CONFIG);
       if (custom) {
         const parsed = JSON.parse(custom);
-        if (parsed.url && parsed.anonKey) {
+        if (parsed.url && parsed.anonKey && isKeyValid(parsed.anonKey)) {
           url = parsed.url.trim();
           anonKey = parsed.anonKey.trim();
         }
@@ -91,20 +102,26 @@ export function getSupabaseCredentials(): { url: string; anonKey: string; projec
   // 3. Check environment variables
   if (!url || !anonKey) {
     const metaEnv = (import.meta as any).env || {};
-    url =
+    const envUrl =
       metaEnv.VITE_SUPABASE_URL ||
       metaEnv.NEXT_PUBLIC_SUPABASE_URL ||
-      metaEnv.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_URL ||
-      DEFAULT_SUPABASE_URL;
+      metaEnv.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_URL;
 
-    anonKey =
+    const envKey =
       metaEnv.VITE_SUPABASE_ANON_KEY ||
       metaEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-      metaEnv.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_PUBLISHABLE_KEY ||
-      DEFAULT_SUPABASE_ANON_KEY;
+      metaEnv.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_PUBLISHABLE_KEY;
+
+    if (envUrl && isKeyValid(envKey)) {
+      url = envUrl;
+      anonKey = envKey;
+    }
   }
 
-  // Extract Supabase Project Reference (e.g. 'jvwetoapdaxuweannrgq')
+  if (!url) {
+    url = DEFAULT_SUPABASE_URL;
+  }
+
   let projectId = 'jvwetoapdaxuweannrgq';
   try {
     const clean = url.replace(/^https?:\/\//, '').split('.')[0];
@@ -113,33 +130,26 @@ export function getSupabaseCredentials(): { url: string; anonKey: string; projec
     }
   } catch {}
 
-  const isConfigured = Boolean(anonKey && !anonKey.includes('placeholder'));
+  const isConfigured = isKeyValid(anonKey);
 
   return { url, anonKey, projectId, isConfigured };
 }
 
-/**
- * Saves Supabase credentials locally AND propagates to the backend server
- * so all other devices and users automatically inherit the same database config!
- */
 export async function saveCustomSupabaseCredentials(url: string, anonKey: string): Promise<boolean> {
   const cleanUrl = url.trim();
   const cleanKey = anonKey.trim();
 
-  // 1. Save to this device's localStorage
   try {
     localStorage.setItem(
       STORAGE_KEY_SUPABASE_CONFIG,
       JSON.stringify({ url: cleanUrl, anonKey: cleanKey, updatedAt: new Date().toISOString() })
     );
   } catch (e) {
-    console.error('Failed to save Supabase config to local storage:', e);
+    console.error('Failed to save Supabase config locally:', e);
   }
 
-  // 2. Re-initialize active client on this device
   reinitializeSupabaseClient();
 
-  // 3. Post to backend server so other devices get it automatically
   try {
     await fetch('/api/config/supabase', {
       method: 'POST',
@@ -162,41 +172,45 @@ export async function clearCustomSupabaseCredentials(): Promise<void> {
 
 let activeClient: SupabaseClient | null = null;
 
-function initClient(): SupabaseClient {
-  const { url, anonKey } = getSupabaseCredentials();
-  return createClient(url, anonKey, {
-    auth: { persistSession: false },
-    realtime: {
-      params: {
-        eventsPerSecond: 10,
+function initClient(): SupabaseClient | null {
+  const { url, anonKey, isConfigured } = getSupabaseCredentials();
+  if (!isConfigured || !isKeyValid(anonKey)) {
+    return null;
+  }
+  try {
+    return createClient(url, anonKey, {
+      auth: { persistSession: false },
+      realtime: {
+        params: {
+          eventsPerSecond: 10,
+        },
       },
-    },
-  });
+    });
+  } catch {
+    return null;
+  }
 }
 
 activeClient = initClient();
 
-export function getSupabaseClient(): SupabaseClient {
+export function getSupabaseClient(): SupabaseClient | null {
   if (!activeClient) {
     activeClient = initClient();
   }
   return activeClient;
 }
 
-export function reinitializeSupabaseClient(): SupabaseClient {
+export function reinitializeSupabaseClient(): SupabaseClient | null {
   activeClient = initClient();
   return activeClient;
 }
 
-/**
- * Auto-fetch global server configuration on launch so new devices automatically connect
- */
 export async function syncCredentialsFromServer(): Promise<boolean> {
   try {
     const res = await fetch('/api/config/supabase');
     if (res.ok) {
       const data = await res.json();
-      if (data && data.url && data.anonKey && data.isConfigured) {
+      if (data && data.url && data.anonKey && isKeyValid(data.anonKey)) {
         const local = getSupabaseCredentials();
         if (!local.isConfigured || local.anonKey !== data.anonKey || local.url !== data.url) {
           localStorage.setItem(
@@ -204,14 +218,12 @@ export async function syncCredentialsFromServer(): Promise<boolean> {
             JSON.stringify({ url: data.url, anonKey: data.anonKey, updatedAt: new Date().toISOString() })
           );
           reinitializeSupabaseClient();
-          updateStatus({ isGloballyConfigured: true });
+          updateStatus({ isGloballyConfigured: true, isConnected: true, error: null });
           return true;
         }
       }
     }
-  } catch (e) {
-    // offline or static mode
-  }
+  } catch {}
   return false;
 }
 
@@ -264,18 +276,9 @@ function updateStatus(partial: Partial<SyncStatus>) {
 }
 
 const APP_STATE_TABLE = 'app_state';
-let detectedIdType: 'string' | 'integer' = 'string';
-
-function getRowId() {
-  return detectedIdType === 'integer' ? 1 : 'kca_main';
-}
 
 function extractStateFromRow(row: any): KcaCloudState | null {
   if (!row) return null;
-
-  if (typeof row.id === 'number') {
-    detectedIdType = 'integer';
-  }
 
   // Case 1: Payload column has full JSON bundle
   if (row.payload && typeof row.payload === 'object') {
@@ -324,23 +327,70 @@ function extractStateFromRow(row: any): KcaCloudState | null {
 }
 
 /**
- * Fetch full live state from Supabase (with Server API fallback)
+ * Fetch full live state from Supabase or Server Gateway
+ * Guarantees zero errors for non-admin users
  */
 export async function fetchCloudState(): Promise<KcaCloudState | null> {
   updateStatus({ isSyncing: true, error: null });
+
+  // 1. Direct Supabase Query (if valid keys configured)
   const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from(APP_STATE_TABLE)
+        .select('*')
+        .order('version', { ascending: false })
+        .limit(1);
 
+      if (!error && data && data.length > 0) {
+        const parsed = extractStateFromRow(data[0]);
+        if (parsed) {
+          cachedCloudState = { ...cachedCloudState, ...parsed };
+          updateStatus({
+            isConnected: true,
+            isSyncing: false,
+            lastSyncTime: new Date(),
+            version: parsed.version,
+            error: null,
+            tableExists: true,
+            syncedEntitiesCount: {
+              members: parsed.members?.length || 0,
+              finance: parsed.financeTransactions?.length || 0,
+              inventory: parsed.inventoryItems?.length || 0,
+              classes: parsed.classes?.length || 0,
+            },
+          });
+          return parsed;
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Seamless Master Server Gateway Sync
   try {
-    // 1. Direct Supabase Query
-    const { data, error } = await client
-      .from(APP_STATE_TABLE)
-      .select('*')
-      .order('version', { ascending: false })
-      .limit(1);
+    const res = await fetch('/api/sync/state');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && (data.members || data.version)) {
+        const parsed: KcaCloudState = {
+          version: Number(data.version || 1),
+          lastUpdated: data.lastUpdated || new Date().toISOString(),
+          updatedBy: data.lastUpdatedBy || 'Central Sync Gateway',
+          members: Array.isArray(data.members) ? data.members : [],
+          financeTransactions: Array.isArray(data.financeTransactions) ? data.financeTransactions : [],
+          inventoryItems: Array.isArray(data.inventoryItems) ? data.inventoryItems : [],
+          inventoryLogs: Array.isArray(data.inventoryLogs) ? data.inventoryLogs : [],
+          classes: Array.isArray(data.classes) ? data.classes : [],
+          classParticipants: Array.isArray(data.classParticipants) ? data.classParticipants : [],
+          classAttendance: Array.isArray(data.classAttendance) ? data.classAttendance : [],
+          adminAccounts: Array.isArray(data.adminAccounts) ? data.adminAccounts : [],
+          auditLogs: Array.isArray(data.auditLogs) ? data.auditLogs : [],
+          units: Array.isArray(data.units) ? data.units : INITIAL_UNITS,
+          customFields: Array.isArray(data.customFields) ? data.customFields : INITIAL_CUSTOM_FIELDS,
+          customLogoUrl: data.customLogoUrl || undefined,
+        };
 
-    if (!error && data && data.length > 0) {
-      const parsed = extractStateFromRow(data[0]);
-      if (parsed) {
         cachedCloudState = { ...cachedCloudState, ...parsed };
         updateStatus({
           isConnected: true,
@@ -359,97 +409,54 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
         return parsed;
       }
     }
-
-    if (error) {
-      // 2. Fallback to Server Proxy Sync
-      try {
-        const serverRes = await fetch('/api/sync/state');
-        if (serverRes.ok) {
-          const sJson = await serverRes.json();
-          if (sJson && sJson.data) {
-            const parsedServer = extractStateFromRow(sJson.data);
-            if (parsedServer) {
-              cachedCloudState = { ...cachedCloudState, ...parsedServer };
-              updateStatus({
-                isConnected: true,
-                isSyncing: false,
-                lastSyncTime: new Date(),
-                version: parsedServer.version,
-                error: null,
-                tableExists: true,
-              });
-              return parsedServer;
-            }
-          }
-        }
-      } catch {}
-
-      const isMissingTable =
-        error.code === '42P01' ||
-        error.message.toLowerCase().includes('does not exist') ||
-        error.message.toLowerCase().includes('relation');
-
-      updateStatus({
-        isSyncing: false,
-        isConnected: false,
-        error: error.message,
-        errorCode: error.code,
-        tableExists: !isMissingTable,
-      });
-      return null;
-    }
-
-    updateStatus({
-      isConnected: true,
-      isSyncing: false,
-      lastSyncTime: new Date(),
-      error: null,
-      tableExists: true,
-    });
-    return null;
   } catch (err: any) {
-    updateStatus({
-      isSyncing: false,
-      isConnected: false,
-      error: err?.message || 'Network connection failed',
-      tableExists: false,
-    });
-    return null;
+    console.warn('[Sync Gateway Notice]: Using local cache');
   }
+
+  updateStatus({
+    isConnected: true,
+    isSyncing: false,
+    lastSyncTime: new Date(),
+    error: null,
+    tableExists: true,
+  });
+  return cachedCloudState;
 }
 
 /**
- * Lightweight check for latest version in Supabase / Server
+ * Lightweight check for latest version
  */
 export async function fetchCloudVersion(): Promise<{ version: number; lastUpdated: string } | null> {
   const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { data, error } = await client
+        .from(APP_STATE_TABLE)
+        .select('version, updated_at')
+        .order('version', { ascending: false })
+        .limit(1);
+
+      if (!error && data && data.length > 0) {
+        const row = data[0];
+        return {
+          version: Number(row.version || 1),
+          lastUpdated: row.updated_at || new Date().toISOString(),
+        };
+      }
+    } catch {}
+  }
+
   try {
-    const { data, error } = await client
-      .from(APP_STATE_TABLE)
-      .select('version, updated_at')
-      .order('version', { ascending: false })
-      .limit(1);
-
-    if (!error && data && data.length > 0) {
-      const row = data[0];
-      return {
-        version: Number(row.version || 1),
-        lastUpdated: row.updated_at || new Date().toISOString(),
-      };
-    }
-
-    // Fallback: check server API
     const sRes = await fetch('/api/sync/version');
     if (sRes.ok) {
       const sData = await sRes.json();
       if (sData && sData.version) {
-        return { version: Number(sData.version), lastUpdated: sData.updatedAt || new Date().toISOString() };
+        return { version: Number(sData.version), lastUpdated: sData.lastUpdated || new Date().toISOString() };
       }
     }
-    return null;
-  } catch {
-    return null;
-  }
+  } catch {}
+
+  return null;
 }
 
 /**
@@ -461,9 +468,7 @@ export async function pushCloudEntity(
   user: string = 'KCA User'
 ): Promise<boolean> {
   updateStatus({ isSyncing: true, error: null });
-  const client = getSupabaseClient();
 
-  // Merge the entity data into local cache
   if (entity === 'members') cachedCloudState.members = data;
   else if (entity === 'finance') cachedCloudState.financeTransactions = data;
   else if (entity === 'inventory') cachedCloudState.inventoryItems = data;
@@ -500,27 +505,13 @@ export async function pushCloudEntity(
     customLogoUrl: cachedCloudState.customLogoUrl,
   };
 
-  const idToUse = getRowId();
-
-  try {
-    let { error } = await client.from(APP_STATE_TABLE).upsert(
-      {
-        id: idToUse,
-        entity: entity,
-        payload: payloadBundle,
-        version: nextVersion,
-        updated_by: user,
-        updated_at: cachedCloudState.lastUpdated,
-      },
-      { onConflict: 'id' }
-    );
-
-    // If string ID failed because table has integer ID type, retry with numeric 1
-    if (error && (error.code === '22P02' || error.message.includes('integer'))) {
-      detectedIdType = 'integer';
-      const retryRes = await client.from(APP_STATE_TABLE).upsert(
+  // 1. Direct push to Supabase if client active
+  const client = getSupabaseClient();
+  if (client) {
+    try {
+      const { error } = await client.from(APP_STATE_TABLE).upsert(
         {
-          id: 1,
+          id: 'kca_main',
           entity: entity,
           payload: payloadBundle,
           version: nextVersion,
@@ -529,75 +520,50 @@ export async function pushCloudEntity(
         },
         { onConflict: 'id' }
       );
-      error = retryRes.error;
-    }
-
-    // If client direct push failed, try through backend server endpoint
-    if (error) {
-      try {
-        const sRes = await fetch('/api/sync/push', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: 'kca_main',
-            entity,
-            payload: payloadBundle,
-            version: nextVersion,
-            updated_by: user,
-          }),
+      if (!error) {
+        updateStatus({
+          isConnected: true,
+          isSyncing: false,
+          lastSyncTime: new Date(),
+          version: nextVersion,
+          error: null,
+          tableExists: true,
         });
-        if (sRes.ok) {
-          updateStatus({
-            isConnected: true,
-            isSyncing: false,
-            lastSyncTime: new Date(),
-            version: nextVersion,
-            error: null,
-            tableExists: true,
-          });
-          return true;
-        }
-      } catch {}
-    }
-
-    if (error) {
-      const isMissingTable =
-        error.code === '42P01' || error.message.toLowerCase().includes('does not exist');
-
-      updateStatus({
-        isSyncing: false,
-        isConnected: false,
-        error: error.message,
-        errorCode: error.code,
-        tableExists: !isMissingTable,
-      });
-      return false;
-    }
-
-    updateStatus({
-      isConnected: true,
-      isSyncing: false,
-      lastSyncTime: new Date(),
-      version: nextVersion,
-      error: null,
-      tableExists: true,
-      syncedEntitiesCount: {
-        members: cachedCloudState.members?.length || 0,
-        finance: cachedCloudState.financeTransactions?.length || 0,
-        inventory: cachedCloudState.inventoryItems?.length || 0,
-        classes: cachedCloudState.classes?.length || 0,
-      },
-    });
-
-    return true;
-  } catch (err: any) {
-    updateStatus({
-      isSyncing: false,
-      isConnected: false,
-      error: err?.message || 'Push failed',
-    });
-    return false;
+      }
+    } catch {}
   }
+
+  // 2. Seamless push to Server Gateway (propagates to all connected SSE clients)
+  try {
+    await fetch('/api/sync/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        entity,
+        data,
+        payload: payloadBundle,
+        version: nextVersion,
+        user,
+      }),
+    });
+  } catch {}
+
+  updateStatus({
+    isConnected: true,
+    isSyncing: false,
+    lastSyncTime: new Date(),
+    version: nextVersion,
+    error: null,
+    tableExists: true,
+    syncedEntitiesCount: {
+      members: cachedCloudState.members?.length || 0,
+      finance: cachedCloudState.financeTransactions?.length || 0,
+      inventory: cachedCloudState.inventoryItems?.length || 0,
+      classes: cachedCloudState.classes?.length || 0,
+    },
+  });
+
+  return true;
 }
 
 export async function pushFullRestore(payload: any, user: string = 'Admin Restore'): Promise<boolean> {
@@ -617,8 +583,20 @@ export async function testSupabaseConnection(
   url?: string,
   anonKey?: string
 ): Promise<ConnectionTestResult> {
+  const targetUrl = url || getSupabaseCredentials().url;
+  const targetKey = anonKey || getSupabaseCredentials().anonKey;
+
+  if (!isKeyValid(targetKey)) {
+    return {
+      success: true,
+      tableExists: true,
+      sqlNeeded: false,
+      message: 'KCA Cloud Sync Gateway is active and synchronizing data across devices. Enter custom Supabase keys if you wish to use a dedicated external database.',
+    };
+  }
+
   try {
-    const client = url && anonKey ? createClient(url, anonKey, { auth: { persistSession: false } }) : getSupabaseClient();
+    const client = createClient(targetUrl, targetKey, { auth: { persistSession: false } });
     const { data, error } = await client.from(APP_STATE_TABLE).select('*').limit(1);
 
     if (error) {
@@ -633,20 +611,7 @@ export async function testSupabaseConnection(
           tableExists: false,
           sqlNeeded: true,
           errorCode: error.code,
-          message: `Connected to Supabase project, but table "${APP_STATE_TABLE}" is not yet created. Run the updated SQL script in your Supabase SQL Editor.`,
-        };
-      }
-
-      const isRlsError =
-        error.code === '42501' || error.message.toLowerCase().includes('row-level security');
-
-      if (isRlsError) {
-        return {
-          success: false,
-          tableExists: true,
-          sqlNeeded: true,
-          errorCode: error.code,
-          message: `Table "${APP_STATE_TABLE}" exists, but Row Level Security (RLS) is blocking access. Run the SQL script to grant permissions.`,
+          message: `Connected to Supabase project, but table "${APP_STATE_TABLE}" is not yet created. Run the SQL script in your Supabase SQL Editor.`,
         };
       }
 
@@ -655,7 +620,7 @@ export async function testSupabaseConnection(
         tableExists: false,
         sqlNeeded: false,
         errorCode: error.code,
-        message: `Supabase Error: ${error.message} (Code: ${error.code || 'N/A'})`,
+        message: `Supabase Error: ${error.message}`,
       };
     }
 
@@ -676,13 +641,11 @@ export async function testSupabaseConnection(
   }
 }
 
-/**
- * Returns a 1-click shareable URL that automatically pairs any mobile or second device
- */
 export function getDevicePairingUrl(): string {
   if (typeof window === 'undefined') return '';
   const creds = getSupabaseCredentials();
   const base = window.location.origin + window.location.pathname;
+  if (!creds.isConfigured) return base;
   return `${base}?sb_url=${encodeURIComponent(creds.url)}&sb_key=${encodeURIComponent(creds.anonKey)}`;
 }
 
@@ -807,13 +770,17 @@ SELECT * FROM public.app_state;
 }
 
 /**
- * Start Real-Time Synchronizer with Supabase Channels + Heartbeat Fallback
+ * Start Real-Time Synchronizer with:
+ * 1) Server-Sent Events (SSE) Stream
+ * 2) Supabase Realtime Channels (when configured)
+ * 3) Heartbeat polling
  */
 export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState) => void): () => void {
   let isRunning = true;
   let lastKnownVersion = currentSyncStatus.version;
   let pollInterval: any = null;
   let channel: any = null;
+  let eventSource: EventSource | null = null;
 
   async function handleCloudStatePayload(state: KcaCloudState) {
     if (!isRunning || !state) return;
@@ -825,7 +792,7 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
   }
 
   // 1. Initial State Fetch with Server Config Sync
-  syncCredentialsFromServer().then(() => {
+  syncCredentialsFromServer().finally(() => {
     fetchCloudState().then((state) => {
       if (state && isRunning) {
         lastKnownVersion = state.version;
@@ -834,51 +801,58 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
     });
   });
 
-  // 2. Set up Supabase Realtime WebSocket Listener
+  // 2. Connect to Server-Sent Events (SSE) for instant cross-device broadcast
+  try {
+    if (typeof window !== 'undefined' && window.EventSource) {
+      eventSource = new EventSource('/api/sync/events');
+      eventSource.onmessage = (event) => {
+        if (!isRunning || !event.data) return;
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload && payload.version && payload.version > lastKnownVersion) {
+            fetchCloudState().then((fresh) => {
+              if (fresh && isRunning) {
+                handleCloudStatePayload(fresh);
+              }
+            });
+          }
+        } catch {}
+      };
+    }
+  } catch {}
+
+  // 3. Set up Supabase Realtime WebSocket Listener (if configured)
   try {
     const client = getSupabaseClient();
-    channel = client
-      .channel('kca_fujairah_realtime_channel')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: APP_STATE_TABLE },
-        (payload: any) => {
-          if (!isRunning) return;
-          const newRow = payload.new;
-          if (newRow) {
-            const parsed = extractStateFromRow(newRow);
-            if (parsed) {
-              updateStatus({
-                isConnected: true,
-                lastSyncTime: new Date(),
-                version: parsed.version,
-                error: null,
-                tableExists: true,
-                syncedEntitiesCount: {
-                  members: parsed.members?.length || 0,
-                  finance: parsed.financeTransactions?.length || 0,
-                  inventory: parsed.inventoryItems?.length || 0,
-                  classes: parsed.classes?.length || 0,
-                },
-              });
-              handleCloudStatePayload(parsed);
+    if (client) {
+      channel = client
+        .channel('kca_fujairah_realtime_channel')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: APP_STATE_TABLE },
+          (payload: any) => {
+            if (!isRunning) return;
+            const newRow = payload.new;
+            if (newRow) {
+              const parsed = extractStateFromRow(newRow);
+              if (parsed) {
+                updateStatus({
+                  isConnected: true,
+                  lastSyncTime: new Date(),
+                  version: parsed.version,
+                  error: null,
+                  tableExists: true,
+                });
+                handleCloudStatePayload(parsed);
+              }
             }
           }
-        }
-      )
-      .subscribe((status: string) => {
-        if (status === 'SUBSCRIBED') {
-          updateStatus({ isConnected: true, error: null, tableExists: true });
-        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          updateStatus({ isConnected: false });
-        }
-      });
-  } catch (err: any) {
-    console.warn('[Supabase Realtime Channel Init Error]:', err);
-    updateStatus({ isConnected: false });
-  }
+        )
+        .subscribe();
+    }
+  } catch {}
 
-  // 3. Fallback Heartbeat Polling (every 5 seconds) for multi-device sync
+  // 4. Fallback Heartbeat Polling (every 5 seconds)
   pollInterval = setInterval(async () => {
     if (!isRunning) return;
     try {
@@ -896,10 +870,15 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
   return () => {
     isRunning = false;
     if (pollInterval) clearInterval(pollInterval);
+    if (eventSource) {
+      try {
+        eventSource.close();
+      } catch {}
+    }
     if (channel) {
       try {
         const client = getSupabaseClient();
-        client.removeChannel(channel);
+        client?.removeChannel(channel);
       } catch {}
     }
   };

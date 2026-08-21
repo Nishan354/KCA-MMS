@@ -164,6 +164,13 @@ export function isUnitOperatorRole(role?: string): boolean {
 }
 
 /**
+ * Checks if the user is a top-level Super Admin or Admin (has database/storage credentials access)
+ */
+export function isSuperAdminOrAdmin(role?: string): boolean {
+  return role === 'Super Admin' || role === 'Admin';
+}
+
+/**
  * Checks if the user has full central administration privileges (manage accounts, all units, backups)
  */
 export function hasAdminPrivilege(role?: string): boolean {

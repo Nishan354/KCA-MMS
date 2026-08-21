@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { KcaLogo } from './Logo';
 import { LiveSyncIndicator } from './LiveSyncIndicator';
-import { UserSession, hasAdminPrivilege, isUnitOperatorRole } from '../types/member';
+import { UserSession, hasAdminPrivilege, isUnitOperatorRole, isSuperAdminOrAdmin } from '../types/member';
 import {
   Users,
   LayoutDashboard,
@@ -61,6 +61,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [toolsDropdownOpen, setToolsDropdownOpen] = useState(false);
   const isAdmin = hasAdminPrivilege(userSession.role);
+  const isStorageAdmin = isSuperAdminOrAdmin(userSession.role);
   const isUnitOp = isUnitOperatorRole(userSession.role);
 
   const rawNavItems: { id: NavTab; label: string; icon: React.FC<{ className?: string }>; adminOnly?: boolean }[] = [
@@ -75,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'verify', label: 'Verify', icon: QrCode },
   ];
 
-  const navItems = rawNavItems.filter((item) => !item.adminOnly || isAdmin);
+  const navItems = rawNavItems.filter((item) => !item.adminOnly || isStorageAdmin);
 
   return (
     <header
@@ -139,7 +140,10 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Zone 3: Primary Actions */}
         <div className="flex items-center gap-2 shrink-0">
           {/* Live Cloud Multi-Device Sync Indicator */}
-          <LiveSyncIndicator onOpenStorageSettings={() => onSelectTab('backup')} />
+          <LiveSyncIndicator
+            isAdmin={isStorageAdmin}
+            onOpenStorageSettings={isStorageAdmin ? () => onSelectTab('backup') : undefined}
+          />
 
           {/* Quick Tools Dropdown */}
           <div className="relative">

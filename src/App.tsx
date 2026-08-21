@@ -1792,6 +1792,7 @@ export default function App() {
         isOpen={showBackupModal}
         members={members}
         auditLogs={auditLogs}
+        userSession={userSession}
         onClose={() => setShowBackupModal(false)}
         onRestoreBackup={handleRestoreBackup}
         fullDataPayload={{
@@ -1870,9 +1871,26 @@ export default function App() {
       <LoginModal
         isOpen={showLoginModal}
         adminAccounts={adminAccounts}
+        members={members}
         onLogin={(session) => {
           setUserSession(session);
           setShowLoginModal(false);
+          fetchCloudState().then((state) => {
+            if (state) {
+              if (Array.isArray(state.members)) {
+                setMembers(state.members);
+                saveMembersToStorage(state.members);
+              }
+              if (Array.isArray(state.financeTransactions)) {
+                setFinanceTransactions(state.financeTransactions);
+                saveFinanceTransactions(state.financeTransactions);
+              }
+              if (Array.isArray(state.inventoryItems)) {
+                setInventoryItems(state.inventoryItems);
+                saveInventoryItems(state.inventoryItems);
+              }
+            }
+          });
         }}
         onClose={() => setShowLoginModal(false)}
         canClose={!!userSession && userSession.isLoggedIn}

@@ -1,4 +1,8 @@
 import { Request, Response, Router } from 'express';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { createClient } from '@supabase/supabase-js';
 import {
   loadDatabase,
   saveDatabase,
@@ -6,12 +10,147 @@ import {
   subscribeToSyncEvents,
 } from './dataStore.ts';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const SERVER_CONFIG_PATH = path.resolve(process.cwd(), '.supabase_runtime_config.json');
+
+// Initialize runtime Supabase state
+let runtimeSupabaseUrl =
+  process.env.NEXT_PUBLIC_SUPABASE_URL ||
+  process.env.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_URL ||
+  process.env.VITE_SUPABASE_URL ||
+  'https://jvwetoapdaxuweannrgq.supabase.co';
+
+let runtimeSupabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  process.env.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  '';
+
+// Try to load cached config from disk if available
+try {
+  if (fs.existsSync(SERVER_CONFIG_PATH)) {
+    const raw = fs.readFileSync(SERVER_CONFIG_PATH, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed.url && parsed.anonKey) {
+      runtimeSupabaseUrl = parsed.url;
+      runtimeSupabaseAnonKey = parsed.anonKey;
+    }
+  }
+} catch (e) {
+  console.warn('Failed to read server config file:', e);
+}
+
+let serverSupabaseClient: any = null;
+
+function initServerSupabase() {
+  try {
+    if (
+      runtimeSupabaseUrl &&
+      runtimeSupabaseAnonKey &&
+      !runtimeSupabaseAnonKey.includes('placeholder') &&
+      runtimeSupabaseAnonKey.length > 20
+    ) {
+      serverSupabaseClient = createClient(runtimeSupabaseUrl, runtimeSupabaseAnonKey, {
+        auth: { persistSession: false },
+      });
+    } else {
+      serverSupabaseClient = null;
+    }
+  } catch {
+    serverSupabaseClient = null;
+  }
+}
+
+initServerSupabase();
+
 export const apiRouter = Router();
 
-// 1. Full Database Snapshot
-apiRouter.get('/sync/state', (req: Request, res: Response) => {
+// 0. Supabase Global Configuration Endpoints
+apiRouter.get('/config/supabase', (_req: Request, res: Response) => {
+  const isConfigured = Boolean(
+    runtimeSupabaseUrl &&
+    runtimeSupabaseAnonKey &&
+    !runtimeSupabaseAnonKey.includes('placeholder') &&
+    runtimeSupabaseAnonKey.length > 20
+  );
+
+  res.json({
+    url: runtimeSupabaseUrl,
+    anonKey: runtimeSupabaseAnonKey,
+    isConfigured,
+    projectId: runtimeSupabaseUrl ? runtimeSupabaseUrl.replace(/^https?:\/\//, '').split('.')[0] : '',
+  });
+});
+
+apiRouter.post('/config/supabase', (req: Request, res: Response) => {
+  try {
+    const { url, anonKey } = req.body || {};
+    if (!url || !anonKey) {
+      res.status(400).json({ error: 'URL and Anon Key are required' });
+      return;
+    }
+
+    runtimeSupabaseUrl = url.trim();
+    runtimeSupabaseAnonKey = anonKey.trim();
+
+    try {
+      fs.writeFileSync(
+        SERVER_CONFIG_PATH,
+        JSON.stringify({ url: runtimeSupabaseUrl, anonKey: runtimeSupabaseAnonKey, updatedAt: new Date().toISOString() }),
+        'utf-8'
+      );
+    } catch (fsErr) {
+      console.warn('Could not write server config file:', fsErr);
+    }
+
+    initServerSupabase();
+
+    res.json({
+      success: true,
+      url: runtimeSupabaseUrl,
+      isConfigured: true,
+      message: 'Supabase configuration saved and propagated to all devices.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to update server configuration' });
+  }
+});
+
+// 1. Full Database Snapshot (Seamless master state for all users and devices)
+apiRouter.get('/sync/state', async (req: Request, res: Response) => {
   try {
     const db = loadDatabase();
+
+    // If server supabase is configured, attempt to sync latest if higher version exists
+    if (serverSupabaseClient) {
+      try {
+        const { data } = await serverSupabaseClient
+          .from('app_state')
+          .select('*')
+          .order('version', { ascending: false })
+          .limit(1);
+
+        if (data && data.length > 0 && data[0].payload) {
+          const row = data[0];
+          const cloudPayload = row.payload;
+          if (row.version && row.version > db.version) {
+            db.version = row.version;
+            db.lastUpdated = row.updated_at || db.lastUpdated;
+            if (Array.isArray(cloudPayload.members)) db.members = cloudPayload.members;
+            if (Array.isArray(cloudPayload.financeTransactions)) db.financeTransactions = cloudPayload.financeTransactions;
+            if (Array.isArray(cloudPayload.inventoryItems)) db.inventoryItems = cloudPayload.inventoryItems;
+            if (Array.isArray(cloudPayload.classes)) db.classes = cloudPayload.classes;
+            if (Array.isArray(cloudPayload.classParticipants)) db.classParticipants = cloudPayload.classParticipants;
+            if (Array.isArray(cloudPayload.classAttendance)) db.classAttendance = cloudPayload.classAttendance;
+            if (Array.isArray(cloudPayload.adminAccounts)) db.adminAccounts = cloudPayload.adminAccounts;
+            if (Array.isArray(cloudPayload.auditLogs)) db.auditLogs = cloudPayload.auditLogs;
+            saveDatabase(db);
+          }
+        }
+      } catch {}
+    }
+
     res.json({
       success: true,
       ...db,
@@ -36,7 +175,7 @@ apiRouter.get('/sync/version', (req: Request, res: Response) => {
   }
 });
 
-// 3. Real-time Server-Sent Events (SSE) stream for instant push across all 5 devices & locations
+// 3. Real-time Server-Sent Events (SSE) stream for instant push across all devices & locations
 apiRouter.get('/sync/events', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -67,15 +206,33 @@ apiRouter.get('/sync/events', (req: Request, res: Response) => {
 });
 
 // 4. Push Entity Change
-apiRouter.post('/sync/push', (req: Request, res: Response) => {
+apiRouter.post('/sync/push', async (req: Request, res: Response) => {
   try {
-    const { entity, data, user } = req.body;
-    if (!entity) {
-      res.status(400).json({ success: false, error: 'Missing entity type' });
-      return;
+    const { entity, data, user, payload, version } = req.body || {};
+    const entityToUpdate = entity || 'all';
+    const dataToUpdate = data !== undefined ? data : payload;
+
+    const updated = updateEntity(entityToUpdate, dataToUpdate, user || 'KCA Portal User');
+
+    // Async push to Supabase if connected
+    if (serverSupabaseClient) {
+      serverSupabaseClient
+        .from('app_state')
+        .upsert(
+          {
+            id: 'kca_main',
+            entity: entityToUpdate,
+            payload: updated,
+            version: updated.version,
+            updated_by: user || 'KCA Portal User',
+            updated_at: updated.lastUpdated,
+          },
+          { onConflict: 'id' }
+        )
+        .then(() => {})
+        .catch(() => {});
     }
 
-    const updated = updateEntity(entity, data, user || 'KCA Portal User');
     res.json({
       success: true,
       version: updated.version,
