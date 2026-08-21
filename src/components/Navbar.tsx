@@ -139,7 +139,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Zone 3: Primary Actions */}
         <div className="flex items-center gap-2 shrink-0">
           {/* Live Cloud Multi-Device Sync Indicator */}
-          <LiveSyncIndicator />
+          <LiveSyncIndicator onOpenStorageSettings={() => onSelectTab('backup')} />
 
           {/* Quick Tools Dropdown */}
           <div className="relative">

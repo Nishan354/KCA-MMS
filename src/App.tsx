@@ -1794,6 +1794,65 @@ export default function App() {
         auditLogs={auditLogs}
         onClose={() => setShowBackupModal(false)}
         onRestoreBackup={handleRestoreBackup}
+        fullDataPayload={{
+          members,
+          financeTransactions,
+          inventoryItems,
+          inventoryLogs,
+          classes,
+          classParticipants,
+          classAttendance,
+          adminAccounts,
+          auditLogs,
+          units,
+          customFields,
+        }}
+        onCloudStateReloaded={(cloudState) => {
+          if (cloudState) {
+            if (Array.isArray(cloudState.members)) {
+              setMembers(cloudState.members);
+              saveMembersToStorage(cloudState.members);
+            }
+            if (Array.isArray(cloudState.financeTransactions)) {
+              setFinanceTransactions(cloudState.financeTransactions);
+              saveFinanceTransactions(cloudState.financeTransactions);
+            }
+            if (Array.isArray(cloudState.inventoryItems)) {
+              setInventoryItems(cloudState.inventoryItems);
+              saveInventoryItems(cloudState.inventoryItems);
+            }
+            if (Array.isArray(cloudState.inventoryLogs)) {
+              setInventoryLogs(cloudState.inventoryLogs);
+              saveInventoryLogs(cloudState.inventoryLogs);
+            }
+            if (Array.isArray(cloudState.classes)) {
+              setClasses(cloudState.classes);
+              saveClasses(cloudState.classes);
+            }
+            if (Array.isArray(cloudState.classParticipants)) {
+              setClassParticipants(cloudState.classParticipants);
+              saveParticipants(cloudState.classParticipants);
+            }
+            if (Array.isArray(cloudState.classAttendance)) {
+              setClassAttendance(cloudState.classAttendance);
+              saveAttendance(cloudState.classAttendance);
+            }
+            if (Array.isArray(cloudState.adminAccounts)) {
+              setAdminAccounts(cloudState.adminAccounts);
+              saveAdminAccounts(cloudState.adminAccounts);
+            }
+            if (Array.isArray(cloudState.units)) {
+              setUnits(cloudState.units);
+              try {
+                localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(cloudState.units));
+              } catch {}
+            }
+            if (Array.isArray(cloudState.customFields)) {
+              setCustomFields(cloudState.customFields);
+              saveCustomFields(cloudState.customFields);
+            }
+          }
+        }}
       />
 
       {/* 11. QR Scanner & Member Verifier Modal */}

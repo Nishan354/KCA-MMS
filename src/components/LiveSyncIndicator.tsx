@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { subscribeToSyncStatus, fetchCloudState, SyncStatus } from '../utils/cloudSync';
-import { Cloud, CloudOff, RefreshCw, CheckCircle2, ShieldCheck, Wifi, WifiOff } from 'lucide-react';
+import { RefreshCw, Wifi, WifiOff, Database, CheckCircle2 } from 'lucide-react';
 
 interface LiveSyncIndicatorProps {
-  onManualSync?: () => void;
+  onManualSync?: () => Promise<void> | void;
+  onOpenStorageSettings?: () => void;
 }
 
-export const LiveSyncIndicator: React.FC<LiveSyncIndicatorProps> = ({ onManualSync }) => {
+export const LiveSyncIndicator: React.FC<LiveSyncIndicatorProps> = ({
+  onManualSync,
+  onOpenStorageSettings,
+}) => {
   const [status, setStatus] = useState<SyncStatus>({
     isConnected: true,
     isSyncing: false,
@@ -47,7 +51,7 @@ export const LiveSyncIndicator: React.FC<LiveSyncIndicatorProps> = ({ onManualSy
   const handleForceSync = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (onManualSync) {
-      onManualSync();
+      await onManualSync();
     } else {
       await fetchCloudState();
     }
@@ -59,14 +63,14 @@ export const LiveSyncIndicator: React.FC<LiveSyncIndicatorProps> = ({ onManualSy
         onClick={handleForceSync}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
-        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all border shadow-2xs cursor-pointer ${
+        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all border shadow-xs cursor-pointer ${
           status.isSyncing
-            ? 'bg-amber-500/10 text-amber-300 border-amber-500/30'
+            ? 'bg-amber-500/20 text-amber-200 border-amber-400/40'
             : status.isConnected
-            ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30 hover:bg-emerald-950/60'
-            : 'bg-rose-950/40 text-rose-300 border-rose-500/30'
+            ? 'bg-emerald-950/60 text-emerald-200 border-emerald-500/40 hover:bg-emerald-900/80 hover:border-emerald-400'
+            : 'bg-rose-950/60 text-rose-200 border-rose-500/40 hover:bg-rose-900/80'
         }`}
-        title="Click to force refresh latest cloud data"
+        title="Click to sync latest data with Supabase Cloud"
       >
         <span className="relative flex h-2 w-2">
           {status.isConnected && !status.isSyncing && (
@@ -83,38 +87,77 @@ export const LiveSyncIndicator: React.FC<LiveSyncIndicatorProps> = ({ onManualSy
           ></span>
         </span>
 
-        <span className="hidden sm:inline font-mono tracking-tight">
+        <span className="hidden sm:inline font-mono tracking-tight text-[11px]">
           {status.isSyncing
-            ? 'Syncing...'
+            ? 'Syncing Supabase...'
             : status.isConnected
-            ? `Live Cloud: ${timeAgo}`
-            : 'Offline Cache'}
+            ? `Supabase Live (${timeAgo})`
+            : 'Offline Mode'}
         </span>
-        <span className="sm:hidden font-mono">
-          {status.isSyncing ? 'Sync...' : 'Live'}
+        <span className="sm:hidden font-mono text-[10px]">
+          {status.isSyncing ? 'Sync...' : status.isConnected ? 'Live' : 'Offline'}
         </span>
 
         <RefreshCw
-          className={`w-3 h-3 text-slate-300 hover:text-white transition-transform ${
-            status.isSyncing ? 'animate-spin' : 'hover:rotate-180 duration-300'
+          className={`w-3 h-3 text-white/80 hover:text-white transition-transform ${
+            status.isSyncing ? 'animate-spin text-amber-300' : 'hover:rotate-180 duration-300'
           }`}
         />
       </button>
 
       {/* Hover Info Tooltip */}
       {showTooltip && (
-        <div className="absolute right-0 top-full mt-1.5 w-64 p-3 bg-slate-900 text-white rounded-lg shadow-xl border border-slate-700 text-xs z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-150">
-          <div className="flex items-center gap-1.5 font-bold text-emerald-400 mb-1">
-            <Wifi className="w-3.5 h-3.5" />
-            <span>Centralized Live Synchronization</span>
+        <div className="absolute right-0 top-full mt-2 w-72 p-3.5 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-700 text-xs z-50 pointer-events-auto">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+            <div className="flex items-center gap-1.5 font-bold text-emerald-400 text-xs">
+              <Database className="w-3.5 h-3.5" />
+              <span>Supabase Real-Time Cloud</span>
+            </div>
+            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase font-mono ${
+              status.isConnected ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950 text-rose-300 border border-rose-500/30'
+            }`}>
+              {status.isConnected ? 'Connected' : 'Offline'}
+            </span>
           </div>
-          <p className="text-[11px] text-slate-300 leading-relaxed">
-            All 5 user locations, unit operators &amp; central management dashboards are linked in real-time. Any update made on any device is instantly synchronized.
+
+          <p className="text-[11px] text-slate-300 leading-relaxed mt-2">
+            Multi-user realtime sync is active. Updates made by any user across branches/devices are synchronized instantly and permanently saved.
           </p>
-          <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between text-[10px] text-slate-400">
-            <span>Server Version: v{status.version}</span>
-            <span>Status: {status.isConnected ? 'Connected 🟢' : 'Reconnecting 🔴'}</span>
+
+          <div className="mt-2.5 pt-2 border-t border-slate-800/80 space-y-1 text-[10px] text-slate-400 font-mono">
+            <div className="flex items-center justify-between">
+              <span>Cloud Version:</span>
+              <span className="text-white font-bold">v{status.version}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span>Last Synced:</span>
+              <span className="text-slate-300">{timeAgo}</span>
+            </div>
+            {status.syncedEntitiesCount && (
+              <div className="flex items-center justify-between text-slate-400 pt-0.5">
+                <span>Cached Data:</span>
+                <span className="text-emerald-400">
+                  {status.syncedEntitiesCount.members || 0} members · {status.syncedEntitiesCount.finance || 0} finance
+                </span>
+              </div>
+            )}
           </div>
+
+          {onOpenStorageSettings && (
+            <div className="mt-3 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowTooltip(false);
+                  onOpenStorageSettings();
+                }}
+                className="w-full py-1 text-center text-[10px] text-indigo-300 hover:text-indigo-100 font-semibold cursor-pointer underline"
+              >
+                Configure Cloud &amp; Supabase Settings &rarr;
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

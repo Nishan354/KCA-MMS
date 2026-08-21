@@ -10,6 +10,15 @@ import {
   LocalStorageSnapshot,
 } from '../utils/storage';
 import {
+  getSupabaseCredentials,
+  saveCustomSupabaseCredentials,
+  clearCustomSupabaseCredentials,
+  testSupabaseConnection,
+  getSupabaseSqlSetupScript,
+  pushFullRestore,
+  fetchCloudState,
+} from '../utils/cloudSync';
+import {
   X,
   HardDrive,
   Cloud,
@@ -23,9 +32,14 @@ import {
   FolderCheck,
   ExternalLink,
   ShieldCheck,
-  History,
-  RotateCcw,
-  Sparkles,
+  Database,
+  Key,
+  Copy,
+  Check,
+  Layers,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  Lock,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -35,6 +49,8 @@ interface BackupAndStorageModalProps {
   isOpen: boolean;
   onClose: () => void;
   onRestoreBackup: (members: Member[], logs: AuditLogItem[]) => void;
+  fullDataPayload?: any;
+  onCloudStateReloaded?: (state: any) => void;
 }
 
 export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
@@ -43,6 +59,8 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
   isOpen,
   onClose,
   onRestoreBackup,
+  fullDataPayload,
+  onCloudStateReloaded,
 }) => {
   const [backupMeta, setBackupMetaState] = useState<BackupMetadata>(getBackupMetadata());
   const [isSavingLocal, setIsSavingLocal] = useState(false);
@@ -56,14 +74,134 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
   const [recoverySuccessMsg, setRecoverySuccessMsg] = useState<string | null>(null);
   const importFileRef = useRef<HTMLInputElement>(null);
 
+  // Supabase Cloud Configuration State
+  const [supabaseCreds, setSupabaseCreds] = useState(() => getSupabaseCredentials());
+  const [supabaseUrlInput, setSupabaseUrlInput] = useState(supabaseCreds.url);
+  const [supabaseKeyInput, setSupabaseKeyInput] = useState(supabaseCreds.anonKey);
+  const [showCredentialsForm, setShowCredentialsForm] = useState(false);
+  const [showSqlSetup, setShowSqlSetup] = useState(false);
+  const [isTestingSupabase, setIsTestingSupabase] = useState(false);
+  const [supabaseTestResult, setSupabaseTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [isPushingCloud, setIsPushingCloud] = useState(false);
+  const [isPullingCloud, setIsPullingCloud] = useState(false);
+  const [cloudOpMessage, setCloudOpMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [copiedSql, setCopiedSql] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       const found = getLocalRecoverySnapshots();
       setRecoverySnapshots(found);
+      const creds = getSupabaseCredentials();
+      setSupabaseCreds(creds);
+      setSupabaseUrlInput(creds.url);
+      setSupabaseKeyInput(creds.anonKey);
     }
   }, [isOpen, members]);
 
   if (!isOpen) return null;
+
+  const handleTestConnection = async () => {
+    setIsTestingSupabase(true);
+    setSupabaseTestResult(null);
+    try {
+      const res = await testSupabaseConnection(supabaseUrlInput, supabaseKeyInput);
+      setSupabaseTestResult(res);
+      if (res.success) {
+        confetti({ particleCount: 30, spread: 50 });
+      }
+    } catch (e: any) {
+      setSupabaseTestResult({ success: false, message: e.message || 'Connection test failed' });
+    } finally {
+      setIsTestingSupabase(false);
+    }
+  };
+
+  const handleSaveCredentials = () => {
+    saveCustomSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
+    setSupabaseCreds({ url: supabaseUrlInput, anonKey: supabaseKeyInput });
+    setCloudOpMessage({ type: 'success', text: 'Supabase configuration saved & client re-initialized!' });
+    setShowCredentialsForm(false);
+    handleTestConnection();
+  };
+
+  const handleResetDefaultCredentials = () => {
+    clearCustomSupabaseCredentials();
+    const creds = getSupabaseCredentials();
+    setSupabaseCreds(creds);
+    setSupabaseUrlInput(creds.url);
+    setSupabaseKeyInput(creds.anonKey);
+    setCloudOpMessage({ type: 'success', text: 'Reset to default Supabase project credentials.' });
+    setShowCredentialsForm(false);
+  };
+
+  const handleForcePushToSupabase = async () => {
+    setIsPushingCloud(true);
+    setCloudOpMessage(null);
+    try {
+      const payloadToPush = fullDataPayload || {
+        members,
+        auditLogs,
+      };
+
+      const success = await pushFullRestore(payloadToPush, 'Admin Manual Cloud Push');
+      if (success) {
+        setCloudOpMessage({
+          type: 'success',
+          text: `Successfully pushed entire dataset (${members.length} members + records) to Supabase table "app_state"!`,
+        });
+        confetti({ particleCount: 45, spread: 65 });
+      } else {
+        setCloudOpMessage({
+          type: 'error',
+          text: 'Failed to push data to Supabase. Check credentials and ensure table "app_state" exists.',
+        });
+      }
+    } catch (err: any) {
+      setCloudOpMessage({ type: 'error', text: err.message || 'Cloud push operation failed' });
+    } finally {
+      setIsPushingCloud(false);
+    }
+  };
+
+  const handleForcePullFromSupabase = async () => {
+    setIsPullingCloud(true);
+    setCloudOpMessage(null);
+    try {
+      const cloudData = await fetchCloudState();
+      if (cloudData && Array.isArray(cloudData.members) && cloudData.members.length > 0) {
+        onRestoreBackup(cloudData.members, cloudData.auditLogs || auditLogs);
+        if (onCloudStateReloaded) {
+          onCloudStateReloaded(cloudData);
+        }
+        setCloudOpMessage({
+          type: 'success',
+          text: `Pulled latest Supabase cloud state (v${cloudData.version}, ${cloudData.members.length} members).`,
+        });
+        confetti({ particleCount: 45, spread: 65 });
+      } else if (cloudData) {
+        setCloudOpMessage({
+          type: 'success',
+          text: 'Connected to Supabase cloud. No newer data found or table is currently empty.',
+        });
+      } else {
+        setCloudOpMessage({
+          type: 'error',
+          text: 'Could not retrieve data from Supabase. Ensure table "app_state" exists and RLS allows read.',
+        });
+      }
+    } catch (err: any) {
+      setCloudOpMessage({ type: 'error', text: err.message || 'Cloud pull operation failed' });
+    } finally {
+      setIsPullingCloud(false);
+    }
+  };
+
+  const handleCopySql = () => {
+    const sql = getSupabaseSqlSetupScript();
+    navigator.clipboard.writeText(sql);
+    setCopiedSql(true);
+    setTimeout(() => setCopiedSql(false), 2500);
+  };
 
   const handleRestoreSnapshot = (snapshot: LocalStorageSnapshot) => {
     if (snapshot.members.length === 0) return;
@@ -77,11 +215,9 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
 
   const handleMergeAllHistorical = () => {
     const allKnown = new Map<string, Member>();
-    // Add current
     members.forEach((m) => {
       if (m.id || m.membershipId) allKnown.set(m.id || m.membershipId, m);
     });
-    // Add from all snapshots
     recoverySnapshots.forEach((snap) => {
       snap.members.forEach((m) => {
         const key = m.id || m.membershipId;
@@ -134,7 +270,6 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
 
   const handleExportForGoogleDrive = () => {
     downloadFullJsonBackup(members, auditLogs);
-    // Also provide direct link to Google Drive
     window.open('https://drive.google.com/drive/my-drive', '_blank');
   };
 
@@ -160,7 +295,7 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
         } else {
           setImportError('Invalid backup file format. Expected a valid KCA Fujairah JSON backup.');
         }
-      } catch (err) {
+      } catch {
         setImportError('Failed to parse backup JSON file. Please verify file integrity.');
       }
     };
@@ -178,17 +313,17 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
             </div>
             <div>
               <h3 className="font-display font-bold text-lg text-white">
-                Data Storage & Seamless Backups
+                Cloud Database &amp; Multi-User Sync
               </h3>
               <p className="text-xs text-red-100">
-                Save directly to Local PC Folder, Google Drive storage sync, and offline database
+                Supabase Real-Time Cloud, Google Drive integration, and PC backups
               </p>
             </div>
           </div>
 
           <button
             onClick={onClose}
-            className="p-1.5 text-white/80 hover:text-white rounded-md transition-colors"
+            className="p-1.5 text-white/80 hover:text-white rounded-md transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -196,59 +331,293 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50">
-          {/* Status Banner */}
-          <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-xs flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-700">
-                <CheckCircle2 className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="font-bold text-xs text-slate-900">
-                  Offline Database Status: <span className="text-emerald-700">Fully Persistent</span>
+          {/* Section 1: Supabase Realtime Cloud Sync */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200">
+                  <Database className="w-4 h-4" />
                 </div>
-                <div className="text-[11px] text-slate-500">
-                  {members.length} members cached locally in browser memory for 100% offline access.
+                <div>
+                  <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-1.5">
+                    Supabase Real-Time Cloud Database
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Provides continuous live sync for multiple users across branches &amp; devices.
+                  </p>
                 </div>
               </div>
+
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1 font-mono">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                Real-Time Active
+              </span>
             </div>
 
-            {backupMeta.localFolderName && (
-              <div className="text-right text-[11px] hidden sm:block">
-                <span className="text-slate-400 block font-medium">Synced Folder:</span>
-                <span className="font-mono font-semibold text-slate-800">{backupMeta.localFolderName}</span>
+            {/* Cloud Operational Feedback */}
+            {cloudOpMessage && (
+              <div
+                className={`p-3 rounded-lg border text-xs font-medium flex items-center gap-2 ${
+                  cloudOpMessage.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}
+              >
+                {cloudOpMessage.type === 'success' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                )}
+                <span>{cloudOpMessage.text}</span>
+              </div>
+            )}
+
+            {/* Supabase Action Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={handleForcePushToSupabase}
+                disabled={isPushingCloud}
+                className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-[#8b0000] hover:bg-[#730000] text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                <ArrowUpCircle className={`w-4 h-4 ${isPushingCloud ? 'animate-spin' : ''}`} />
+                {isPushingCloud ? 'Pushing to Cloud...' : 'Force Push to Supabase'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleForcePullFromSupabase}
+                disabled={isPullingCloud}
+                className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold transition-all shadow-xs cursor-pointer disabled:opacity-50"
+              >
+                <ArrowDownCircle className={`w-4 h-4 ${isPullingCloud ? 'animate-spin' : ''}`} />
+                {isPullingCloud ? 'Pulling Cloud State...' : 'Force Pull from Supabase'}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={isTestingSupabase}
+                className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-all cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isTestingSupabase ? 'animate-spin' : ''}`} />
+                {isTestingSupabase ? 'Testing Ping...' : 'Test Connection'}
+              </button>
+            </div>
+
+            {/* Test Connection Output */}
+            {supabaseTestResult && (
+              <div
+                className={`p-3 rounded-lg border text-xs flex items-center justify-between gap-2 ${
+                  supabaseTestResult.success
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {supabaseTestResult.success ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  )}
+                  <span>{supabaseTestResult.message}</span>
+                </div>
+                {supabaseTestResult.success && (
+                  <span className="font-mono text-[10px] bg-emerald-200/60 px-2 py-0.5 rounded font-bold">
+                    Latency: OK
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Credentials / Advanced Options Toggles */}
+            <div className="flex flex-wrap items-center justify-between pt-2 border-t border-slate-100 text-xs text-slate-600 gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCredentialsForm(!showCredentialsForm)}
+                className="inline-flex items-center gap-1.5 text-blue-700 hover:text-blue-900 font-semibold cursor-pointer"
+              >
+                <Key className="w-3.5 h-3.5" />
+                {showCredentialsForm ? 'Hide Supabase Credentials' : 'Configure Supabase URL & Keys'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowSqlSetup(!showSqlSetup)}
+                className="inline-flex items-center gap-1.5 text-slate-700 hover:text-slate-900 font-semibold cursor-pointer"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                {showSqlSetup ? 'Hide SQL Script' : 'View Supabase Table SQL'}
+              </button>
+            </div>
+
+            {/* Custom Supabase Credentials Form */}
+            {showCredentialsForm && (
+              <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-3 animate-fadeIn">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Supabase Project URL:
+                  </label>
+                  <input
+                    type="text"
+                    value={supabaseUrlInput}
+                    onChange={(e) => setSupabaseUrlInput(e.target.value)}
+                    placeholder="https://your-project.supabase.co"
+                    className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-mono text-slate-900 focus:ring-1 focus:ring-[#8b0000] outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+                    Supabase Anon / Public API Key:
+                  </label>
+                  <input
+                    type="password"
+                    value={supabaseKeyInput}
+                    onChange={(e) => setSupabaseKeyInput(e.target.value)}
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
+                    className="w-full px-3 py-1.5 bg-white border border-slate-300 rounded-md text-xs font-mono text-slate-900 focus:ring-1 focus:ring-[#8b0000] outline-none"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    onClick={handleResetDefaultCredentials}
+                    className="text-[11px] text-slate-500 hover:text-slate-700 underline cursor-pointer"
+                  >
+                    Reset to Default Project
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveCredentials}
+                    className="px-3.5 py-1.5 bg-[#8b0000] hover:bg-[#730000] text-white text-xs font-bold rounded-md transition-colors cursor-pointer shadow-xs"
+                  >
+                    Save &amp; Reconnect
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Copyable SQL Setup Script */}
+            {showSqlSetup && (
+              <div className="p-4 bg-slate-900 rounded-lg text-slate-200 space-y-2.5 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-mono text-emerald-400 font-bold">
+                    Supabase SQL Editor Setup Script
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopySql}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white text-[11px] font-semibold border border-slate-700 cursor-pointer"
+                  >
+                    {copiedSql ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    {copiedSql ? 'Copied!' : 'Copy SQL Script'}
+                  </button>
+                </div>
+
+                <pre className="p-3 bg-black/50 rounded text-[10px] font-mono text-slate-300 overflow-x-auto leading-relaxed max-h-48 border border-slate-800">
+                  {getSupabaseSqlSetupScript()}
+                </pre>
+                <p className="text-[10px] text-slate-400">
+                  Paste and run this inside your Supabase Dashboard &rarr; SQL Editor to ensure Realtime publications and table permissions are active.
+                </p>
               </div>
             )}
           </div>
 
-          {/* Section 1: Save to Local PC Folder */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-xs space-y-3">
+          {/* Section 2: Local Recovery Snapshots & Offline Redundancy */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
-                <FolderPlus className="w-4 h-4 text-[#8b0000]" />
-                1. Save Data into Local PC Folder
+                <HardDrive className="w-4 h-4 text-[#8b0000]" />
+                Browser Local Storage &amp; Redundant Snapshots
               </h4>
               <span className="text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-semibold border border-slate-200">
-                Offline Accessibility
+                {members.length} Members in Cache
               </span>
             </div>
 
             <p className="text-xs text-slate-600 leading-relaxed">
-              Select a dedicated backup folder on your computer (e.g. <code>C:\KCA_Backups</code> or <code>Documents/KCA_Fujairah</code>). The system will automatically write both timestamped JSON and full CSV exports directly into your chosen directory.
+              In addition to Supabase cloud sync, automatic snapshots are created in your browser memory so records are safe even during temporary internet disconnection.
+            </p>
+
+            {recoverySuccessMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-md text-xs font-medium text-emerald-800 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{recoverySuccessMsg}</span>
+              </div>
+            )}
+
+            {recoverySnapshots.length > 0 && (
+              <div className="pt-1 space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-700">
+                  <span>Available Local Recovery Points:</span>
+                  <button
+                    type="button"
+                    onClick={handleMergeAllHistorical}
+                    className="text-[#8b0000] hover:underline cursor-pointer"
+                  >
+                    Merge All Snapshots
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                  {recoverySnapshots.map((snap) => (
+                    <div
+                      key={snap.key}
+                      className="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 text-xs transition-colors"
+                    >
+                      <div>
+                        <div className="font-bold text-slate-800">{snap.label}</div>
+                        <div className="text-[10px] text-slate-500 font-mono">
+                          {snap.members.length} members · {new Date(snap.timestamp).toLocaleString()}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRestoreSnapshot(snap)}
+                        className="px-2.5 py-1 bg-white hover:bg-slate-200 border border-slate-300 rounded text-[11px] font-semibold text-slate-800 cursor-pointer"
+                      >
+                        Restore
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Section 3: Save to Local PC Folder */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
+                <FolderPlus className="w-4 h-4 text-[#8b0000]" />
+                Direct Local PC Folder Export
+              </h4>
+              <span className="text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-800 font-semibold border border-slate-200">
+                Offline File Backup
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Export data directly into a folder on your computer (e.g. <code>C:\KCA_Backups</code> or <code>Documents/KCA_Fujairah</code>). Both timestamped JSON and Excel/CSV formats are generated.
             </p>
 
             <div className="pt-2 flex flex-wrap items-center gap-3">
               <button
                 onClick={handleSaveToLocalFolder}
                 disabled={isSavingLocal}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#8b0000] hover:bg-[#730000] text-white text-xs font-semibold transition-colors shadow-xs disabled:opacity-50"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#8b0000] hover:bg-[#730000] text-white text-xs font-semibold transition-colors shadow-xs disabled:opacity-50 cursor-pointer"
               >
                 <FolderCheck className="w-4 h-4" />
-                {isSavingLocal ? 'Selecting Folder & Saving...' : 'Save to Selected PC Folder'}
+                {isSavingLocal ? 'Saving to PC...' : 'Save to PC Folder'}
               </button>
 
               <button
                 onClick={() => downloadMembersCsv(members)}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-semibold transition-colors"
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-semibold transition-colors cursor-pointer"
               >
                 <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
                 Export Excel/CSV
@@ -263,89 +632,41 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
             )}
           </div>
 
-          {/* Section 2: Google Drive Integration */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-xs space-y-3">
+          {/* Section 4: Google Drive & JSON File Import */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
                 <Cloud className="w-4 h-4 text-blue-600" />
-                2. Google Drive Storage Integration
+                Google Drive &amp; JSON File Restore
               </h4>
-              <span className={`text-[11px] px-2 py-0.5 rounded font-semibold border ${
-                googleDriveLinked
-                  ? 'bg-blue-50 text-blue-800 border-blue-200'
-                  : 'bg-slate-100 text-slate-600 border-slate-200'
-              }`}>
-                {googleDriveLinked ? 'Drive Configured' : 'Ready to Connect'}
-              </span>
             </div>
 
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Connect a designated Google Drive destination folder to maintain cloud-synchronized backups for the central committee.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block text-[10px] font-semibold uppercase text-slate-600 mb-1">
-                  Google Drive Target Folder Name:
-                </label>
-                <input
-                  type="text"
-                  value={googleDriveFolderName}
-                  onChange={(e) => setGoogleDriveFolderName(e.target.value)}
-                  className="w-full px-3 py-1.5 border border-slate-200 rounded-md text-xs font-medium text-slate-900 focus:ring-1 focus:ring-[#8b0000] focus:border-[#8b0000] outline-none"
-                  placeholder="e.g. KCA_Fujairah_Membership_Backups"
-                />
-              </div>
-
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={handleLinkGoogleDrive}
-                  className="w-full px-4 py-2 rounded-md bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold transition-colors"
-                >
-                  Save Drive Setting
-                </button>
-              </div>
-            </div>
-
-            <div className="pt-2 flex items-center gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <button
                 onClick={handleExportForGoogleDrive}
-                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold transition-colors cursor-pointer"
               >
                 <Download className="w-4 h-4 text-blue-300" />
-                Download Backup & Open Google Drive
+                Download JSON &amp; Open Drive
                 <ExternalLink className="w-3.5 h-3.5 opacity-60" />
               </button>
+
+              <button
+                onClick={() => importFileRef.current?.click()}
+                className="inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <Upload className="w-4 h-4 text-slate-600" />
+                Restore from JSON File
+              </button>
+
+              <input
+                type="file"
+                ref={importFileRef}
+                onChange={handleImportJsonFile}
+                accept=".json"
+                className="hidden"
+              />
             </div>
-          </div>
-
-          {/* Section 3: Restore / Import Backup */}
-          <div className="bg-white p-5 rounded-lg border border-slate-200 shadow-xs space-y-3">
-            <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
-              <Upload className="w-4 h-4 text-slate-700" />
-              3. Restore Database from JSON Backup File
-            </h4>
-
-            <p className="text-xs text-slate-600">
-              Restore members and transaction records from a previously saved JSON backup file from your PC or Google Drive.
-            </p>
-
-            <input
-              type="file"
-              ref={importFileRef}
-              onChange={handleImportJsonFile}
-              accept=".json"
-              className="hidden"
-            />
-
-            <button
-              onClick={() => importFileRef.current?.click()}
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 text-xs font-semibold transition-colors"
-            >
-              <Upload className="w-4 h-4 text-slate-600" />
-              Choose Backup JSON File to Restore
-            </button>
 
             {importError && (
               <div className="p-3 bg-red-50 border border-red-200 rounded-md text-xs text-red-800 flex items-center gap-2">
@@ -360,7 +681,7 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
         <div className="px-6 py-3 bg-white border-t border-slate-200 flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-xs font-semibold rounded-md border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
+            className="px-4 py-2 text-xs font-semibold rounded-md border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             Close
           </button>

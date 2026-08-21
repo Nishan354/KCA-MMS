@@ -41,16 +41,27 @@ try {
     auth: { persistSession: false },
   });
 } catch (e) {
-  console.warn('Supabase client failed to initialize:', e);
+  console.warn('Supabase client failed to initialize on server:', e);
 }
 
 // Sync Endpoints
-app.get('/api/sync/version', (_req, res) => {
-  res.status(200).json({ version: 1, status: 'ok' });
-});
+app.get('/api/sync/version', async (_req, res) => {
+  try {
+    if (!supabase) {
+      return res.status(200).json({ version: 1, status: 'ok' });
+    }
+    const { data } = await supabase
+      .from('app_state')
+      .select('version, updated_at')
+      .order('version', { ascending: false })
+      .limit(1);
 
-app.get('/api/sync/events', (_req, res) => {
-  res.status(200).json({ events: [], status: 'ok' });
+    const version = data && data[0] ? Number(data[0].version) : 1;
+    const updatedAt = data && data[0] ? data[0].updated_at : new Date().toISOString();
+    return res.status(200).json({ version, updatedAt, status: 'ok' });
+  } catch {
+    return res.status(200).json({ version: 1, status: 'ok' });
+  }
 });
 
 app.get('/api/sync/state', async (_req, res) => {
@@ -58,11 +69,18 @@ app.get('/api/sync/state', async (_req, res) => {
     if (!supabase) {
       return res.status(200).json({ status: 'success', data: null });
     }
-    const { data, error } = await supabase.from('gallery').select('*');
-    if (error) return res.status(200).json({ status: 'success', data: [] });
-    return res.status(200).json({ status: 'success', data });
-  } catch {
-    return res.status(200).json({ status: 'success', data: [] });
+    const { data, error } = await supabase
+      .from('app_state')
+      .select('*')
+      .order('version', { ascending: false })
+      .limit(1);
+
+    if (error || !data || data.length === 0) {
+      return res.status(200).json({ status: 'success', data: null });
+    }
+    return res.status(200).json({ status: 'success', data: data[0] });
+  } catch (err: any) {
+    return res.status(200).json({ status: 'success', data: null, error: err.message });
   }
 });
 
@@ -71,7 +89,18 @@ app.post('/api/sync/push', async (req, res) => {
     if (!supabase) {
       return res.status(200).json({ status: 'success', data: req.body });
     }
-    const { data, error } = await supabase.from('gallery').insert([req.body]);
+    const body = req.body || {};
+    const { data, error } = await supabase.from('app_state').upsert(
+      {
+        id: body.id || 'kca_main',
+        entity: body.entity || 'all',
+        payload: body.payload || body,
+        version: Number(body.version || 1),
+        updated_by: body.updated_by || 'Server API',
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
     if (error) return res.status(400).json({ error: error.message });
     return res.status(200).json({ status: 'success', data });
   } catch (err: any) {
