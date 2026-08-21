@@ -1,7 +1,4 @@
-/**
- * KCA Fujairah Centralized Local Storage Engine
- * Disables background HTTP sync polling to stop browser 401 console logs.
- */
+import { createClient } from '@supabase/supabase-js';
 
 export interface SyncStatus {
   isConnected: boolean;
@@ -10,6 +7,12 @@ export interface SyncStatus {
   version: number;
   error: string | null;
 }
+
+// Environment variables configured in Vercel / AI Studio
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://jvwetoapdaxuweannrgq.supabase.co';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 let currentSyncStatus: SyncStatus = {
   isConnected: true,
@@ -38,46 +41,94 @@ function updateStatus(partial: Partial<SyncStatus>) {
   });
 }
 
-// Local mock return to prevent HTTP fetch calls
+// Fetch live state directly from Supabase table
 export async function fetchCloudState() {
-  updateStatus({ isSyncing: false, isConnected: true, lastSyncTime: new Date() });
-  return null;
+  updateStatus({ isSyncing: true, error: null });
+  try {
+    const { data, error } = await supabase.from('app_state').select('*').single();
+    if (error) throw error;
+
+    updateStatus({
+      isConnected: true,
+      isSyncing: false,
+      lastSyncTime: new Date(),
+      version: data?.version || 1,
+      error: null,
+    });
+    return data?.payload || null;
+  } catch (err: any) {
+    updateStatus({ isSyncing: false, isConnected: false, error: err.message });
+    return null;
+  }
 }
 
-// Local mock return to prevent HTTP fetch calls
-export async function fetchCloudVersion(): Promise<{ version: number; lastUpdated: string } | null> {
-  return { version: 1, lastUpdated: new Date().toISOString() };
+export async function fetchCloudVersion() {
+  try {
+    const { data, error } = await supabase.from('app_state').select('version, updated_at').single();
+    if (error) return null;
+    return { version: data.version, lastUpdated: data.updated_at };
+  } catch {
+    return null;
+  }
 }
 
-// Push operations fallback locally
-export async function pushCloudEntity(
-  entity: string,
-  data: any,
-  user: string = 'KCA User'
-): Promise<boolean> {
-  updateStatus({
-    isSyncing: false,
-    isConnected: true,
-    lastSyncTime: new Date(),
-    error: null,
-  });
-  return true;
+// Push local edits directly to Supabase so other devices receive updates
+export async function pushCloudEntity(entity: string, data: any, user: string = 'KCA User'): Promise<boolean> {
+  updateStatus({ isSyncing: true });
+  try {
+    const newVersion = currentSyncStatus.version + 1;
+    const { error } = await supabase.from('app_state').upsert({
+      id: 1,
+      entity,
+      payload: data,
+      updated_by: user,
+      version: newVersion,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) throw error;
+
+    updateStatus({
+      isSyncing: false,
+      isConnected: true,
+      lastSyncTime: new Date(),
+      version: newVersion,
+      error: null,
+    });
+    return true;
+  } catch (err: any) {
+    updateStatus({ isSyncing: false, isConnected: false, error: err.message });
+    return false;
+  }
 }
 
-export async function pushFullRestore(payload: any): Promise<boolean> {
-  updateStatus({
-    isSyncing: false,
-    isConnected: true,
-    lastSyncTime: new Date(),
-    error: null,
-  });
-  return true;
-}
-
-/**
- * Sync Manager using local storage only
- */
+// Subscribe to real-time changes across all connected devices
 export function startCloudSyncManager(onRemoteUpdate: (cloudState: any) => void): () => void {
-  updateStatus({ isConnected: true, isSyncing: false, error: null });
-  return () => {};
+  fetchCloudState().then((state) => {
+    if (state) onRemoteUpdate(state);
+  });
+
+  const channel = supabase
+    .channel('realtime_kca_sync')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'app_state' },
+      (payload) => {
+        if (payload.new && (payload.new as any).payload) {
+          updateStatus({
+            isConnected: true,
+            lastSyncTime: new Date(),
+            version: (payload.new as any).version || 1,
+          });
+          onRemoteUpdate((payload.new as any).payload);
+        }
+      }
+    )
+    .subscribe((status) => {
+      updateStatus({ isConnected: status === 'SUBSCRIBED' });
+    });
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
 }
