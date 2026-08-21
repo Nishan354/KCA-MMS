@@ -1,5 +1,21 @@
 import { ThemePreset } from './theme';
 
+// ==========================================
+// USER & ROLE DEFINITIONS
+// ==========================================
+export type UserRole = 'admin' | 'user';
+
+export interface User {
+  id: string;
+  username: string;
+  email?: string;
+  role: UserRole; // 'admin' or 'user'
+  createdAt?: string;
+}
+
+// ==========================================
+// PORTAL BRANDING CONFIGURATION
+// ==========================================
 export interface PortalBrandingConfig {
   portalName: string; // e.g. "Kairali Cultural Association Fujairah"
   shortName: string; // e.g. "KCA FUJAIRAH"
