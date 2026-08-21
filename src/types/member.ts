@@ -133,48 +133,36 @@ export type UserRole =
   | 'Unit Coordinator'
   | 'Desk Auditor';
 
+export interface AdminAccountPermissions {
+  canManageUsers?: boolean;
+  canManageStorage?: boolean;
+  canEditMembers?: boolean;
+  canExportData?: boolean;
+}
+
 export interface AdminAccount {
   id: string;
   username: string;
   fullName: string;
   email: string;
-  password: string;
+  password?: string;
   role: UserRole;
-  unit?: string; // Assigned unit for unit operators (e.g. 'Fujairah', 'Kalba', 'Khorfakhan', 'Dibba')
+  unit?: string; // Assigned unit for unit operators
   status: 'Active' | 'Inactive';
   createdAt: string;
   lastLoginAt?: string;
+  permissions?: AdminAccountPermissions;
 }
 
 export interface UserSession {
   id: string;
   username: string;
   fullName: string;
-  role: UserRole;
+  role: UserRole | string;
   unit?: string;
   email: string;
   isLoggedIn: boolean;
-}
-
-/**
- * Checks if the role is restricted to a single specific unit's data and operations
- */
-export function isUnitOperatorRole(role?: string): boolean {
-  return role === 'Unit Data Operator' || role === 'Unit Coordinator';
-}
-
-/**
- * Checks if the user is a top-level Super Admin or Admin (has database/storage credentials access)
- */
-export function isSuperAdminOrAdmin(role?: string): boolean {
-  return role === 'Super Admin' || role === 'Admin';
-}
-
-/**
- * Checks if the user has full central administration privileges (manage accounts, all units, backups)
- */
-export function hasAdminPrivilege(role?: string): boolean {
-  return role === 'Super Admin' || role === 'Admin' || role === 'Executive Officer';
+  permissions?: AdminAccountPermissions;
 }
 
 export interface BackupMetadata {
@@ -194,4 +182,49 @@ export interface AuditLogItem {
   memberId?: string;
   targetMemberId?: string;
   targetMembershipId?: string;
+}
+
+// Access Control & Permission Helper Functions
+
+/**
+ * Checks if the role is restricted to a single specific unit's data and operations
+ */
+export function isUnitOperatorRole(role?: string): boolean {
+  return role === 'Unit Data Operator' || role === 'Unit Coordinator';
+}
+
+/**
+ * Checks if the user is a top-level Super Admin or Admin (has database, cloud, and storage controls)
+ */
+export function isSuperAdminOrAdmin(role?: string): boolean {
+  return role === 'Super Admin' || role === 'Admin';
+}
+
+/**
+ * Checks if the user has central administration privileges (manage user accounts, units, backups)
+ */
+export function hasAdminPrivilege(role?: string): boolean {
+  return role === 'Super Admin' || role === 'Admin' || role === 'Executive Officer';
+}
+
+/**
+ * Checks if user has explicit permission to wipe, backup, or alter physical system storage
+ */
+export function canManageStorageAccess(session?: UserSession | null): boolean {
+  if (!session || !session.isLoggedIn) return false;
+  if (session.permissions?.canManageStorage !== undefined) {
+    return session.permissions.canManageStorage;
+  }
+  return isSuperAdminOrAdmin(session.role);
+}
+
+/**
+ * Checks if user can create, update, or remove administrative/staff user accounts
+ */
+export function canManageUserAccounts(session?: UserSession | null): boolean {
+  if (!session || !session.isLoggedIn) return false;
+  if (session.permissions?.canManageUsers !== undefined) {
+    return session.permissions.canManageUsers;
+  }
+  return isSuperAdminOrAdmin(session.role);
 }
