@@ -13,6 +13,9 @@ export interface SyncStatus {
   lastSyncTime: Date | null;
   version: number;
   error: string | null;
+  errorCode?: string | null;
+  tableExists?: boolean;
+  isGloballyConfigured?: boolean;
   syncedEntitiesCount?: {
     members?: number;
     finance?: number;
@@ -41,51 +44,116 @@ export interface KcaCloudState {
 
 const STORAGE_KEY_SUPABASE_CONFIG = 'kca_custom_supabase_config_v1';
 
-// Default Supabase project endpoints with fallback support
+// Default fallback endpoints
 const DEFAULT_SUPABASE_URL = 'https://jvwetoapdaxuweannrgq.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder';
 
-export function getSupabaseCredentials(): { url: string; anonKey: string } {
+export function getSupabaseCredentials(): { url: string; anonKey: string; projectId: string; isConfigured: boolean } {
+  let url = '';
+  let anonKey = '';
+
+  // 1. Check URL parameters for instant 1-click device pairing (?sync_url=...&sync_key=... or #sb=...)
   try {
-    const custom = localStorage.getItem(STORAGE_KEY_SUPABASE_CONFIG);
-    if (custom) {
-      const parsed = JSON.parse(custom);
-      if (parsed.url && parsed.anonKey) {
-        return { url: parsed.url.trim(), anonKey: parsed.anonKey.trim() };
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlParam = params.get('sb_url') || params.get('sync_url');
+      const keyParam = params.get('sb_key') || params.get('sync_key');
+      if (urlParam && keyParam) {
+        url = decodeURIComponent(urlParam).trim();
+        anonKey = decodeURIComponent(keyParam).trim();
+        // Save to localStorage immediately so future visits stay configured
+        localStorage.setItem(
+          STORAGE_KEY_SUPABASE_CONFIG,
+          JSON.stringify({ url, anonKey, updatedAt: new Date().toISOString() })
+        );
+        // Clean up URL without reloading
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
       }
     }
   } catch {}
 
-  const metaEnv = (import.meta as any).env || {};
-  const url =
-    metaEnv.VITE_SUPABASE_URL ||
-    metaEnv.NEXT_PUBLIC_SUPABASE_URL ||
-    metaEnv.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_URL ||
-    DEFAULT_SUPABASE_URL;
+  // 2. Check LocalStorage
+  if (!url || !anonKey) {
+    try {
+      const custom = localStorage.getItem(STORAGE_KEY_SUPABASE_CONFIG);
+      if (custom) {
+        const parsed = JSON.parse(custom);
+        if (parsed.url && parsed.anonKey) {
+          url = parsed.url.trim();
+          anonKey = parsed.anonKey.trim();
+        }
+      }
+    } catch {}
+  }
 
-  const anonKey =
-    metaEnv.VITE_SUPABASE_ANON_KEY ||
-    metaEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    metaEnv.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_PUBLISHABLE_KEY ||
-    DEFAULT_SUPABASE_ANON_KEY;
+  // 3. Check environment variables
+  if (!url || !anonKey) {
+    const metaEnv = (import.meta as any).env || {};
+    url =
+      metaEnv.VITE_SUPABASE_URL ||
+      metaEnv.NEXT_PUBLIC_SUPABASE_URL ||
+      metaEnv.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_URL ||
+      DEFAULT_SUPABASE_URL;
 
-  return { url, anonKey };
+    anonKey =
+      metaEnv.VITE_SUPABASE_ANON_KEY ||
+      metaEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+      metaEnv.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_PUBLISHABLE_KEY ||
+      DEFAULT_SUPABASE_ANON_KEY;
+  }
+
+  // Extract Supabase Project Reference (e.g. 'jvwetoapdaxuweannrgq')
+  let projectId = 'jvwetoapdaxuweannrgq';
+  try {
+    const clean = url.replace(/^https?:\/\//, '').split('.')[0];
+    if (clean && clean.length > 3) {
+      projectId = clean;
+    }
+  } catch {}
+
+  const isConfigured = Boolean(anonKey && !anonKey.includes('placeholder'));
+
+  return { url, anonKey, projectId, isConfigured };
 }
 
-export function saveCustomSupabaseCredentials(url: string, anonKey: string): void {
+/**
+ * Saves Supabase credentials locally AND propagates to the backend server
+ * so all other devices and users automatically inherit the same database config!
+ */
+export async function saveCustomSupabaseCredentials(url: string, anonKey: string): Promise<boolean> {
+  const cleanUrl = url.trim();
+  const cleanKey = anonKey.trim();
+
+  // 1. Save to this device's localStorage
   try {
     localStorage.setItem(
       STORAGE_KEY_SUPABASE_CONFIG,
-      JSON.stringify({ url: url.trim(), anonKey: anonKey.trim(), updatedAt: new Date().toISOString() })
+      JSON.stringify({ url: cleanUrl, anonKey: cleanKey, updatedAt: new Date().toISOString() })
     );
-    reinitializeSupabaseClient();
   } catch (e) {
-    console.error('Failed to save Supabase config to storage:', e);
+    console.error('Failed to save Supabase config to local storage:', e);
   }
+
+  // 2. Re-initialize active client on this device
+  reinitializeSupabaseClient();
+
+  // 3. Post to backend server so other devices get it automatically
+  try {
+    await fetch('/api/config/supabase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: cleanUrl, anonKey: cleanKey }),
+    });
+  } catch (err) {
+    console.warn('[Server Sync Config Error]:', err);
+  }
+
+  return true;
 }
 
-export function clearCustomSupabaseCredentials(): void {
+export async function clearCustomSupabaseCredentials(): Promise<void> {
   try {
     localStorage.removeItem(STORAGE_KEY_SUPABASE_CONFIG);
     reinitializeSupabaseClient();
@@ -120,7 +188,34 @@ export function reinitializeSupabaseClient(): SupabaseClient {
   return activeClient;
 }
 
-// In-memory master state cache to allow atomic merging
+/**
+ * Auto-fetch global server configuration on launch so new devices automatically connect
+ */
+export async function syncCredentialsFromServer(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/config/supabase');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.url && data.anonKey && data.isConfigured) {
+        const local = getSupabaseCredentials();
+        if (!local.isConfigured || local.anonKey !== data.anonKey || local.url !== data.url) {
+          localStorage.setItem(
+            STORAGE_KEY_SUPABASE_CONFIG,
+            JSON.stringify({ url: data.url, anonKey: data.anonKey, updatedAt: new Date().toISOString() })
+          );
+          reinitializeSupabaseClient();
+          updateStatus({ isGloballyConfigured: true });
+          return true;
+        }
+      }
+    }
+  } catch (e) {
+    // offline or static mode
+  }
+  return false;
+}
+
+// In-memory master state cache
 let cachedCloudState: KcaCloudState = {
   version: 1,
   lastUpdated: new Date().toISOString(),
@@ -145,6 +240,8 @@ let currentSyncStatus: SyncStatus = {
   lastSyncTime: new Date(),
   version: 1,
   error: null,
+  tableExists: true,
+  isGloballyConfigured: true,
 };
 
 const statusListeners = new Set<(status: SyncStatus) => void>();
@@ -166,17 +263,21 @@ function updateStatus(partial: Partial<SyncStatus>) {
   });
 }
 
-// Standard table names used for synchronization
 const APP_STATE_TABLE = 'app_state';
-const STATE_ROW_ID = 'kca_main';
+let detectedIdType: 'string' | 'integer' = 'string';
 
-/**
- * Normalizes incoming data from Supabase into our standard KcaCloudState structure
- */
+function getRowId() {
+  return detectedIdType === 'integer' ? 1 : 'kca_main';
+}
+
 function extractStateFromRow(row: any): KcaCloudState | null {
   if (!row) return null;
 
-  // Case 1: Payload column has full bundle
+  if (typeof row.id === 'number') {
+    detectedIdType = 'integer';
+  }
+
+  // Case 1: Payload column has full JSON bundle
   if (row.payload && typeof row.payload === 'object') {
     const p = row.payload;
     return {
@@ -198,7 +299,7 @@ function extractStateFromRow(row: any): KcaCloudState | null {
     };
   }
 
-  // Case 2: Individual JSON columns directly on table row
+  // Case 2: Direct columns on row
   if (Array.isArray(row.members) || row.version) {
     return {
       version: Number(row.version || 1),
@@ -223,32 +324,21 @@ function extractStateFromRow(row: any): KcaCloudState | null {
 }
 
 /**
- * Fetch full live state from Supabase
+ * Fetch full live state from Supabase (with Server API fallback)
  */
 export async function fetchCloudState(): Promise<KcaCloudState | null> {
   updateStatus({ isSyncing: true, error: null });
   const client = getSupabaseClient();
 
   try {
-    // Attempt 1: Fetch from 'app_state' table
+    // 1. Direct Supabase Query
     const { data, error } = await client
       .from(APP_STATE_TABLE)
       .select('*')
       .order('version', { ascending: false })
       .limit(1);
 
-    if (error) {
-      // If table doesn't exist or RLS policy restricts, record status gracefully
-      console.warn('[Supabase Sync] Fetch warning:', error.message);
-      updateStatus({
-        isSyncing: false,
-        isConnected: false,
-        error: error.message,
-      });
-      return null;
-    }
-
-    if (data && data.length > 0) {
+    if (!error && data && data.length > 0) {
       const parsed = extractStateFromRow(data[0]);
       if (parsed) {
         cachedCloudState = { ...cachedCloudState, ...parsed };
@@ -258,6 +348,7 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
           lastSyncTime: new Date(),
           version: parsed.version,
           error: null,
+          tableExists: true,
           syncedEntitiesCount: {
             members: parsed.members?.length || 0,
             finance: parsed.financeTransactions?.length || 0,
@@ -269,12 +360,51 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
       }
     }
 
-    // If database table is connected but empty, initialize it with current state
+    if (error) {
+      // 2. Fallback to Server Proxy Sync
+      try {
+        const serverRes = await fetch('/api/sync/state');
+        if (serverRes.ok) {
+          const sJson = await serverRes.json();
+          if (sJson && sJson.data) {
+            const parsedServer = extractStateFromRow(sJson.data);
+            if (parsedServer) {
+              cachedCloudState = { ...cachedCloudState, ...parsedServer };
+              updateStatus({
+                isConnected: true,
+                isSyncing: false,
+                lastSyncTime: new Date(),
+                version: parsedServer.version,
+                error: null,
+                tableExists: true,
+              });
+              return parsedServer;
+            }
+          }
+        }
+      } catch {}
+
+      const isMissingTable =
+        error.code === '42P01' ||
+        error.message.toLowerCase().includes('does not exist') ||
+        error.message.toLowerCase().includes('relation');
+
+      updateStatus({
+        isSyncing: false,
+        isConnected: false,
+        error: error.message,
+        errorCode: error.code,
+        tableExists: !isMissingTable,
+      });
+      return null;
+    }
+
     updateStatus({
       isConnected: true,
       isSyncing: false,
       lastSyncTime: new Date(),
       error: null,
+      tableExists: true,
     });
     return null;
   } catch (err: any) {
@@ -282,13 +412,14 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
       isSyncing: false,
       isConnected: false,
       error: err?.message || 'Network connection failed',
+      tableExists: false,
     });
     return null;
   }
 }
 
 /**
- * Lightweight check for latest version in Supabase
+ * Lightweight check for latest version in Supabase / Server
  */
 export async function fetchCloudVersion(): Promise<{ version: number; lastUpdated: string } | null> {
   const client = getSupabaseClient();
@@ -299,37 +430,33 @@ export async function fetchCloudVersion(): Promise<{ version: number; lastUpdate
       .order('version', { ascending: false })
       .limit(1);
 
-    if (error || !data || data.length === 0) return null;
+    if (!error && data && data.length > 0) {
+      const row = data[0];
+      return {
+        version: Number(row.version || 1),
+        lastUpdated: row.updated_at || new Date().toISOString(),
+      };
+    }
 
-    const row = data[0];
-    return {
-      version: Number(row.version || 1),
-      lastUpdated: row.updated_at || new Date().toISOString(),
-    };
+    // Fallback: check server API
+    const sRes = await fetch('/api/sync/version');
+    if (sRes.ok) {
+      const sData = await sRes.json();
+      if (sData && sData.version) {
+        return { version: Number(sData.version), lastUpdated: sData.updatedAt || new Date().toISOString() };
+      }
+    }
+    return null;
   } catch {
     return null;
   }
 }
 
 /**
- * Atomic Push: Updates a specific entity inside the master cloud state without overwriting other entities
+ * Push entity data to Supabase and fallback to Server API
  */
 export async function pushCloudEntity(
-  entity:
-    | 'members'
-    | 'finance'
-    | 'inventory'
-    | 'inventoryLogs'
-    | 'classes'
-    | 'classParticipants'
-    | 'classAttendance'
-    | 'accounts'
-    | 'audit'
-    | 'units'
-    | 'customFields'
-    | 'customLogo'
-    | 'all'
-    | string,
+  entity: string,
   data: any,
   user: string = 'KCA User'
 ): Promise<boolean> {
@@ -373,10 +500,12 @@ export async function pushCloudEntity(
     customLogoUrl: cachedCloudState.customLogoUrl,
   };
 
+  const idToUse = getRowId();
+
   try {
-    const { error } = await client.from(APP_STATE_TABLE).upsert(
+    let { error } = await client.from(APP_STATE_TABLE).upsert(
       {
-        id: STATE_ROW_ID,
+        id: idToUse,
         entity: entity,
         payload: payloadBundle,
         version: nextVersion,
@@ -386,12 +515,61 @@ export async function pushCloudEntity(
       { onConflict: 'id' }
     );
 
+    // If string ID failed because table has integer ID type, retry with numeric 1
+    if (error && (error.code === '22P02' || error.message.includes('integer'))) {
+      detectedIdType = 'integer';
+      const retryRes = await client.from(APP_STATE_TABLE).upsert(
+        {
+          id: 1,
+          entity: entity,
+          payload: payloadBundle,
+          version: nextVersion,
+          updated_by: user,
+          updated_at: cachedCloudState.lastUpdated,
+        },
+        { onConflict: 'id' }
+      );
+      error = retryRes.error;
+    }
+
+    // If client direct push failed, try through backend server endpoint
     if (error) {
-      console.warn('[Supabase Sync] Push error:', error.message);
+      try {
+        const sRes = await fetch('/api/sync/push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: 'kca_main',
+            entity,
+            payload: payloadBundle,
+            version: nextVersion,
+            updated_by: user,
+          }),
+        });
+        if (sRes.ok) {
+          updateStatus({
+            isConnected: true,
+            isSyncing: false,
+            lastSyncTime: new Date(),
+            version: nextVersion,
+            error: null,
+            tableExists: true,
+          });
+          return true;
+        }
+      } catch {}
+    }
+
+    if (error) {
+      const isMissingTable =
+        error.code === '42P01' || error.message.toLowerCase().includes('does not exist');
+
       updateStatus({
         isSyncing: false,
         isConnected: false,
         error: error.message,
+        errorCode: error.code,
+        tableExists: !isMissingTable,
       });
       return false;
     }
@@ -402,6 +580,7 @@ export async function pushCloudEntity(
       lastSyncTime: new Date(),
       version: nextVersion,
       error: null,
+      tableExists: true,
       syncedEntitiesCount: {
         members: cachedCloudState.members?.length || 0,
         finance: cachedCloudState.financeTransactions?.length || 0,
@@ -421,55 +600,99 @@ export async function pushCloudEntity(
   }
 }
 
-/**
- * Full Restore & Sync to Supabase
- */
 export async function pushFullRestore(payload: any, user: string = 'Admin Restore'): Promise<boolean> {
   return pushCloudEntity('all', payload, user);
 }
 
-/**
- * Test Connection helper to verify Supabase credentials and table availability
- */
+export interface ConnectionTestResult {
+  success: boolean;
+  message: string;
+  tableExists: boolean;
+  rowCount?: number;
+  errorCode?: string;
+  sqlNeeded?: boolean;
+}
+
 export async function testSupabaseConnection(
   url?: string,
   anonKey?: string
-): Promise<{ success: boolean; message: string; rowCount?: number }> {
+): Promise<ConnectionTestResult> {
   try {
     const client = url && anonKey ? createClient(url, anonKey, { auth: { persistSession: false } }) : getSupabaseClient();
     const { data, error } = await client.from(APP_STATE_TABLE).select('*').limit(1);
 
     if (error) {
-      if (error.code === '42P01' || error.message.includes('relation "app_state" does not exist')) {
+      const isMissingTable =
+        error.code === '42P01' ||
+        error.message.toLowerCase().includes('does not exist') ||
+        error.message.toLowerCase().includes('relation');
+
+      if (isMissingTable) {
         return {
           success: false,
-          message: `Connected to Supabase successfully, but the table "${APP_STATE_TABLE}" is not yet created. Use the SQL setup script below to create it.`,
+          tableExists: false,
+          sqlNeeded: true,
+          errorCode: error.code,
+          message: `Connected to Supabase project, but table "${APP_STATE_TABLE}" is not yet created. Run the updated SQL script in your Supabase SQL Editor.`,
         };
       }
+
+      const isRlsError =
+        error.code === '42501' || error.message.toLowerCase().includes('row-level security');
+
+      if (isRlsError) {
+        return {
+          success: false,
+          tableExists: true,
+          sqlNeeded: true,
+          errorCode: error.code,
+          message: `Table "${APP_STATE_TABLE}" exists, but Row Level Security (RLS) is blocking access. Run the SQL script to grant permissions.`,
+        };
+      }
+
       return {
         success: false,
+        tableExists: false,
+        sqlNeeded: false,
+        errorCode: error.code,
         message: `Supabase Error: ${error.message} (Code: ${error.code || 'N/A'})`,
       };
     }
 
     return {
       success: true,
-      message: `Successfully connected to Supabase table "${APP_STATE_TABLE}". Real-time cloud sync is operational!`,
+      tableExists: true,
+      sqlNeeded: false,
+      message: `Operational! Successfully connected to Supabase table "${APP_STATE_TABLE}". Real-time cloud sync is live.`,
       rowCount: data?.length || 0,
     };
   } catch (err: any) {
     return {
       success: false,
+      tableExists: false,
+      sqlNeeded: false,
       message: `Connection failed: ${err.message || 'Network error'}`,
     };
   }
 }
 
 /**
- * Generates copy-pasteable SQL setup script for Supabase SQL Editor
+ * Returns a 1-click shareable URL that automatically pairs any mobile or second device
  */
+export function getDevicePairingUrl(): string {
+  if (typeof window === 'undefined') return '';
+  const creds = getSupabaseCredentials();
+  const base = window.location.origin + window.location.pathname;
+  return `${base}?sb_url=${encodeURIComponent(creds.url)}&sb_key=${encodeURIComponent(creds.anonKey)}`;
+}
+
 export function getSupabaseSqlSetupScript(): string {
-  return `-- 1. Create the master app_state table for KCA Fujairah MMS
+  return `-- ====================================================================
+-- KCA FUJAIRAH - REALTIME CLOUD SYNCHRONIZATION SETUP (MULTI-DEVICE)
+-- Copy and run this script in Supabase Dashboard -> SQL Editor -> New query
+-- ====================================================================
+
+-- 1. Create table with TEXT id or adapt existing table
 CREATE TABLE IF NOT EXISTS public.app_state (
   id TEXT PRIMARY KEY DEFAULT 'kca_main',
   entity TEXT DEFAULT 'all',
@@ -479,16 +702,107 @@ CREATE TABLE IF NOT EXISTS public.app_state (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 2. Disable RLS or allow anonymous read/write for live sync
-ALTER TABLE public.app_state DISABLE ROW LEVEL SECURITY;
+-- 2. Convert existing integer/bigint 'id' column to TEXT if already created
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'app_state' 
+    AND column_name = 'id' 
+    AND data_type IN ('integer', 'bigint', 'smallint')
+  ) THEN
+    ALTER TABLE public.app_state ALTER COLUMN id TYPE TEXT USING id::text;
+    ALTER TABLE public.app_state ALTER COLUMN id SET DEFAULT 'kca_main';
+  END IF;
+  
+  -- Add payload column if missing
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'app_state' 
+    AND column_name = 'payload'
+  ) THEN
+    ALTER TABLE public.app_state ADD COLUMN payload JSONB NOT NULL DEFAULT '{}'::jsonb;
+  END IF;
 
--- 3. Enable Supabase Realtime publication
-ALTER PUBLICATION supabase_realtime ADD TABLE public.app_state;
+  -- Add entity column if missing
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'app_state' 
+    AND column_name = 'entity'
+  ) THEN
+    ALTER TABLE public.app_state ADD COLUMN entity TEXT DEFAULT 'all';
+  END IF;
 
--- 4. Insert initial seed row if not exists
+  -- Add version column if missing
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'app_state' 
+    AND column_name = 'version'
+  ) THEN
+    ALTER TABLE public.app_state ADD COLUMN version BIGINT DEFAULT 1;
+  END IF;
+
+  -- Add updated_by column if missing
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'app_state' 
+    AND column_name = 'updated_by'
+  ) THEN
+    ALTER TABLE public.app_state ADD COLUMN updated_by TEXT DEFAULT 'KCA Admin';
+  END IF;
+
+  -- Add updated_at column if missing
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_schema = 'public' 
+    AND table_name = 'app_state' 
+    AND column_name = 'updated_at'
+  ) THEN
+    ALTER TABLE public.app_state ADD COLUMN updated_at TIMESTAMPTZ DEFAULT now();
+  END IF;
+END $$;
+
+-- 3. Grant full permissions to anonymous and authenticated users
+GRANT ALL ON TABLE public.app_state TO anon;
+GRANT ALL ON TABLE public.app_state TO authenticated;
+GRANT ALL ON TABLE public.app_state TO service_role;
+
+-- 4. Enable Row Level Security with permissive read/write policy
+ALTER TABLE public.app_state ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow all access to app_state" ON public.app_state;
+CREATE POLICY "Allow all access to app_state" 
+ON public.app_state 
+FOR ALL 
+TO anon, authenticated 
+USING (true) 
+WITH CHECK (true);
+
+-- 5. Enable Supabase Realtime WebSocket broadcast
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' 
+    AND schemaname = 'public' 
+    AND tablename = 'app_state'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.app_state;
+  END IF;
+END $$;
+
+-- 6. Seed initial record safely
 INSERT INTO public.app_state (id, entity, payload, version, updated_by, updated_at)
 VALUES ('kca_main', 'all', '{}'::jsonb, 1, 'System Initializer', now())
 ON CONFLICT (id) DO NOTHING;
+
+-- Verification query
+SELECT * FROM public.app_state;
 `;
 }
 
@@ -510,12 +824,14 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
     }
   }
 
-  // 1. Initial State Fetch
-  fetchCloudState().then((state) => {
-    if (state && isRunning) {
-      lastKnownVersion = state.version;
-      onRemoteUpdate(state);
-    }
+  // 1. Initial State Fetch with Server Config Sync
+  syncCredentialsFromServer().then(() => {
+    fetchCloudState().then((state) => {
+      if (state && isRunning) {
+        lastKnownVersion = state.version;
+        onRemoteUpdate(state);
+      }
+    });
   });
 
   // 2. Set up Supabase Realtime WebSocket Listener
@@ -537,6 +853,7 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
                 lastSyncTime: new Date(),
                 version: parsed.version,
                 error: null,
+                tableExists: true,
                 syncedEntitiesCount: {
                   members: parsed.members?.length || 0,
                   finance: parsed.financeTransactions?.length || 0,
@@ -551,7 +868,7 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
       )
       .subscribe((status: string) => {
         if (status === 'SUBSCRIBED') {
-          updateStatus({ isConnected: true, error: null });
+          updateStatus({ isConnected: true, error: null, tableExists: true });
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           updateStatus({ isConnected: false });
         }
@@ -561,7 +878,7 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
     updateStatus({ isConnected: false });
   }
 
-  // 3. Fallback Heartbeat Polling (every 6 seconds) for bulletproof sync across proxies / mobile networks
+  // 3. Fallback Heartbeat Polling (every 5 seconds) for multi-device sync
   pollInterval = setInterval(async () => {
     if (!isRunning) return;
     try {
@@ -574,7 +891,7 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
         }
       }
     } catch {}
-  }, 6000);
+  }, 5000);
 
   return () => {
     isRunning = false;

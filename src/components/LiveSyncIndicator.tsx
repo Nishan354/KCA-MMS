@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { subscribeToSyncStatus, fetchCloudState, SyncStatus } from '../utils/cloudSync';
-import { RefreshCw, Wifi, WifiOff, Database, CheckCircle2 } from 'lucide-react';
+import { RefreshCw, Database, AlertTriangle, Sparkles } from 'lucide-react';
 
 interface LiveSyncIndicatorProps {
   onManualSync?: () => Promise<void> | void;
@@ -17,6 +17,7 @@ export const LiveSyncIndicator: React.FC<LiveSyncIndicatorProps> = ({
     lastSyncTime: new Date(),
     version: 1,
     error: null,
+    tableExists: true,
   });
   const [showTooltip, setShowTooltip] = useState(false);
   const [timeAgo, setTimeAgo] = useState('Just now');
@@ -48,8 +49,14 @@ export const LiveSyncIndicator: React.FC<LiveSyncIndicatorProps> = ({
     return () => clearInterval(interval);
   }, [status.lastSyncTime]);
 
-  const handleForceSync = async (e: React.MouseEvent) => {
+  const handleIndicatorClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!status.isConnected || status.tableExists === false || status.error) {
+      if (onOpenStorageSettings) {
+        onOpenStorageSettings();
+        return;
+      }
+    }
     if (onManualSync) {
       await onManualSync();
     } else {
@@ -57,32 +64,34 @@ export const LiveSyncIndicator: React.FC<LiveSyncIndicatorProps> = ({
     }
   };
 
+  const isSetupNeeded = !status.isConnected || status.tableExists === false || Boolean(status.error);
+
   return (
     <div className="relative inline-block">
       <button
-        onClick={handleForceSync}
+        onClick={handleIndicatorClick}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all border shadow-xs cursor-pointer ${
           status.isSyncing
             ? 'bg-amber-500/20 text-amber-200 border-amber-400/40'
-            : status.isConnected
-            ? 'bg-emerald-950/60 text-emerald-200 border-emerald-500/40 hover:bg-emerald-900/80 hover:border-emerald-400'
-            : 'bg-rose-950/60 text-rose-200 border-rose-500/40 hover:bg-rose-900/80'
+            : isSetupNeeded
+            ? 'bg-amber-950/70 text-amber-200 border-amber-500/40 hover:bg-amber-900/90'
+            : 'bg-emerald-950/60 text-emerald-200 border-emerald-500/40 hover:bg-emerald-900/80 hover:border-emerald-400'
         }`}
-        title="Click to sync latest data with Supabase Cloud"
+        title={isSetupNeeded ? 'Click to open Supabase setup guide' : 'Click to sync with Supabase Cloud'}
       >
         <span className="relative flex h-2 w-2">
-          {status.isConnected && !status.isSyncing && (
+          {status.isConnected && !status.isSyncing && !isSetupNeeded && (
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
           )}
           <span
             className={`relative inline-flex rounded-full h-2 w-2 ${
               status.isSyncing
                 ? 'bg-amber-400 animate-spin'
-                : status.isConnected
-                ? 'bg-emerald-400'
-                : 'bg-rose-400'
+                : isSetupNeeded
+                ? 'bg-amber-400'
+                : 'bg-emerald-400'
             }`}
           ></span>
         </span>
@@ -90,39 +99,57 @@ export const LiveSyncIndicator: React.FC<LiveSyncIndicatorProps> = ({
         <span className="hidden sm:inline font-mono tracking-tight text-[11px]">
           {status.isSyncing
             ? 'Syncing Supabase...'
-            : status.isConnected
-            ? `Supabase Live (${timeAgo})`
-            : 'Offline Mode'}
+            : isSetupNeeded
+            ? 'Supabase: Setup Table'
+            : `Supabase Live (${timeAgo})`}
         </span>
         <span className="sm:hidden font-mono text-[10px]">
-          {status.isSyncing ? 'Sync...' : status.isConnected ? 'Live' : 'Offline'}
+          {status.isSyncing ? 'Sync...' : isSetupNeeded ? 'Setup DB' : 'Live'}
         </span>
 
-        <RefreshCw
-          className={`w-3 h-3 text-white/80 hover:text-white transition-transform ${
-            status.isSyncing ? 'animate-spin text-amber-300' : 'hover:rotate-180 duration-300'
-          }`}
-        />
+        {isSetupNeeded ? (
+          <Sparkles className="w-3 h-3 text-amber-300" />
+        ) : (
+          <RefreshCw
+            className={`w-3 h-3 text-white/80 hover:text-white transition-transform ${
+              status.isSyncing ? 'animate-spin text-amber-300' : 'hover:rotate-180 duration-300'
+            }`}
+          />
+        )}
       </button>
 
       {/* Hover Info Tooltip */}
       {showTooltip && (
-        <div className="absolute right-0 top-full mt-2 w-72 p-3.5 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-700 text-xs z-50 pointer-events-auto">
+        <div className="absolute right-0 top-full mt-2 w-76 p-3.5 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-700 text-xs z-50 pointer-events-auto">
           <div className="flex items-center justify-between pb-2 border-b border-slate-800">
             <div className="flex items-center gap-1.5 font-bold text-emerald-400 text-xs">
               <Database className="w-3.5 h-3.5" />
               <span>Supabase Real-Time Cloud</span>
             </div>
             <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase font-mono ${
-              status.isConnected ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950 text-rose-300 border border-rose-500/30'
+              !isSetupNeeded ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/30' : 'bg-amber-950 text-amber-300 border border-amber-500/30'
             }`}>
-              {status.isConnected ? 'Connected' : 'Offline'}
+              {!isSetupNeeded ? 'Connected' : 'Action Required'}
             </span>
           </div>
 
-          <p className="text-[11px] text-slate-300 leading-relaxed mt-2">
-            Multi-user realtime sync is active. Updates made by any user across branches/devices are synchronized instantly and permanently saved.
-          </p>
+          {isSetupNeeded ? (
+            <div className="mt-2 space-y-2">
+              <div className="flex items-start gap-2 text-amber-200 text-[11px] leading-relaxed">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                <span>
+                  Supabase database table <code>app_state</code> needs to be created or permissions granted via SQL script.
+                </span>
+              </div>
+              <p className="text-[10px] text-slate-400">
+                Click below to open the 10-second setup guide and copy the SQL script.
+              </p>
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-300 leading-relaxed mt-2">
+              Multi-user realtime sync is active. Updates made by any user across branches/devices are synchronized instantly and permanently saved.
+            </p>
+          )}
 
           <div className="mt-2.5 pt-2 border-t border-slate-800/80 space-y-1 text-[10px] text-slate-400 font-mono">
             <div className="flex items-center justify-between">
@@ -152,9 +179,9 @@ export const LiveSyncIndicator: React.FC<LiveSyncIndicatorProps> = ({
                   setShowTooltip(false);
                   onOpenStorageSettings();
                 }}
-                className="w-full py-1 text-center text-[10px] text-indigo-300 hover:text-indigo-100 font-semibold cursor-pointer underline"
+                className="w-full py-1 text-center text-[10px] text-amber-300 hover:text-amber-100 font-semibold cursor-pointer underline"
               >
-                Configure Cloud &amp; Supabase Settings &rarr;
+                {isSetupNeeded ? '⚡ Open 10-Second SQL Setup Guide →' : 'Configure Cloud & Supabase Settings →'}
               </button>
             </div>
           )}

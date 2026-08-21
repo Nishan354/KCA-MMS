@@ -17,6 +17,9 @@ import {
   getSupabaseSqlSetupScript,
   pushFullRestore,
   fetchCloudState,
+  syncCredentialsFromServer,
+  getDevicePairingUrl,
+  ConnectionTestResult,
 } from '../utils/cloudSync';
 import {
   X,
@@ -31,7 +34,6 @@ import {
   RefreshCw,
   FolderCheck,
   ExternalLink,
-  ShieldCheck,
   Database,
   Key,
   Copy,
@@ -39,7 +41,11 @@ import {
   Layers,
   ArrowUpCircle,
   ArrowDownCircle,
-  Lock,
+  Terminal,
+  Sparkles,
+  Share2,
+  Smartphone,
+  Globe,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -65,10 +71,9 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
   const [backupMeta, setBackupMetaState] = useState<BackupMetadata>(getBackupMetadata());
   const [isSavingLocal, setIsSavingLocal] = useState(false);
   const [localStatusMessage, setLocalStatusMessage] = useState<string | null>(null);
-  const [googleDriveFolderName, setGoogleDriveFolderName] = useState(
+  const [googleDriveFolderName] = useState(
     backupMeta.googleDriveFolderName || 'KCA_Fujairah_Membership_Backups'
   );
-  const [googleDriveLinked, setGoogleDriveLinked] = useState(backupMeta.googleDriveLinked);
   const [importError, setImportError] = useState<string | null>(null);
   const [recoverySnapshots, setRecoverySnapshots] = useState<LocalStorageSnapshot[]>([]);
   const [recoverySuccessMsg, setRecoverySuccessMsg] = useState<string | null>(null);
@@ -81,20 +86,37 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
   const [showCredentialsForm, setShowCredentialsForm] = useState(false);
   const [showSqlSetup, setShowSqlSetup] = useState(false);
   const [isTestingSupabase, setIsTestingSupabase] = useState(false);
-  const [supabaseTestResult, setSupabaseTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [supabaseTestResult, setSupabaseTestResult] = useState<ConnectionTestResult | null>(null);
   const [isPushingCloud, setIsPushingCloud] = useState(false);
   const [isPullingCloud, setIsPullingCloud] = useState(false);
-  const [cloudOpMessage, setCloudOpMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [cloudOpMessage, setCloudOpMessage] = useState<{
+    type: 'success' | 'error' | 'warning';
+    text: string;
+    showSqlAction?: boolean;
+  } | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       const found = getLocalRecoverySnapshots();
       setRecoverySnapshots(found);
-      const creds = getSupabaseCredentials();
-      setSupabaseCreds(creds);
-      setSupabaseUrlInput(creds.url);
-      setSupabaseKeyInput(creds.anonKey);
+      
+      // Auto sync config from server first to make sure this device has the global admin setup
+      syncCredentialsFromServer().then(() => {
+        const creds = getSupabaseCredentials();
+        setSupabaseCreds(creds);
+        setSupabaseUrlInput(creds.url);
+        setSupabaseKeyInput(creds.anonKey);
+
+        // Auto test connection on open
+        testSupabaseConnection(creds.url, creds.anonKey).then((res) => {
+          setSupabaseTestResult(res);
+          if (!res.success && res.sqlNeeded) {
+            setShowSqlSetup(true);
+          }
+        });
+      });
     }
   }, [isOpen, members]);
 
@@ -108,30 +130,50 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
       setSupabaseTestResult(res);
       if (res.success) {
         confetti({ particleCount: 30, spread: 50 });
+      } else if (res.sqlNeeded) {
+        setShowSqlSetup(true);
       }
     } catch (e: any) {
-      setSupabaseTestResult({ success: false, message: e.message || 'Connection test failed' });
+      setSupabaseTestResult({
+        success: false,
+        tableExists: false,
+        message: e.message || 'Connection test failed',
+      });
     } finally {
       setIsTestingSupabase(false);
     }
   };
 
-  const handleSaveCredentials = () => {
-    saveCustomSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
-    setSupabaseCreds({ url: supabaseUrlInput, anonKey: supabaseKeyInput });
-    setCloudOpMessage({ type: 'success', text: 'Supabase configuration saved & client re-initialized!' });
+  const handleSaveCredentials = async () => {
+    await saveCustomSupabaseCredentials(supabaseUrlInput, supabaseKeyInput);
+    const updated = getSupabaseCredentials();
+    setSupabaseCreds(updated);
+    setCloudOpMessage({
+      type: 'success',
+      text: 'Global Supabase setup saved! All devices connecting to this app will automatically sync.',
+    });
     setShowCredentialsForm(false);
     handleTestConnection();
   };
 
-  const handleResetDefaultCredentials = () => {
-    clearCustomSupabaseCredentials();
+  const handleResetDefaultCredentials = async () => {
+    await clearCustomSupabaseCredentials();
     const creds = getSupabaseCredentials();
     setSupabaseCreds(creds);
     setSupabaseUrlInput(creds.url);
     setSupabaseKeyInput(creds.anonKey);
     setCloudOpMessage({ type: 'success', text: 'Reset to default Supabase project credentials.' });
     setShowCredentialsForm(false);
+    handleTestConnection();
+  };
+
+  const handleCopyDevicePairingLink = () => {
+    const pairUrl = getDevicePairingUrl();
+    if (!pairUrl) return;
+    navigator.clipboard.writeText(pairUrl);
+    setCopiedShareLink(true);
+    setTimeout(() => setCopiedShareLink(false), 2500);
+    confetti({ particleCount: 25, spread: 45 });
   };
 
   const handleForcePushToSupabase = async () => {
@@ -151,13 +193,20 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
         });
         confetti({ particleCount: 45, spread: 65 });
       } else {
+        setShowSqlSetup(true);
         setCloudOpMessage({
           type: 'error',
-          text: 'Failed to push data to Supabase. Check credentials and ensure table "app_state" exists.',
+          text: 'Supabase push failed. The "app_state" table is missing or restricted by RLS policies. Run the SQL script below in Supabase.',
+          showSqlAction: true,
         });
       }
     } catch (err: any) {
-      setCloudOpMessage({ type: 'error', text: err.message || 'Cloud push operation failed' });
+      setShowSqlSetup(true);
+      setCloudOpMessage({
+        type: 'error',
+        text: err.message || 'Cloud push operation failed',
+        showSqlAction: true,
+      });
     } finally {
       setIsPushingCloud(false);
     }
@@ -181,16 +230,23 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
       } else if (cloudData) {
         setCloudOpMessage({
           type: 'success',
-          text: 'Connected to Supabase cloud. No newer data found or table is currently empty.',
+          text: 'Connected to Supabase cloud table. Ready for sync!',
         });
       } else {
+        setShowSqlSetup(true);
         setCloudOpMessage({
-          type: 'error',
-          text: 'Could not retrieve data from Supabase. Ensure table "app_state" exists and RLS allows read.',
+          type: 'warning',
+          text: 'Supabase table "app_state" needs initial creation. Follow the 10-second SQL guide below to activate cloud sync.',
+          showSqlAction: true,
         });
       }
     } catch (err: any) {
-      setCloudOpMessage({ type: 'error', text: err.message || 'Cloud pull operation failed' });
+      setShowSqlSetup(true);
+      setCloudOpMessage({
+        type: 'error',
+        text: err.message || 'Cloud pull operation failed',
+        showSqlAction: true,
+      });
     } finally {
       setIsPullingCloud(false);
     }
@@ -202,6 +258,10 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
     setCopiedSql(true);
     setTimeout(() => setCopiedSql(false), 2500);
   };
+
+  const directSqlEditorUrl = supabaseCreds.projectId
+    ? `https://supabase.com/dashboard/project/${supabaseCreds.projectId}/sql/new`
+    : 'https://supabase.com/dashboard';
 
   const handleRestoreSnapshot = (snapshot: LocalStorageSnapshot) => {
     if (snapshot.members.length === 0) return;
@@ -257,17 +317,6 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
     }
   };
 
-  const handleLinkGoogleDrive = () => {
-    setGoogleDriveLinked(true);
-    setBackupMetadata({
-      googleDriveLinked: true,
-      googleDriveFolderName,
-      lastBackupDate: new Date().toISOString(),
-    });
-    setBackupMetaState(getBackupMetadata());
-    confetti({ particleCount: 30, spread: 50 });
-  };
-
   const handleExportForGoogleDrive = () => {
     downloadFullJsonBackup(members, auditLogs);
     window.open('https://drive.google.com/drive/my-drive', '_blank');
@@ -304,7 +353,7 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden my-auto">
+      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-3xl max-h-[92vh] flex flex-col overflow-hidden my-auto">
         {/* Header */}
         <div className="px-6 py-4 bg-[#8b0000] text-white flex items-center justify-between border-b border-[#730000]">
           <div className="flex items-center gap-3">
@@ -313,10 +362,10 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
             </div>
             <div>
               <h3 className="font-display font-bold text-lg text-white">
-                Cloud Database &amp; Multi-User Sync
+                Multi-User Cloud Sync &amp; Database
               </h3>
               <p className="text-xs text-red-100">
-                Supabase Real-Time Cloud, Google Drive integration, and PC backups
+                Supabase Real-Time Cloud, Branch synchronization, and PC backups
               </p>
             </div>
           </div>
@@ -343,34 +392,127 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                     Supabase Real-Time Cloud Database
                   </h4>
                   <p className="text-[11px] text-slate-500">
-                    Provides continuous live sync for multiple users across branches &amp; devices.
+                    Live multi-user sync across branches (Fujairah, Kalba, Khorfakhan, Dibba) and mobile devices.
                   </p>
                 </div>
               </div>
 
-              <span className="px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1 font-mono">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                Real-Time Active
+              <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 font-mono ${
+                supabaseTestResult?.success
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                  : 'bg-amber-100 text-amber-800 border-amber-200'
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  supabaseTestResult?.success ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                }`}></span>
+                {supabaseTestResult?.success ? 'Real-Time Live' : 'Setup Required'}
               </span>
             </div>
 
             {/* Cloud Operational Feedback */}
             {cloudOpMessage && (
               <div
-                className={`p-3 rounded-lg border text-xs font-medium flex items-center gap-2 ${
+                className={`p-3 rounded-lg border text-xs font-medium flex items-center justify-between gap-2 ${
                   cloudOpMessage.type === 'success'
                     ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : cloudOpMessage.type === 'warning'
+                    ? 'bg-amber-50 border-amber-200 text-amber-800'
                     : 'bg-rose-50 border-rose-200 text-rose-800'
                 }`}
               >
-                {cloudOpMessage.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                ) : (
-                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <div className="flex items-center gap-2">
+                  {cloudOpMessage.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  )}
+                  <span>{cloudOpMessage.text}</span>
+                </div>
+
+                {cloudOpMessage.showSqlAction && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSqlSetup(true)}
+                    className="px-2 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold shrink-0 cursor-pointer"
+                  >
+                    View SQL Fix
+                  </button>
                 )}
-                <span>{cloudOpMessage.text}</span>
               </div>
             )}
+
+            {/* Step-by-Step 10-Second Setup Guide Callout (If table is not yet created) */}
+            {(!supabaseTestResult?.success || showSqlSetup) && (
+              <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 text-amber-950 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-600" />
+                    <h5 className="text-xs font-bold font-display uppercase tracking-wider text-amber-900">
+                      10-Second Supabase Activation Guide
+                    </h5>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold bg-amber-200/80 px-2 py-0.5 rounded text-amber-900">
+                    Project: {supabaseCreds.projectId}
+                  </span>
+                </div>
+
+                <p className="text-xs text-amber-900 leading-relaxed">
+                  To enable permanent multi-device sync, run the auto-generated SQL setup script once in your Supabase SQL Editor to create the <code>app_state</code> table and configure real-time broadcasting.
+                </p>
+
+                {/* 3 Step Action Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleCopySql}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  >
+                    {copiedSql ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copiedSql ? '1. Copied to Clipboard!' : '1. Copy SQL Script'}
+                  </button>
+
+                  <a
+                    href={directSqlEditorUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-black text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 text-amber-300" />
+                    2. Open SQL Editor
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={handleTestConnection}
+                    disabled={isTestingSupabase}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2 bg-white hover:bg-amber-100 text-amber-900 border border-amber-300 rounded-lg text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isTestingSupabase ? 'animate-spin' : ''}`} />
+                    3. Verify &amp; Connect
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Global Multi-Device Sharing & Pairing Banner */}
+            <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+              <div className="flex items-center gap-2 text-blue-900">
+                <Globe className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>
+                  <strong>Global Sync:</strong> Configuration is propagated across all devices automatically.
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleCopyDevicePairingLink}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded-md text-xs font-bold transition-colors shadow-xs shrink-0 cursor-pointer"
+                title="Copies a 1-click link to configure any phone, tablet, or other PC"
+              >
+                {copiedShareLink ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Smartphone className="w-3.5 h-3.5 text-blue-200" />}
+                {copiedShareLink ? 'Link Copied!' : 'Copy Device Pairing Link'}
+              </button>
+            </div>
 
             {/* Supabase Action Buttons */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
@@ -424,7 +566,7 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                 </div>
                 {supabaseTestResult.success && (
                   <span className="font-mono text-[10px] bg-emerald-200/60 px-2 py-0.5 rounded font-bold">
-                    Latency: OK
+                    Status: OK
                   </span>
                 )}
               </div>
@@ -447,7 +589,7 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                 className="inline-flex items-center gap-1.5 text-slate-700 hover:text-slate-900 font-semibold cursor-pointer"
               >
                 <Layers className="w-3.5 h-3.5" />
-                {showSqlSetup ? 'Hide SQL Script' : 'View Supabase Table SQL'}
+                {showSqlSetup ? 'Hide SQL Setup Script' : 'View SQL Setup Script'}
               </button>
             </div>
 
@@ -494,7 +636,7 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                     onClick={handleSaveCredentials}
                     className="px-3.5 py-1.5 bg-[#8b0000] hover:bg-[#730000] text-white text-xs font-bold rounded-md transition-colors cursor-pointer shadow-xs"
                   >
-                    Save &amp; Reconnect
+                    Save &amp; Broadcast to All Devices
                   </button>
                 </div>
               </div>
@@ -504,9 +646,12 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
             {showSqlSetup && (
               <div className="p-4 bg-slate-900 rounded-lg text-slate-200 space-y-2.5 animate-fadeIn">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-mono text-emerald-400 font-bold">
-                    Supabase SQL Editor Setup Script
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-emerald-400" />
+                    <span className="text-[11px] font-mono text-emerald-400 font-bold">
+                      Supabase SQL Editor Setup Script
+                    </span>
+                  </div>
                   <button
                     type="button"
                     onClick={handleCopySql}
@@ -517,12 +662,20 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                   </button>
                 </div>
 
-                <pre className="p-3 bg-black/50 rounded text-[10px] font-mono text-slate-300 overflow-x-auto leading-relaxed max-h-48 border border-slate-800">
+                <pre className="p-3 bg-black/60 rounded text-[10px] font-mono text-slate-300 overflow-x-auto leading-relaxed max-h-56 border border-slate-800">
                   {getSupabaseSqlSetupScript()}
                 </pre>
-                <p className="text-[10px] text-slate-400">
-                  Paste and run this inside your Supabase Dashboard &rarr; SQL Editor to ensure Realtime publications and table permissions are active.
-                </p>
+                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+                  <span>Copy and paste this into Supabase SQL Editor and click "Run".</span>
+                  <a
+                    href={directSqlEditorUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-amber-400 hover:text-amber-300 font-semibold inline-flex items-center gap-1"
+                  >
+                    Open Supabase SQL Editor &rarr;
+                  </a>
+                </div>
               </div>
             )}
           </div>

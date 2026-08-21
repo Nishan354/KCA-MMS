@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -22,35 +23,113 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Initialize Supabase Client safely
-const supabaseUrl =
+// Persistent server config file path
+const SERVER_CONFIG_PATH = path.join(__dirname, '.supabase_runtime_config.json');
+
+// Initialize server-side Supabase credentials
+let runtimeSupabaseUrl =
   process.env.NEXT_PUBLIC_SUPABASE_URL ||
   process.env.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_URL ||
   process.env.VITE_SUPABASE_URL ||
   'https://jvwetoapdaxuweannrgq.supabase.co';
 
-const supabaseAnonKey =
+let runtimeSupabaseAnonKey =
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   process.env.NEXT_PUBLIC_KCA_MMS_DB_STORAGE_SUPABASE_PUBLISHABLE_KEY ||
   process.env.VITE_SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder';
 
-let supabase: any = null;
+// Try to load cached config from disk if available
 try {
-  supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: false },
-  });
+  if (fs.existsSync(SERVER_CONFIG_PATH)) {
+    const raw = fs.readFileSync(SERVER_CONFIG_PATH, 'utf-8');
+    const parsed = JSON.parse(raw);
+    if (parsed.url && parsed.anonKey) {
+      runtimeSupabaseUrl = parsed.url;
+      runtimeSupabaseAnonKey = parsed.anonKey;
+    }
+  }
 } catch (e) {
-  console.warn('Supabase client failed to initialize on server:', e);
+  console.warn('Failed to read server config file:', e);
 }
+
+let supabaseClient: any = null;
+
+function initServerSupabaseClient() {
+  try {
+    if (runtimeSupabaseUrl && runtimeSupabaseAnonKey && !runtimeSupabaseAnonKey.includes('placeholder')) {
+      supabaseClient = createClient(runtimeSupabaseUrl, runtimeSupabaseAnonKey, {
+        auth: { persistSession: false },
+      });
+    } else {
+      supabaseClient = null;
+    }
+  } catch (e) {
+    console.warn('Supabase client failed to initialize on server:', e);
+    supabaseClient = null;
+  }
+}
+
+initServerSupabaseClient();
+
+// Configuration Endpoints for Multi-Device Auto Sync
+app.get('/api/config/supabase', (_req, res) => {
+  const isConfigured = Boolean(
+    runtimeSupabaseUrl &&
+    runtimeSupabaseAnonKey &&
+    !runtimeSupabaseAnonKey.includes('placeholder')
+  );
+
+  return res.status(200).json({
+    url: runtimeSupabaseUrl,
+    anonKey: runtimeSupabaseAnonKey,
+    isConfigured,
+    projectId: runtimeSupabaseUrl ? runtimeSupabaseUrl.replace(/^https?:\/\//, '').split('.')[0] : '',
+  });
+});
+
+app.post('/api/config/supabase', (req, res) => {
+  try {
+    const { url, anonKey } = req.body || {};
+    if (!url || !anonKey) {
+      return res.status(400).json({ error: 'URL and Anon Key are required' });
+    }
+
+    runtimeSupabaseUrl = url.trim();
+    runtimeSupabaseAnonKey = anonKey.trim();
+
+    // Persist to server config file
+    try {
+      fs.writeFileSync(
+        SERVER_CONFIG_PATH,
+        JSON.stringify({ url: runtimeSupabaseUrl, anonKey: runtimeSupabaseAnonKey, updatedAt: new Date().toISOString() }),
+        'utf-8'
+      );
+    } catch (fsErr) {
+      console.warn('Could not write server config file (continuing in-memory):', fsErr);
+    }
+
+    initServerSupabaseClient();
+
+    console.log(`[Server] Supabase config updated globally for all devices: ${runtimeSupabaseUrl}`);
+    return res.status(200).json({
+      success: true,
+      url: runtimeSupabaseUrl,
+      isConfigured: true,
+      message: 'Supabase configuration saved and propagated to all devices.',
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to update server configuration' });
+  }
+});
 
 // Sync Endpoints
 app.get('/api/sync/version', async (_req, res) => {
   try {
-    if (!supabase) {
-      return res.status(200).json({ version: 1, status: 'ok' });
+    if (!supabaseClient) {
+      return res.status(200).json({ version: 1, status: 'ok', serverClientReady: false });
     }
-    const { data } = await supabase
+    const { data } = await supabaseClient
       .from('app_state')
       .select('version, updated_at')
       .order('version', { ascending: false })
@@ -58,7 +137,7 @@ app.get('/api/sync/version', async (_req, res) => {
 
     const version = data && data[0] ? Number(data[0].version) : 1;
     const updatedAt = data && data[0] ? data[0].updated_at : new Date().toISOString();
-    return res.status(200).json({ version, updatedAt, status: 'ok' });
+    return res.status(200).json({ version, updatedAt, status: 'ok', serverClientReady: true });
   } catch {
     return res.status(200).json({ version: 1, status: 'ok' });
   }
@@ -66,10 +145,10 @@ app.get('/api/sync/version', async (_req, res) => {
 
 app.get('/api/sync/state', async (_req, res) => {
   try {
-    if (!supabase) {
-      return res.status(200).json({ status: 'success', data: null });
+    if (!supabaseClient) {
+      return res.status(200).json({ status: 'success', data: null, message: 'Server supabase not configured' });
     }
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
       .from('app_state')
       .select('*')
       .order('version', { ascending: false })
@@ -86,11 +165,11 @@ app.get('/api/sync/state', async (_req, res) => {
 
 app.post('/api/sync/push', async (req, res) => {
   try {
-    if (!supabase) {
-      return res.status(200).json({ status: 'success', data: req.body });
+    if (!supabaseClient) {
+      return res.status(200).json({ status: 'success', data: req.body, warning: 'Supabase client not active' });
     }
     const body = req.body || {};
-    const { data, error } = await supabase.from('app_state').upsert(
+    const { data, error } = await supabaseClient.from('app_state').upsert(
       {
         id: body.id || 'kca_main',
         entity: body.entity || 'all',
@@ -124,5 +203,5 @@ app.get('*', (_req, res) => {
 
 const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`KCA Server running on port ${PORT}`);
 });
