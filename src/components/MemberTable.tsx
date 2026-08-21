@@ -33,6 +33,7 @@ interface MemberTableProps {
   onViewReceipt?: (member: Member) => void;
   onEditMember?: (member: Member) => void;
   onDeleteMember?: (id: string) => void;
+  onBulkDeleteMembers?: (ids: string[]) => void;
   onRenewMember?: (member: Member) => void;
   onAddNewMember?: () => void;
   onOpenNewMember?: () => void;
@@ -57,6 +58,7 @@ export const MemberTable: React.FC<MemberTableProps> = ({
   onViewReceipt,
   onEditMember,
   onDeleteMember,
+  onBulkDeleteMembers,
   onRenewMember,
   onAddNewMember,
   onOpenNewMember,
@@ -86,6 +88,7 @@ export const MemberTable: React.FC<MemberTableProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingUnitMemberId, setEditingUnitMemberId] = useState<string | null>(null);
   const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
+  const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
   // Visible custom field columns
   const tableCustomFields = useMemo(() => {
@@ -219,6 +222,17 @@ export const MemberTable: React.FC<MemberTableProps> = ({
               >
                 <MapPin className="w-3.5 h-3.5" style={{ color: 'var(--color-primary, #881337)' }} />
                 <span>Units ({units.length})</span>
+              </button>
+            )}
+
+            {isAdmin && selectedIds.length > 0 && onBulkDeleteMembers && (
+              <button
+                onClick={() => setShowBulkDeleteModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-colors shadow-xs cursor-pointer animate-fadeIn"
+                title="Delete all selected members"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Selected ({selectedIds.length})</span>
               </button>
             )}
 
@@ -702,6 +716,43 @@ export const MemberTable: React.FC<MemberTableProps> = ({
                 className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow-xs transition-colors cursor-pointer"
               >
                 Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Confirmation Modal */}
+      {showBulkDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 animate-fadeIn">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 text-center">Delete {selectedIds.length} Members</h3>
+            <p className="text-sm text-slate-600 text-center mt-2">
+              Are you sure you want to delete <strong className="text-slate-900">{selectedIds.length}</strong> selected member records? This change will immediately synchronize across all devices.
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowBulkDeleteModal(false)}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onBulkDeleteMembers && selectedIds.length > 0) {
+                    onBulkDeleteMembers(selectedIds);
+                    setSelectedIds([]);
+                    setShowBulkDeleteModal(false);
+                  }
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                Confirm Bulk Delete
               </button>
             </div>
           </div>

@@ -129,8 +129,17 @@ export function saveMembersToStorage(members: Member[]): void {
  */
 export function loadMembersFromStorage(): Member[] | null {
   try {
+    const mainRaw = localStorage.getItem(STORAGE_KEY_MEMBERS);
+    if (mainRaw !== null) {
+      try {
+        const parsed = JSON.parse(mainRaw);
+        if (Array.isArray(parsed)) {
+          return parsed;
+        }
+      } catch {}
+    }
+
     const candidateKeys = [
-      STORAGE_KEY_MEMBERS,
       STORAGE_KEY_EMERGENCY_BACKUP,
       STORAGE_KEY_LAST_KNOWN_GOOD,
       'kca_fujairah_members_v1',

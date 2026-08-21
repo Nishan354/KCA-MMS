@@ -720,6 +720,27 @@ export default function App() {
     }
   };
 
+  // Handler: Bulk Delete Members
+  const handleBulkDeleteMembers = (memberIds: string[]) => {
+    const updated = members.filter((m) => !memberIds.includes(m.id));
+    setMembers(updated);
+    saveMembersToStorage(updated);
+    broadcastSync('MEMBERS_SYNC');
+    pushCloudEntity('members', updated, userSession?.username || 'User');
+
+    const logItem: AuditLogItem = {
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: 'DELETE',
+      performedBy: userSession?.fullName || 'System',
+      details: `Bulk deleted ${memberIds.length} member records`,
+    };
+    const updatedLogs = [logItem, ...auditLogs];
+    setAuditLogs(updatedLogs);
+    saveAuditLogs(updatedLogs);
+    pushCloudEntity('audit', updatedLogs, userSession?.username || 'User');
+  };
+
   // Handler: Renew Member
   const handleRenewMember = (memberToRenew: Member) => {
     const now = new Date();
@@ -1537,6 +1558,7 @@ export default function App() {
             }}
             onRenewMember={handleRenewMember}
             onDeleteMember={handleDeleteMember}
+            onBulkDeleteMembers={handleBulkDeleteMembers}
             onAddNewMember={() => {
               setEditingMember(null);
               setShowFormModal(true);

@@ -289,7 +289,7 @@ function extractStateFromRow(row: any): KcaCloudState | null {
   const fallbackMembers = loadMembersFromStorage() || INITIAL_MEMBERS;
   const fallbackAccounts = loadAdminAccounts() || INITIAL_ADMIN_ACCOUNTS;
 
-  // Case 1: Payload column has full JSON bundle
+  // Case 1: Payload column has full JSON bundle (Supabase row)
   if (row.payload && typeof row.payload === 'object') {
     const p = row.payload;
     const resolvedMembers = Array.isArray(p.members)
@@ -306,8 +306,8 @@ function extractStateFromRow(row: any): KcaCloudState | null {
 
     return {
       version: Number(row.version || p.version || 1),
-      lastUpdated: row.updated_at || p.lastUpdated || new Date().toISOString(),
-      updatedBy: row.updated_by || p.updatedBy || 'Remote User',
+      lastUpdated: row.updated_at || p.lastUpdated || row.lastUpdated || new Date().toISOString(),
+      updatedBy: row.updated_by || p.updatedBy || row.lastUpdatedBy || 'Remote User',
       members: resolvedMembers,
       financeTransactions: Array.isArray(p.financeTransactions) ? p.financeTransactions : Array.isArray(row.financeTransactions) ? row.financeTransactions : [],
       inventoryItems: Array.isArray(p.inventoryItems) ? p.inventoryItems : Array.isArray(row.inventoryItems) ? row.inventoryItems : [],
@@ -323,15 +323,15 @@ function extractStateFromRow(row: any): KcaCloudState | null {
     };
   }
 
-  // Case 2: Direct columns on row
-  if (Array.isArray(row.members) || row.version) {
+  // Case 2: Direct columns on row / server database response
+  if (Array.isArray(row.members) || row.version !== undefined || row.success) {
     const resolvedMembers = Array.isArray(row.members) ? row.members : fallbackMembers;
     const resolvedAccounts = Array.isArray(row.adminAccounts) ? row.adminAccounts : fallbackAccounts;
 
     return {
       version: Number(row.version || 1),
-      lastUpdated: row.updated_at || new Date().toISOString(),
-      updatedBy: row.updated_by || 'Remote User',
+      lastUpdated: row.lastUpdated || row.updated_at || new Date().toISOString(),
+      updatedBy: row.lastUpdatedBy || row.updated_by || 'Remote User',
       members: resolvedMembers,
       financeTransactions: Array.isArray(row.financeTransactions) ? row.financeTransactions : [],
       inventoryItems: Array.isArray(row.inventoryItems) ? row.inventoryItems : [],
@@ -352,10 +352,13 @@ function extractStateFromRow(row: any): KcaCloudState | null {
 
 /**
  * Fetch full live state from Supabase or Server Gateway
- * Guarantees zero errors for non-admin users
+ * Compares sources and ensures the freshest state (highest version) is returned
  */
 export async function fetchCloudState(): Promise<KcaCloudState | null> {
   updateStatus({ isSyncing: true, error: null });
+
+  let supabaseCandidate: KcaCloudState | null = null;
+  let serverCandidate: KcaCloudState | null = null;
 
   // 1. Direct Supabase Query (if valid keys configured)
   const client = getSupabaseClient();
@@ -368,25 +371,7 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
         .limit(1);
 
       if (!error && data && data.length > 0) {
-        const parsed = extractStateFromRow(data[0]);
-        if (parsed) {
-          cachedCloudState = { ...cachedCloudState, ...parsed };
-          updateStatus({
-            isConnected: true,
-            isSyncing: false,
-            lastSyncTime: new Date(),
-            version: parsed.version,
-            error: null,
-            tableExists: true,
-            syncedEntitiesCount: {
-              members: parsed.members?.length || 0,
-              finance: parsed.financeTransactions?.length || 0,
-              inventory: parsed.inventoryItems?.length || 0,
-              classes: parsed.classes?.length || 0,
-            },
-          });
-          return parsed;
-        }
+        supabaseCandidate = extractStateFromRow(data[0]);
       }
     } catch {}
   }
@@ -397,49 +382,38 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
     if (res.ok) {
       const data = await res.json();
       if (data && (data.members !== undefined || data.version !== undefined)) {
-        const fallbackMembers = loadMembersFromStorage() || INITIAL_MEMBERS;
-        const resolvedMembers = Array.isArray(data.members) ? data.members : fallbackMembers;
-        const fallbackAccounts = loadAdminAccounts() || INITIAL_ADMIN_ACCOUNTS;
-        const resolvedAccounts = Array.isArray(data.adminAccounts) ? data.adminAccounts : fallbackAccounts;
-
-        const parsed: KcaCloudState = {
-          version: Number(data.version || 1),
-          lastUpdated: data.lastUpdated || new Date().toISOString(),
-          updatedBy: data.lastUpdatedBy || 'Central Sync Gateway',
-          members: resolvedMembers,
-          financeTransactions: Array.isArray(data.financeTransactions) ? data.financeTransactions : [],
-          inventoryItems: Array.isArray(data.inventoryItems) ? data.inventoryItems : [],
-          inventoryLogs: Array.isArray(data.inventoryLogs) ? data.inventoryLogs : [],
-          classes: Array.isArray(data.classes) ? data.classes : [],
-          classParticipants: Array.isArray(data.classParticipants) ? data.classParticipants : [],
-          classAttendance: Array.isArray(data.classAttendance) ? data.classAttendance : [],
-          adminAccounts: resolvedAccounts,
-          auditLogs: Array.isArray(data.auditLogs) ? data.auditLogs : [],
-          units: Array.isArray(data.units) && data.units.length > 0 ? data.units : INITIAL_UNITS,
-          customFields: Array.isArray(data.customFields) && data.customFields.length > 0 ? data.customFields : INITIAL_CUSTOM_FIELDS,
-          customLogoUrl: data.customLogoUrl || undefined,
-        };
-
-        cachedCloudState = { ...cachedCloudState, ...parsed };
-        updateStatus({
-          isConnected: true,
-          isSyncing: false,
-          lastSyncTime: new Date(),
-          version: parsed.version,
-          error: null,
-          tableExists: true,
-          syncedEntitiesCount: {
-            members: parsed.members?.length || 0,
-            finance: parsed.financeTransactions?.length || 0,
-            inventory: parsed.inventoryItems?.length || 0,
-            classes: parsed.classes?.length || 0,
-          },
-        });
-        return parsed;
+        serverCandidate = extractStateFromRow(data);
       }
     }
   } catch (err: any) {
     console.warn('[Sync Gateway Notice]: Using local cache');
+  }
+
+  // Choose newest version between Supabase and Server Gateway
+  let chosenState: KcaCloudState | null = null;
+  if (supabaseCandidate && serverCandidate) {
+    chosenState = supabaseCandidate.version >= serverCandidate.version ? supabaseCandidate : serverCandidate;
+  } else {
+    chosenState = serverCandidate || supabaseCandidate || cachedCloudState;
+  }
+
+  if (chosenState) {
+    cachedCloudState = { ...cachedCloudState, ...chosenState };
+    updateStatus({
+      isConnected: true,
+      isSyncing: false,
+      lastSyncTime: new Date(),
+      version: chosenState.version,
+      error: null,
+      tableExists: true,
+      syncedEntitiesCount: {
+        members: chosenState.members?.length || 0,
+        finance: chosenState.financeTransactions?.length || 0,
+        inventory: chosenState.inventoryItems?.length || 0,
+        classes: chosenState.classes?.length || 0,
+      },
+    });
+    return chosenState;
   }
 
   updateStatus({
@@ -839,22 +813,41 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
         if (!isRunning || !rawData) return;
         try {
           const payload = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
-          if (payload) {
-            if (payload.version && payload.version > lastKnownVersion) {
-              lastKnownVersion = payload.version;
-            }
-            fetchCloudState().then((fresh) => {
-              if (fresh && isRunning) {
-                handleCloudStatePayload(fresh);
-              }
-            });
+          if (!payload) return;
+
+          // If payload contains full database state directly, apply it immediately
+          const extracted = extractStateFromRow(payload);
+          if (extracted && extracted.version >= lastKnownVersion) {
+            lastKnownVersion = extracted.version;
+            handleCloudStatePayload(extracted);
+            return;
           }
+
+          if (payload.version && payload.version > lastKnownVersion) {
+            lastKnownVersion = payload.version;
+          }
+
+          fetchCloudState().then((fresh) => {
+            if (fresh && isRunning) {
+              handleCloudStatePayload(fresh);
+            }
+          });
         } catch {}
       };
 
       eventSource.onmessage = (event) => handleIncomingSyncEvent(event.data);
       eventSource.addEventListener('SYNC_UPDATE', (event: any) => handleIncomingSyncEvent(event.data));
       eventSource.addEventListener('CONNECTED', (event: any) => handleIncomingSyncEvent(event.data));
+      eventSource.onerror = () => {
+        // Fallback fetch on SSE reconnect
+        if (isRunning) {
+          fetchCloudState().then((fresh) => {
+            if (fresh && isRunning) {
+              handleCloudStatePayload(fresh);
+            }
+          });
+        }
+      };
     }
   } catch {}
 
@@ -889,7 +882,7 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
     }
   } catch {}
 
-  // 4. Fallback Heartbeat Polling (every 5 seconds)
+  // 4. Fallback Heartbeat Polling (every 2.5 seconds for instant multi-device sync)
   pollInterval = setInterval(async () => {
     if (!isRunning) return;
     try {
@@ -902,7 +895,7 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
         }
       }
     } catch {}
-  }, 5000);
+  }, 2500);
 
   return () => {
     isRunning = false;
