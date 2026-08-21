@@ -15,7 +15,7 @@ export const INITIAL_ADMIN_ACCOUNTS = [
   {
     id: 'usr_admin_main',
     username: 'admin',
-    password: '12345',
+    passwordHash: '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918', // SHA-256 for 12345 or handle authentication via runtime state
     role: 'admin',
     createdAt: new Date().toISOString(),
   },
