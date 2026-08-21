@@ -92,9 +92,16 @@ export function loadDatabase(): CloudDatabaseState {
       inMemoryState = {
         ...getInitialState(),
         ...loaded,
+        members: Array.isArray(loaded.members) && loaded.members.length > 0 ? loaded.members : INITIAL_MEMBERS,
+        financeTransactions: Array.isArray(loaded.financeTransactions) ? loaded.financeTransactions : INITIAL_FINANCE_TRANSACTIONS,
+        inventoryItems: Array.isArray(loaded.inventoryItems) ? loaded.inventoryItems : INITIAL_INVENTORY_ITEMS,
+        inventoryLogs: Array.isArray(loaded.inventoryLogs) ? loaded.inventoryLogs : INITIAL_INVENTORY_LOGS,
         classes: Array.isArray(loaded.classes) ? loaded.classes : INITIAL_CLASSES,
         classParticipants: Array.isArray(loaded.classParticipants) ? loaded.classParticipants : INITIAL_PARTICIPANTS,
         classAttendance: Array.isArray(loaded.classAttendance) ? loaded.classAttendance : INITIAL_ATTENDANCE,
+        adminAccounts: Array.isArray(loaded.adminAccounts) && loaded.adminAccounts.length > 0 ? loaded.adminAccounts : INITIAL_ADMIN_ACCOUNTS,
+        units: Array.isArray(loaded.units) && loaded.units.length > 0 ? loaded.units : INITIAL_UNITS,
+        customFields: Array.isArray(loaded.customFields) && loaded.customFields.length > 0 ? loaded.customFields : INITIAL_CUSTOM_FIELDS,
       };
       return inMemoryState!;
     }

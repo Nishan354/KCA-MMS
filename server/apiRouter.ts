@@ -137,13 +137,13 @@ apiRouter.get('/sync/state', async (req: Request, res: Response) => {
           if (row.version && row.version > db.version) {
             db.version = row.version;
             db.lastUpdated = row.updated_at || db.lastUpdated;
-            if (Array.isArray(cloudPayload.members)) db.members = cloudPayload.members;
+            if (Array.isArray(cloudPayload.members) && cloudPayload.members.length > 0) db.members = cloudPayload.members;
             if (Array.isArray(cloudPayload.financeTransactions)) db.financeTransactions = cloudPayload.financeTransactions;
             if (Array.isArray(cloudPayload.inventoryItems)) db.inventoryItems = cloudPayload.inventoryItems;
             if (Array.isArray(cloudPayload.classes)) db.classes = cloudPayload.classes;
             if (Array.isArray(cloudPayload.classParticipants)) db.classParticipants = cloudPayload.classParticipants;
             if (Array.isArray(cloudPayload.classAttendance)) db.classAttendance = cloudPayload.classAttendance;
-            if (Array.isArray(cloudPayload.adminAccounts)) db.adminAccounts = cloudPayload.adminAccounts;
+            if (Array.isArray(cloudPayload.adminAccounts) && cloudPayload.adminAccounts.length > 0) db.adminAccounts = cloudPayload.adminAccounts;
             if (Array.isArray(cloudPayload.auditLogs)) db.auditLogs = cloudPayload.auditLogs;
             saveDatabase(db);
           }

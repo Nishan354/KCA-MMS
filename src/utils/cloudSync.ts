@@ -1,5 +1,11 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
+  loadMembersFromStorage,
+  loadAdminAccounts,
+  loadAuditLogs,
+  loadCustomFields,
+} from './storage';
+import {
   INITIAL_MEMBERS,
   INITIAL_AUDIT_LOGS,
   INITIAL_ADMIN_ACCOUNTS,
@@ -280,45 +286,56 @@ const APP_STATE_TABLE = 'app_state';
 function extractStateFromRow(row: any): KcaCloudState | null {
   if (!row) return null;
 
+  const fallbackMembers = loadMembersFromStorage() || INITIAL_MEMBERS;
+  const fallbackAccounts = loadAdminAccounts() || INITIAL_ADMIN_ACCOUNTS;
+
   // Case 1: Payload column has full JSON bundle
   if (row.payload && typeof row.payload === 'object') {
     const p = row.payload;
+    const rawMembers = Array.isArray(p.members) ? p.members : Array.isArray(row.members) ? row.members : null;
+    const resolvedMembers = rawMembers && rawMembers.length > 0 ? rawMembers : fallbackMembers;
+    const rawAccounts = Array.isArray(p.adminAccounts) ? p.adminAccounts : Array.isArray(row.adminAccounts) ? row.adminAccounts : null;
+    const resolvedAccounts = rawAccounts && rawAccounts.length > 0 ? rawAccounts : fallbackAccounts;
+
     return {
       version: Number(row.version || p.version || 1),
       lastUpdated: row.updated_at || p.lastUpdated || new Date().toISOString(),
       updatedBy: row.updated_by || p.updatedBy || 'Remote User',
-      members: Array.isArray(p.members) ? p.members : Array.isArray(row.members) ? row.members : [],
+      members: resolvedMembers,
       financeTransactions: Array.isArray(p.financeTransactions) ? p.financeTransactions : Array.isArray(row.financeTransactions) ? row.financeTransactions : [],
       inventoryItems: Array.isArray(p.inventoryItems) ? p.inventoryItems : Array.isArray(row.inventoryItems) ? row.inventoryItems : [],
       inventoryLogs: Array.isArray(p.inventoryLogs) ? p.inventoryLogs : Array.isArray(row.inventoryLogs) ? row.inventoryLogs : [],
       classes: Array.isArray(p.classes) ? p.classes : Array.isArray(row.classes) ? row.classes : [],
       classParticipants: Array.isArray(p.classParticipants) ? p.classParticipants : Array.isArray(row.classParticipants) ? row.classParticipants : [],
       classAttendance: Array.isArray(p.classAttendance) ? p.classAttendance : Array.isArray(row.classAttendance) ? row.classAttendance : [],
-      adminAccounts: Array.isArray(p.adminAccounts) ? p.adminAccounts : Array.isArray(row.adminAccounts) ? row.adminAccounts : [],
+      adminAccounts: resolvedAccounts,
       auditLogs: Array.isArray(p.auditLogs) ? p.auditLogs : Array.isArray(row.auditLogs) ? row.auditLogs : [],
-      units: Array.isArray(p.units) ? p.units : Array.isArray(row.units) ? row.units : INITIAL_UNITS,
-      customFields: Array.isArray(p.customFields) ? p.customFields : Array.isArray(row.customFields) ? row.customFields : INITIAL_CUSTOM_FIELDS,
+      units: Array.isArray(p.units) && p.units.length > 0 ? p.units : Array.isArray(row.units) && row.units.length > 0 ? row.units : INITIAL_UNITS,
+      customFields: Array.isArray(p.customFields) && p.customFields.length > 0 ? p.customFields : Array.isArray(row.customFields) && row.customFields.length > 0 ? row.customFields : INITIAL_CUSTOM_FIELDS,
       customLogoUrl: p.customLogoUrl || row.customLogoUrl || undefined,
     };
   }
 
   // Case 2: Direct columns on row
   if (Array.isArray(row.members) || row.version) {
+    const resolvedMembers = Array.isArray(row.members) && row.members.length > 0 ? row.members : fallbackMembers;
+    const resolvedAccounts = Array.isArray(row.adminAccounts) && row.adminAccounts.length > 0 ? row.adminAccounts : fallbackAccounts;
+
     return {
       version: Number(row.version || 1),
       lastUpdated: row.updated_at || new Date().toISOString(),
       updatedBy: row.updated_by || 'Remote User',
-      members: Array.isArray(row.members) ? row.members : [],
+      members: resolvedMembers,
       financeTransactions: Array.isArray(row.financeTransactions) ? row.financeTransactions : [],
       inventoryItems: Array.isArray(row.inventoryItems) ? row.inventoryItems : [],
       inventoryLogs: Array.isArray(row.inventoryLogs) ? row.inventoryLogs : [],
       classes: Array.isArray(row.classes) ? row.classes : [],
       classParticipants: Array.isArray(row.classParticipants) ? row.classParticipants : [],
       classAttendance: Array.isArray(row.classAttendance) ? row.classAttendance : [],
-      adminAccounts: Array.isArray(row.adminAccounts) ? row.adminAccounts : [],
+      adminAccounts: resolvedAccounts,
       auditLogs: Array.isArray(row.auditLogs) ? row.auditLogs : [],
-      units: Array.isArray(row.units) ? row.units : INITIAL_UNITS,
-      customFields: Array.isArray(row.customFields) ? row.customFields : INITIAL_CUSTOM_FIELDS,
+      units: Array.isArray(row.units) && row.units.length > 0 ? row.units : INITIAL_UNITS,
+      customFields: Array.isArray(row.customFields) && row.customFields.length > 0 ? row.customFields : INITIAL_CUSTOM_FIELDS,
       customLogoUrl: row.customLogoUrl || undefined,
     };
   }
@@ -373,21 +390,26 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
     if (res.ok) {
       const data = await res.json();
       if (data && (data.members || data.version)) {
+        const fallbackMembers = loadMembersFromStorage() || INITIAL_MEMBERS;
+        const resolvedMembers = Array.isArray(data.members) && data.members.length > 0 ? data.members : fallbackMembers;
+        const fallbackAccounts = loadAdminAccounts() || INITIAL_ADMIN_ACCOUNTS;
+        const resolvedAccounts = Array.isArray(data.adminAccounts) && data.adminAccounts.length > 0 ? data.adminAccounts : fallbackAccounts;
+
         const parsed: KcaCloudState = {
           version: Number(data.version || 1),
           lastUpdated: data.lastUpdated || new Date().toISOString(),
           updatedBy: data.lastUpdatedBy || 'Central Sync Gateway',
-          members: Array.isArray(data.members) ? data.members : [],
+          members: resolvedMembers,
           financeTransactions: Array.isArray(data.financeTransactions) ? data.financeTransactions : [],
           inventoryItems: Array.isArray(data.inventoryItems) ? data.inventoryItems : [],
           inventoryLogs: Array.isArray(data.inventoryLogs) ? data.inventoryLogs : [],
           classes: Array.isArray(data.classes) ? data.classes : [],
           classParticipants: Array.isArray(data.classParticipants) ? data.classParticipants : [],
           classAttendance: Array.isArray(data.classAttendance) ? data.classAttendance : [],
-          adminAccounts: Array.isArray(data.adminAccounts) ? data.adminAccounts : [],
+          adminAccounts: resolvedAccounts,
           auditLogs: Array.isArray(data.auditLogs) ? data.auditLogs : [],
-          units: Array.isArray(data.units) ? data.units : INITIAL_UNITS,
-          customFields: Array.isArray(data.customFields) ? data.customFields : INITIAL_CUSTOM_FIELDS,
+          units: Array.isArray(data.units) && data.units.length > 0 ? data.units : INITIAL_UNITS,
+          customFields: Array.isArray(data.customFields) && data.customFields.length > 0 ? data.customFields : INITIAL_CUSTOM_FIELDS,
           customLogoUrl: data.customLogoUrl || undefined,
         };
 

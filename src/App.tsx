@@ -394,9 +394,17 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = startCloudSyncManager((cloudState) => {
       if (cloudState) {
-        if (Array.isArray(cloudState.members)) {
+        if (Array.isArray(cloudState.members) && cloudState.members.length > 0) {
           setMembers(cloudState.members);
           saveMembersToStorage(cloudState.members);
+        } else if (Array.isArray(cloudState.members) && cloudState.members.length === 0) {
+          // If remote cloud returned empty 0 members, restore from storage or push local members
+          const localMembers = loadMembersFromStorage() || INITIAL_MEMBERS;
+          if (localMembers && localMembers.length > 0) {
+            setMembers(localMembers);
+            saveMembersToStorage(localMembers);
+            pushCloudEntity('members', localMembers, userSession?.username || 'Auto Recover');
+          }
         }
         if (Array.isArray(cloudState.financeTransactions)) {
           setFinanceTransactions(cloudState.financeTransactions);
@@ -410,7 +418,7 @@ export default function App() {
           setInventoryLogs(cloudState.inventoryLogs);
           saveInventoryLogs(cloudState.inventoryLogs);
         }
-        if (Array.isArray(cloudState.adminAccounts)) {
+        if (Array.isArray(cloudState.adminAccounts) && cloudState.adminAccounts.length > 0) {
           setAdminAccounts(cloudState.adminAccounts);
           saveAdminAccounts(cloudState.adminAccounts);
         }
@@ -418,13 +426,13 @@ export default function App() {
           setAuditLogs(cloudState.auditLogs);
           saveAuditLogs(cloudState.auditLogs);
         }
-        if (Array.isArray(cloudState.units)) {
+        if (Array.isArray(cloudState.units) && cloudState.units.length > 0) {
           setUnits(cloudState.units);
           try {
             localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(cloudState.units));
           } catch {}
         }
-        if (Array.isArray(cloudState.customFields)) {
+        if (Array.isArray(cloudState.customFields) && cloudState.customFields.length > 0) {
           setCustomFields(cloudState.customFields);
           saveCustomFields(cloudState.customFields);
         }
@@ -449,7 +457,7 @@ export default function App() {
     return () => {
       unsubscribe();
     };
-  }, []);
+  }, [userSession?.username]);
 
   // Cross-Tab / Cross-Device Real-Time Sync Channel & Storage Listeners
   useEffect(() => {
@@ -1877,7 +1885,7 @@ export default function App() {
           setShowLoginModal(false);
           fetchCloudState().then((state) => {
             if (state) {
-              if (Array.isArray(state.members)) {
+              if (Array.isArray(state.members) && state.members.length > 0) {
                 setMembers(state.members);
                 saveMembersToStorage(state.members);
               }

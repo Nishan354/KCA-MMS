@@ -70,6 +70,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [activeUnitFilter, setActiveUnitFilter] = useState<string>(
     isUnitOp && userSession?.unit ? userSession.unit : 'All'
   );
+
+  // Keep activeUnitFilter in sync when user logs in/out or switches accounts
+  React.useEffect(() => {
+    if (isUnitOp && userSession?.unit) {
+      setActiveUnitFilter(userSession.unit);
+    } else {
+      setActiveUnitFilter('All');
+    }
+  }, [userSession?.role, userSession?.unit, isUnitOp]);
+
   const [activePillarTab, setActivePillarTab] = useState<'overview' | 'membership' | 'finance' | 'inventory' | 'bloodbank'>('overview');
   const [isExportingReport, setIsExportingReport] = useState(false);
 
