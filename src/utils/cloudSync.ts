@@ -2,8 +2,6 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   loadMembersFromStorage,
   loadAdminAccounts,
-  loadAuditLogs,
-  loadCustomFields,
 } from './storage';
 import {
   INITIAL_MEMBERS,
@@ -46,11 +44,12 @@ export interface KcaCloudState {
   units: string[];
   customFields: any[];
   customLogoUrl?: string;
+  portalTheme?: any;
 }
 
 const STORAGE_KEY_SUPABASE_CONFIG = 'kca_custom_supabase_config_v1';
-
 const DEFAULT_SUPABASE_URL = 'https://jvwetoapdaxuweannrgq.supabase.co';
+const APP_STATE_TABLE = 'app_state';
 
 export function isKeyValid(key?: string | null): boolean {
   if (!key) return false;
@@ -72,7 +71,6 @@ export function getSupabaseCredentials(): {
   let url = '';
   let anonKey = '';
 
-  // 1. Check URL parameters for instant 1-click device pairing (?sb_url=...&sb_key=...)
   try {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -91,7 +89,6 @@ export function getSupabaseCredentials(): {
     }
   } catch {}
 
-  // 2. Check LocalStorage
   if (!url || !anonKey) {
     try {
       const custom = localStorage.getItem(STORAGE_KEY_SUPABASE_CONFIG);
@@ -105,7 +102,6 @@ export function getSupabaseCredentials(): {
     } catch {}
   }
 
-  // 3. Check environment variables
   if (!url || !anonKey) {
     const metaEnv = (import.meta as any).env || {};
     const envUrl =
@@ -233,7 +229,6 @@ export async function syncCredentialsFromServer(): Promise<boolean> {
   return false;
 }
 
-// In-memory master state cache
 let cachedCloudState: KcaCloudState = {
   version: 1,
   lastUpdated: new Date().toISOString(),
@@ -250,6 +245,7 @@ let cachedCloudState: KcaCloudState = {
   units: INITIAL_UNITS,
   customFields: INITIAL_CUSTOM_FIELDS,
   customLogoUrl: undefined,
+  portalTheme: undefined,
 };
 
 let currentSyncStatus: SyncStatus = {
@@ -281,7 +277,27 @@ function updateStatus(partial: Partial<SyncStatus>) {
   });
 }
 
-const APP_STATE_TABLE = 'app_state';
+export function applyRemoteBranding(branding: any) {
+  if (!branding) return;
+
+  if (branding.customLogo || branding.customLogoUrl) {
+    const logo = branding.customLogo || branding.customLogoUrl;
+    localStorage.setItem('kca_custom_logo', typeof logo === 'string' ? logo : JSON.stringify(logo));
+    localStorage.setItem('customLogo', typeof logo === 'string' ? logo : JSON.stringify(logo));
+  }
+
+  if (branding.portalTheme) {
+    localStorage.setItem('kca_portal_theme', typeof branding.portalTheme === 'string' ? branding.portalTheme : JSON.stringify(branding.portalTheme));
+    localStorage.setItem('theme', typeof branding.portalTheme === 'string' ? branding.portalTheme : JSON.stringify(branding.portalTheme));
+    if (branding.portalTheme.primaryColor) {
+      document.documentElement.style.setProperty('--color-primary', branding.portalTheme.primaryColor);
+    }
+  }
+
+  if (branding.customFields) {
+    localStorage.setItem('kca_custom_fields', typeof branding.customFields === 'string' ? branding.customFields : JSON.stringify(branding.customFields));
+  }
+}
 
 function extractStateFromRow(row: any): KcaCloudState | null {
   if (!row) return null;
@@ -289,9 +305,12 @@ function extractStateFromRow(row: any): KcaCloudState | null {
   const fallbackMembers = loadMembersFromStorage() || INITIAL_MEMBERS;
   const fallbackAccounts = loadAdminAccounts() || INITIAL_ADMIN_ACCOUNTS;
 
-  // Case 1: Payload column has full JSON bundle (Supabase row)
   if (row.payload && typeof row.payload === 'object') {
-    const p = row.payload;
+    const p = row.payload.appData || row.payload;
+    const branding = row.payload.branding || p.branding;
+
+    if (branding) applyRemoteBranding(branding);
+
     const resolvedMembers = Array.isArray(p.members)
       ? p.members
       : Array.isArray(row.members)
@@ -319,11 +338,11 @@ function extractStateFromRow(row: any): KcaCloudState | null {
       auditLogs: Array.isArray(p.auditLogs) ? p.auditLogs : Array.isArray(row.auditLogs) ? row.auditLogs : [],
       units: Array.isArray(p.units) && p.units.length > 0 ? p.units : Array.isArray(row.units) && row.units.length > 0 ? row.units : INITIAL_UNITS,
       customFields: Array.isArray(p.customFields) && p.customFields.length > 0 ? p.customFields : Array.isArray(row.customFields) && row.customFields.length > 0 ? row.customFields : INITIAL_CUSTOM_FIELDS,
-      customLogoUrl: p.customLogoUrl || row.customLogoUrl || undefined,
+      customLogoUrl: p.customLogoUrl || branding?.customLogo || row.customLogoUrl || undefined,
+      portalTheme: p.portalTheme || branding?.portalTheme || undefined,
     };
   }
 
-  // Case 2: Direct columns on row / server database response
   if (Array.isArray(row.members) || row.version !== undefined || row.success) {
     const resolvedMembers = Array.isArray(row.members) ? row.members : fallbackMembers;
     const resolvedAccounts = Array.isArray(row.adminAccounts) ? row.adminAccounts : fallbackAccounts;
@@ -344,23 +363,19 @@ function extractStateFromRow(row: any): KcaCloudState | null {
       units: Array.isArray(row.units) && row.units.length > 0 ? row.units : INITIAL_UNITS,
       customFields: Array.isArray(row.customFields) && row.customFields.length > 0 ? row.customFields : INITIAL_CUSTOM_FIELDS,
       customLogoUrl: row.customLogoUrl || undefined,
+      portalTheme: row.portalTheme || undefined,
     };
   }
 
   return null;
 }
 
-/**
- * Fetch full live state from Supabase or Server Gateway
- * Compares sources and ensures the freshest state (highest version) is returned
- */
 export async function fetchCloudState(): Promise<KcaCloudState | null> {
   updateStatus({ isSyncing: true, error: null });
 
   let supabaseCandidate: KcaCloudState | null = null;
   let serverCandidate: KcaCloudState | null = null;
 
-  // 1. Direct Supabase Query (if valid keys configured)
   const client = getSupabaseClient();
   if (client) {
     try {
@@ -376,7 +391,6 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
     } catch {}
   }
 
-  // 2. Seamless Master Server Gateway Sync
   try {
     const res = await fetch('/api/sync/state');
     if (res.ok) {
@@ -389,7 +403,6 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
     console.warn('[Sync Gateway Notice]: Using local cache');
   }
 
-  // Choose newest version between Supabase and Server Gateway
   let chosenState: KcaCloudState | null = null;
   if (supabaseCandidate && serverCandidate) {
     chosenState = supabaseCandidate.version >= serverCandidate.version ? supabaseCandidate : serverCandidate;
@@ -426,9 +439,6 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
   return cachedCloudState;
 }
 
-/**
- * Lightweight check for latest version
- */
 export async function fetchCloudVersion(): Promise<{ version: number; lastUpdated: string } | null> {
   const client = getSupabaseClient();
   if (client) {
@@ -462,9 +472,6 @@ export async function fetchCloudVersion(): Promise<{ version: number; lastUpdate
   return null;
 }
 
-/**
- * Push entity data to Supabase and fallback to Server API
- */
 export async function pushCloudEntity(
   entity: string,
   data: any,
@@ -484,9 +491,22 @@ export async function pushCloudEntity(
   else if (entity === 'units') cachedCloudState.units = data;
   else if (entity === 'customFields') cachedCloudState.customFields = data;
   else if (entity === 'customLogo') cachedCloudState.customLogoUrl = data;
+  else if (entity === 'portalTheme') cachedCloudState.portalTheme = data;
   else if (entity === 'all' && typeof data === 'object') {
     cachedCloudState = { ...cachedCloudState, ...data };
   }
+
+  const savedLogo = localStorage.getItem('kca_custom_logo') || localStorage.getItem('customLogo') || cachedCloudState.customLogoUrl;
+  const savedTheme = localStorage.getItem('kca_portal_theme') || localStorage.getItem('theme') || cachedCloudState.portalTheme;
+  const savedCustomFields = localStorage.getItem('kca_custom_fields') || cachedCloudState.customFields;
+
+  let parsedLogo = null;
+  let parsedTheme = null;
+  let parsedCustomFields = null;
+
+  try { parsedLogo = savedLogo ? (typeof savedLogo === 'string' && savedLogo.startsWith('{') ? JSON.parse(savedLogo) : savedLogo) : null; } catch {}
+  try { parsedTheme = savedTheme ? (typeof savedTheme === 'string' && savedTheme.startsWith('{') ? JSON.parse(savedTheme) : savedTheme) : null; } catch {}
+  try { parsedCustomFields = savedCustomFields ? (typeof savedCustomFields === 'string' && savedCustomFields.startsWith('[') ? JSON.parse(savedCustomFields) : savedCustomFields) : null; } catch {}
 
   const nextVersion = (cachedCloudState.version || currentSyncStatus.version || 1) + 1;
   cachedCloudState.version = nextVersion;
@@ -494,21 +514,28 @@ export async function pushCloudEntity(
   cachedCloudState.updatedBy = user;
 
   const payloadBundle = {
-    members: cachedCloudState.members,
-    financeTransactions: cachedCloudState.financeTransactions,
-    inventoryItems: cachedCloudState.inventoryItems,
-    inventoryLogs: cachedCloudState.inventoryLogs,
-    classes: cachedCloudState.classes,
-    classParticipants: cachedCloudState.classParticipants,
-    classAttendance: cachedCloudState.classAttendance,
-    adminAccounts: cachedCloudState.adminAccounts,
-    auditLogs: cachedCloudState.auditLogs,
-    units: cachedCloudState.units,
-    customFields: cachedCloudState.customFields,
-    customLogoUrl: cachedCloudState.customLogoUrl,
+    appData: {
+      members: cachedCloudState.members,
+      financeTransactions: cachedCloudState.financeTransactions,
+      inventoryItems: cachedCloudState.inventoryItems,
+      inventoryLogs: cachedCloudState.inventoryLogs,
+      classes: cachedCloudState.classes,
+      classParticipants: cachedCloudState.classParticipants,
+      classAttendance: cachedCloudState.classAttendance,
+      adminAccounts: cachedCloudState.adminAccounts,
+      auditLogs: cachedCloudState.auditLogs,
+      units: cachedCloudState.units,
+      customFields: cachedCloudState.customFields,
+      customLogoUrl: cachedCloudState.customLogoUrl,
+      portalTheme: cachedCloudState.portalTheme,
+    },
+    branding: {
+      customLogo: parsedLogo,
+      portalTheme: parsedTheme,
+      customFields: parsedCustomFields,
+    },
   };
 
-  // 1. Direct push to Supabase if client active
   const client = getSupabaseClient();
   if (client) {
     try {
@@ -536,7 +563,6 @@ export async function pushCloudEntity(
     } catch {}
   }
 
-  // 2. Seamless push to Server Gateway (propagates to all connected SSE clients)
   try {
     await fetch('/api/sync/push', {
       method: 'POST',
@@ -658,7 +684,6 @@ export function getSupabaseSqlSetupScript(): string {
 -- Copy and run this script in Supabase Dashboard -> SQL Editor -> New query
 -- ====================================================================
 
--- 1. Create table with TEXT id or adapt existing table
 CREATE TABLE IF NOT EXISTS public.app_state (
   id TEXT PRIMARY KEY DEFAULT 'kca_main',
   entity TEXT DEFAULT 'all',
@@ -668,7 +693,6 @@ CREATE TABLE IF NOT EXISTS public.app_state (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 2. Convert existing integer/bigint 'id' column to TEXT if already created
 DO $$
 BEGIN
   IF EXISTS (
@@ -681,8 +705,7 @@ BEGIN
     ALTER TABLE public.app_state ALTER COLUMN id TYPE TEXT USING id::text;
     ALTER TABLE public.app_state ALTER COLUMN id SET DEFAULT 'kca_main';
   END IF;
-  
-  -- Add payload column if missing
+
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_schema = 'public' 
@@ -692,7 +715,6 @@ BEGIN
     ALTER TABLE public.app_state ADD COLUMN payload JSONB NOT NULL DEFAULT '{}'::jsonb;
   END IF;
 
-  -- Add entity column if missing
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_schema = 'public' 
@@ -702,7 +724,6 @@ BEGIN
     ALTER TABLE public.app_state ADD COLUMN entity TEXT DEFAULT 'all';
   END IF;
 
-  -- Add version column if missing
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_schema = 'public' 
@@ -712,7 +733,6 @@ BEGIN
     ALTER TABLE public.app_state ADD COLUMN version BIGINT DEFAULT 1;
   END IF;
 
-  -- Add updated_by column if missing
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_schema = 'public' 
@@ -722,7 +742,6 @@ BEGIN
     ALTER TABLE public.app_state ADD COLUMN updated_by TEXT DEFAULT 'KCA Admin';
   END IF;
 
-  -- Add updated_at column if missing
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns 
     WHERE table_schema = 'public' 
@@ -733,12 +752,10 @@ BEGIN
   END IF;
 END $$;
 
--- 3. Grant full permissions to anonymous and authenticated users
 GRANT ALL ON TABLE public.app_state TO anon;
 GRANT ALL ON TABLE public.app_state TO authenticated;
 GRANT ALL ON TABLE public.app_state TO service_role;
 
--- 4. Enable Row Level Security with permissive read/write policy
 ALTER TABLE public.app_state ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow all access to app_state" ON public.app_state;
@@ -749,7 +766,6 @@ TO anon, authenticated
 USING (true) 
 WITH CHECK (true);
 
--- 5. Enable Supabase Realtime WebSocket broadcast
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -762,22 +778,14 @@ BEGIN
   END IF;
 END $$;
 
--- 6. Seed initial record safely
 INSERT INTO public.app_state (id, entity, payload, version, updated_by, updated_at)
 VALUES ('kca_main', 'all', '{}'::jsonb, 1, 'System Initializer', now())
 ON CONFLICT (id) DO NOTHING;
 
--- Verification query
 SELECT * FROM public.app_state;
 `;
 }
 
-/**
- * Start Real-Time Synchronizer with:
- * 1) Server-Sent Events (SSE) Stream
- * 2) Supabase Realtime Channels (when configured)
- * 3) Heartbeat polling
- */
 export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState) => void): () => void {
   let isRunning = true;
   let lastKnownVersion = currentSyncStatus.version;
@@ -794,7 +802,6 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
     }
   }
 
-  // 1. Initial State Fetch with Server Config Sync
   syncCredentialsFromServer().finally(() => {
     fetchCloudState().then((state) => {
       if (state && isRunning) {
@@ -804,7 +811,6 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
     });
   });
 
-  // 2. Connect to Server-Sent Events (SSE) for instant cross-device broadcast
   try {
     if (typeof window !== 'undefined' && window.EventSource) {
       eventSource = new EventSource('/api/sync/events');
@@ -815,7 +821,6 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
           const payload = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
           if (!payload) return;
 
-          // If payload contains full database state directly, apply it immediately
           const extracted = extractStateFromRow(payload);
           if (extracted && extracted.version >= lastKnownVersion) {
             lastKnownVersion = extracted.version;
@@ -839,7 +844,6 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
       eventSource.addEventListener('SYNC_UPDATE', (event: any) => handleIncomingSyncEvent(event.data));
       eventSource.addEventListener('CONNECTED', (event: any) => handleIncomingSyncEvent(event.data));
       eventSource.onerror = () => {
-        // Fallback fetch on SSE reconnect
         if (isRunning) {
           fetchCloudState().then((fresh) => {
             if (fresh && isRunning) {
@@ -851,7 +855,6 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
     }
   } catch {}
 
-  // 3. Set up Supabase Realtime WebSocket Listener (if configured)
   try {
     const client = getSupabaseClient();
     if (client) {
@@ -882,7 +885,6 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
     }
   } catch {}
 
-  // 4. Fallback Heartbeat Polling (every 2.5 seconds for instant multi-device sync)
   pollInterval = setInterval(async () => {
     if (!isRunning) return;
     try {
@@ -912,46 +914,4 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
       } catch {}
     }
   };
-}export async function pushCloudEntity(entity: string, data: any, user: string = 'KCA User'): Promise<boolean> {
-  updateStatus({ isSyncing: true });
-  try {
-    // Retrieve custom logo and theme configuration stored in localStorage
-    const savedLogo = localStorage.getItem('kca_custom_logo') || localStorage.getItem('customLogo');
-    const savedTheme = localStorage.getItem('kca_portal_theme') || localStorage.getItem('theme');
-    const savedCustomFields = localStorage.getItem('kca_custom_fields');
-
-    // Bundle core payload with portal customization options
-    const fullPayload = {
-      appData: data,
-      branding: {
-        customLogo: savedLogo ? JSON.parse(savedLogo) : null,
-        portalTheme: savedTheme ? JSON.parse(savedTheme) : null,
-        customFields: savedCustomFields ? JSON.parse(savedCustomFields) : null,
-      },
-    };
-
-    const newVersion = currentSyncStatus.version + 1;
-    const { error } = await supabase.from('app_state').upsert({
-      id: 1,
-      entity: entity || 'all',
-      payload: fullPayload,
-      updated_by: user,
-      version: newVersion,
-      updated_at: new Date().toISOString(),
-    });
-
-    if (error) throw error;
-
-    updateStatus({
-      isSyncing: false,
-      isConnected: true,
-      lastSyncTime: new Date(),
-      version: newVersion,
-      error: null,
-    });
-    return true;
-  } catch (err: any) {
-    updateStatus({ isSyncing: false, isConnected: false, error: err.message });
-    return false;
-  }
 }
