@@ -1,4 +1,5 @@
 import { Member, AuditLogItem, BackupMetadata, CustomFieldDefinition, AdminAccount, UserSession } from '../types/member';
+import { PortalBrandingConfig, DEFAULT_PORTAL_CONFIG, STORAGE_KEY_PORTAL_CONFIG } from '../types/portal';
 import { INITIAL_CUSTOM_FIELDS, INITIAL_ADMIN_ACCOUNTS } from '../data/initialData';
 
 const STORAGE_KEY_MEMBERS = 'kca_fujairah_members_v2';
@@ -12,6 +13,57 @@ const STORAGE_KEY_USER_SESSION = 'kca_fujairah_active_session_v2';
 const STORAGE_KEY_CUSTOM_LOGO = 'kca_fujairah_custom_logo_v1';
 
 /**
+ * Save & Load Portal Branding Configuration
+ */
+export function loadPortalConfig(): PortalBrandingConfig {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PORTAL_CONFIG);
+    const customLogo = localStorage.getItem(STORAGE_KEY_CUSTOM_LOGO);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        ...DEFAULT_PORTAL_CONFIG,
+        ...parsed,
+        customLogoUrl: parsed.customLogoUrl !== undefined ? parsed.customLogoUrl : customLogo || null,
+      };
+    }
+    if (customLogo) {
+      return { ...DEFAULT_PORTAL_CONFIG, customLogoUrl: customLogo };
+    }
+  } catch (e) {
+    console.warn('Failed to parse portal config:', e);
+  }
+  return DEFAULT_PORTAL_CONFIG;
+}
+
+export function savePortalConfig(config: Partial<PortalBrandingConfig>): PortalBrandingConfig {
+  try {
+    const current = loadPortalConfig();
+    const updated: PortalBrandingConfig = {
+      ...current,
+      ...config,
+      updatedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(STORAGE_KEY_PORTAL_CONFIG, JSON.stringify(updated));
+
+    if (updated.customLogoUrl !== undefined) {
+      if (updated.customLogoUrl) {
+        localStorage.setItem(STORAGE_KEY_CUSTOM_LOGO, updated.customLogoUrl);
+      } else {
+        localStorage.removeItem(STORAGE_KEY_CUSTOM_LOGO);
+      }
+      window.dispatchEvent(new CustomEvent('kca-custom-logo-changed', { detail: updated.customLogoUrl }));
+    }
+
+    window.dispatchEvent(new CustomEvent('kca-portal-config-changed', { detail: updated }));
+    return updated;
+  } catch (error) {
+    console.error('Failed to save portal config:', error);
+    return DEFAULT_PORTAL_CONFIG;
+  }
+}
+
+/**
  * Save & Load Custom Logo Image (data URL or image URL)
  */
 export function saveCustomLogo(logoDataUrl: string | null): void {
@@ -21,8 +73,14 @@ export function saveCustomLogo(logoDataUrl: string | null): void {
     } else {
       localStorage.removeItem(STORAGE_KEY_CUSTOM_LOGO);
     }
-    // Dispatch event to notify components in real-time
+    // Also sync with portalConfig
+    const currentConfig = loadPortalConfig();
+    currentConfig.customLogoUrl = logoDataUrl;
+    localStorage.setItem(STORAGE_KEY_PORTAL_CONFIG, JSON.stringify(currentConfig));
+
+    // Dispatch events to notify components in real-time
     window.dispatchEvent(new CustomEvent('kca-custom-logo-changed', { detail: logoDataUrl }));
+    window.dispatchEvent(new CustomEvent('kca-portal-config-changed', { detail: currentConfig }));
   } catch (error) {
     console.error('Failed to save custom logo:', error);
   }
@@ -30,6 +88,10 @@ export function saveCustomLogo(logoDataUrl: string | null): void {
 
 export function loadCustomLogo(): string | null {
   try {
+    const portalConfig = loadPortalConfig();
+    if (portalConfig.customLogoUrl !== undefined) {
+      return portalConfig.customLogoUrl;
+    }
     return localStorage.getItem(STORAGE_KEY_CUSTOM_LOGO);
   } catch {
     return null;
