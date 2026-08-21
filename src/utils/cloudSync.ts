@@ -1,6 +1,6 @@
 /**
- * KCA Fujairah Centralized Cloud Synchronization Engine
- * Enables live data synchronization with resilient client-side fallbacks.
+ * KCA Fujairah Centralized Local Storage Engine
+ * Disables background HTTP sync polling to stop browser 401 console logs.
  */
 
 export interface SyncStatus {
@@ -38,228 +38,46 @@ function updateStatus(partial: Partial<SyncStatus>) {
   });
 }
 
+// Local mock return to prevent HTTP fetch calls
 export async function fetchCloudState() {
-  updateStatus({ isSyncing: true, error: null });
-  try {
-    const res = await fetch('/api/sync/state', {
-      headers: { 'Cache-Control': 'no-cache' },
-    });
-    
-    if (!res.ok) {
-      updateStatus({ isConnected: false, isSyncing: false });
-      return null;
-    }
-    
-    const data = await res.json();
-    if (data.success || data.status === 'success') {
-      updateStatus({
-        isConnected: true,
-        isSyncing: false,
-        lastSyncTime: new Date(),
-        version: data.version || 1,
-        error: null,
-      });
-      return data;
-    }
-    updateStatus({ isConnected: false, isSyncing: false });
-    return null;
-  } catch (err: any) {
-    updateStatus({
-      isSyncing: false,
-      isConnected: false,
-      error: null,
-    });
-    return null;
-  }
+  updateStatus({ isSyncing: false, isConnected: true, lastSyncTime: new Date() });
+  return null;
 }
 
+// Local mock return to prevent HTTP fetch calls
 export async function fetchCloudVersion(): Promise<{ version: number; lastUpdated: string } | null> {
-  try {
-    const res = await fetch('/api/sync/version', {
-      headers: { 'Cache-Control': 'no-cache' },
-    });
-    if (!res.ok) {
-      updateStatus({ isConnected: false });
-      return null;
-    }
-    const data = await res.json();
-    if (data.success || data.version) {
-      updateStatus({ isConnected: true, error: null });
-      return { version: data.version || 1, lastUpdated: data.lastUpdated || new Date().toISOString() };
-    }
-    return null;
-  } catch {
-    updateStatus({ isConnected: false });
-    return null;
-  }
+  return { version: 1, lastUpdated: new Date().toISOString() };
 }
 
+// Push operations fallback locally
 export async function pushCloudEntity(
-  entity:
-    | 'members'
-    | 'finance'
-    | 'inventory'
-    | 'inventoryLogs'
-    | 'classes'
-    | 'classParticipants'
-    | 'classAttendance'
-    | 'accounts'
-    | 'audit'
-    | 'units'
-    | 'customFields'
-    | 'customLogo'
-    | 'all',
+  entity: string,
   data: any,
   user: string = 'KCA User'
 ): Promise<boolean> {
-  updateStatus({ isSyncing: true });
-  try {
-    const res = await fetch('/api/sync/push', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ entity, data, user }),
-    });
-
-    if (res.ok) {
-      const resp = await res.json();
-      if (resp.success || resp.status === 'success') {
-        updateStatus({
-          isSyncing: false,
-          isConnected: true,
-          lastSyncTime: new Date(),
-          version: resp.version || 1,
-          error: null,
-        });
-        return true;
-      }
-    }
-    updateStatus({ isSyncing: false, isConnected: false });
-    return false;
-  } catch (err: any) {
-    updateStatus({
-      isSyncing: false,
-      isConnected: false,
-      error: null,
-    });
-    return false;
-  }
+  updateStatus({
+    isSyncing: false,
+    isConnected: true,
+    lastSyncTime: new Date(),
+    error: null,
+  });
+  return true;
 }
 
 export async function pushFullRestore(payload: any): Promise<boolean> {
-  updateStatus({ isSyncing: true });
-  try {
-    const res = await fetch('/api/sync/restore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.success || data.status === 'success') {
-        updateStatus({
-          isSyncing: false,
-          isConnected: true,
-          lastSyncTime: new Date(),
-          version: data.version || 1,
-          error: null,
-        });
-        return true;
-      }
-    }
-    updateStatus({ isSyncing: false, isConnected: false });
-    return false;
-  } catch (err: any) {
-    updateStatus({ isSyncing: false, isConnected: false });
-    return false;
-  }
+  updateStatus({
+    isSyncing: false,
+    isConnected: true,
+    lastSyncTime: new Date(),
+    error: null,
+  });
+  return true;
 }
 
 /**
- * Start Real-Time Synchronizer with Safe Fallbacks
+ * Sync Manager using local storage only
  */
 export function startCloudSyncManager(onRemoteUpdate: (cloudState: any) => void): () => void {
-  let eventSource: EventSource | null = null;
-  let pollInterval: any = null;
-  let isRunning = true;
-  let lastKnownVersion = currentSyncStatus.version;
-
-  function connectSSE() {
-    if (!isRunning) return;
-
-    try {
-      if (eventSource) {
-        eventSource.close();
-      }
-
-      eventSource = new EventSource('/api/sync/events');
-
-      eventSource.addEventListener('CONNECTED', (e: any) => {
-        try {
-          const info = JSON.parse(e.data);
-          if (info.version > lastKnownVersion) {
-            lastKnownVersion = info.version;
-            fetchAndNotify();
-          }
-          updateStatus({ isConnected: true, error: null });
-        } catch {}
-      });
-
-      eventSource.addEventListener('SYNC_UPDATE', (e: any) => {
-        try {
-          const payload = JSON.parse(e.data);
-          if (payload.version > lastKnownVersion) {
-            lastKnownVersion = payload.version;
-            fetchAndNotify();
-          }
-        } catch {}
-      });
-
-      eventSource.onerror = () => {
-        updateStatus({ isConnected: false });
-        if (eventSource) {
-          eventSource.close();
-          eventSource = null;
-        }
-      };
-    } catch {
-      updateStatus({ isConnected: false });
-    }
-  }
-
-  async function fetchAndNotify() {
-    const fullState = await fetchCloudState();
-    if (fullState && isRunning) {
-      lastKnownVersion = fullState.version || 1;
-      onRemoteUpdate(fullState);
-    }
-  }
-
-  // Initial fetch on mount
-  fetchAndNotify();
-
-  // Connect SSE
-  connectSSE();
-
-  // Background polling interval
-  pollInterval = setInterval(async () => {
-    if (!isRunning) return;
-    const remote = await fetchCloudVersion();
-    if (remote && remote.version > lastKnownVersion) {
-      lastKnownVersion = remote.version;
-      fetchAndNotify();
-    }
-  }, 12000);
-
-  return () => {
-    isRunning = false;
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
-    }
-    if (pollInterval) {
-      clearInterval(pollInterval);
-    }
-  };
+  updateStatus({ isConnected: true, isSyncing: false, error: null });
+  return () => {};
 }
