@@ -394,17 +394,9 @@ export default function App() {
   useEffect(() => {
     const unsubscribe = startCloudSyncManager((cloudState) => {
       if (cloudState) {
-        if (Array.isArray(cloudState.members) && cloudState.members.length > 0) {
+        if (Array.isArray(cloudState.members)) {
           setMembers(cloudState.members);
           saveMembersToStorage(cloudState.members);
-        } else if (Array.isArray(cloudState.members) && cloudState.members.length === 0) {
-          // If remote cloud returned empty 0 members, restore from storage or push local members
-          const localMembers = loadMembersFromStorage() || INITIAL_MEMBERS;
-          if (localMembers && localMembers.length > 0) {
-            setMembers(localMembers);
-            saveMembersToStorage(localMembers);
-            pushCloudEntity('members', localMembers, userSession?.username || 'Auto Recover');
-          }
         }
         if (Array.isArray(cloudState.financeTransactions)) {
           setFinanceTransactions(cloudState.financeTransactions);
@@ -1711,6 +1703,7 @@ export default function App() {
           setShowWhatsAppModal(true);
         }}
         onUpdateMemberDocuments={handleUpdateMemberDocuments}
+        onDeleteMember={handleDeleteMember}
       />
 
       {/* 3. Official ID Card Generator Modal */}

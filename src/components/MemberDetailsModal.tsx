@@ -61,6 +61,7 @@ interface MemberDetailsModalProps {
   onOpenFieldManager?: () => void;
   onOpenWhatsApp?: (member: Member) => void;
   onUpdateMemberDocuments?: (member: Member, updatedDocuments: MemberDocument[]) => void;
+  onDeleteMember?: (memberId: string) => void;
 }
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
@@ -98,12 +99,14 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   onOpenFieldManager,
   onOpenWhatsApp,
   onUpdateMemberDocuments,
+  onDeleteMember,
 }) => {
   const isAdmin = !userSession || hasAdminPrivilege(userSession.role);
   const isUnitOp = !!userSession && isUnitOperatorRole(userSession.role);
 
   const [isInlineEditing, setIsInlineEditing] = useState(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Editable Form Fields State
   const [membershipId, setMembershipId] = useState('');
@@ -1151,6 +1154,17 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
               <Edit className="w-4 h-4" />
               {isInlineEditing ? 'View Mode' : 'Edit Profile'}
             </button>
+            {onDeleteMember && isAdmin && (
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-md bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 transition-colors cursor-pointer"
+                title="Delete this member record"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -1182,6 +1196,43 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Delete Member Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 animate-fadeIn">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 text-center">Delete Member Record</h3>
+            <p className="text-sm text-slate-600 text-center mt-2">
+              Are you sure you want to delete <strong className="text-slate-900">{member.fullName}</strong> ({member.membershipId})? This will immediately sync and remove the member for all units and operators.
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteMember) {
+                    onDeleteMember(member.id);
+                    setShowDeleteModal(false);
+                    onClose();
+                  }
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

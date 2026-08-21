@@ -85,6 +85,7 @@ export const MemberTable: React.FC<MemberTableProps> = ({
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingUnitMemberId, setEditingUnitMemberId] = useState<string | null>(null);
+  const [memberToDelete, setMemberToDelete] = useState<Member | null>(null);
 
   // Visible custom field columns
   const tableCustomFields = useMemo(() => {
@@ -641,11 +642,7 @@ export const MemberTable: React.FC<MemberTableProps> = ({
 
                           {onDeleteMember && (
                             <button
-                              onClick={() => {
-                                if (confirm(`Are you sure you want to delete member ${m.fullName} (${m.membershipId})?`)) {
-                                  onDeleteMember(m.id);
-                                }
-                              }}
+                              onClick={() => setMemberToDelete(m)}
                               className="p-1.5 rounded-lg bg-slate-100 hover:bg-red-50 hover:text-red-700 text-slate-400 transition-colors cursor-pointer"
                               title="Delete Member"
                             >
@@ -674,6 +671,42 @@ export const MemberTable: React.FC<MemberTableProps> = ({
           </span>
         </div>
       </div>
+
+      {/* In-App Delete Confirmation Modal */}
+      {memberToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full p-6 animate-fadeIn">
+            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-4">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 text-center">Delete Member Record</h3>
+            <p className="text-sm text-slate-600 text-center mt-2">
+              Are you sure you want to delete <strong className="text-slate-900">{memberToDelete.fullName}</strong> ({memberToDelete.membershipId})? This action will sync across all devices.
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setMemberToDelete(null)}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-300 text-slate-700 font-semibold hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onDeleteMember && memberToDelete) {
+                    onDeleteMember(memberToDelete.id);
+                    setMemberToDelete(null);
+                  }
+                }}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold shadow-xs transition-colors cursor-pointer"
+              >
+                Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

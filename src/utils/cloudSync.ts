@@ -292,10 +292,17 @@ function extractStateFromRow(row: any): KcaCloudState | null {
   // Case 1: Payload column has full JSON bundle
   if (row.payload && typeof row.payload === 'object') {
     const p = row.payload;
-    const rawMembers = Array.isArray(p.members) ? p.members : Array.isArray(row.members) ? row.members : null;
-    const resolvedMembers = rawMembers && rawMembers.length > 0 ? rawMembers : fallbackMembers;
-    const rawAccounts = Array.isArray(p.adminAccounts) ? p.adminAccounts : Array.isArray(row.adminAccounts) ? row.adminAccounts : null;
-    const resolvedAccounts = rawAccounts && rawAccounts.length > 0 ? rawAccounts : fallbackAccounts;
+    const resolvedMembers = Array.isArray(p.members)
+      ? p.members
+      : Array.isArray(row.members)
+      ? row.members
+      : fallbackMembers;
+
+    const resolvedAccounts = Array.isArray(p.adminAccounts)
+      ? p.adminAccounts
+      : Array.isArray(row.adminAccounts)
+      ? row.adminAccounts
+      : fallbackAccounts;
 
     return {
       version: Number(row.version || p.version || 1),
@@ -318,8 +325,8 @@ function extractStateFromRow(row: any): KcaCloudState | null {
 
   // Case 2: Direct columns on row
   if (Array.isArray(row.members) || row.version) {
-    const resolvedMembers = Array.isArray(row.members) && row.members.length > 0 ? row.members : fallbackMembers;
-    const resolvedAccounts = Array.isArray(row.adminAccounts) && row.adminAccounts.length > 0 ? row.adminAccounts : fallbackAccounts;
+    const resolvedMembers = Array.isArray(row.members) ? row.members : fallbackMembers;
+    const resolvedAccounts = Array.isArray(row.adminAccounts) ? row.adminAccounts : fallbackAccounts;
 
     return {
       version: Number(row.version || 1),
@@ -389,11 +396,11 @@ export async function fetchCloudState(): Promise<KcaCloudState | null> {
     const res = await fetch('/api/sync/state');
     if (res.ok) {
       const data = await res.json();
-      if (data && (data.members || data.version)) {
+      if (data && (data.members !== undefined || data.version !== undefined)) {
         const fallbackMembers = loadMembersFromStorage() || INITIAL_MEMBERS;
-        const resolvedMembers = Array.isArray(data.members) && data.members.length > 0 ? data.members : fallbackMembers;
+        const resolvedMembers = Array.isArray(data.members) ? data.members : fallbackMembers;
         const fallbackAccounts = loadAdminAccounts() || INITIAL_ADMIN_ACCOUNTS;
-        const resolvedAccounts = Array.isArray(data.adminAccounts) && data.adminAccounts.length > 0 ? data.adminAccounts : fallbackAccounts;
+        const resolvedAccounts = Array.isArray(data.adminAccounts) ? data.adminAccounts : fallbackAccounts;
 
         const parsed: KcaCloudState = {
           version: Number(data.version || 1),
@@ -827,11 +834,15 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
   try {
     if (typeof window !== 'undefined' && window.EventSource) {
       eventSource = new EventSource('/api/sync/events');
-      eventSource.onmessage = (event) => {
-        if (!isRunning || !event.data) return;
+
+      const handleIncomingSyncEvent = (rawData: any) => {
+        if (!isRunning || !rawData) return;
         try {
-          const payload = JSON.parse(event.data);
-          if (payload && payload.version && payload.version > lastKnownVersion) {
+          const payload = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+          if (payload) {
+            if (payload.version && payload.version > lastKnownVersion) {
+              lastKnownVersion = payload.version;
+            }
             fetchCloudState().then((fresh) => {
               if (fresh && isRunning) {
                 handleCloudStatePayload(fresh);
@@ -840,6 +851,10 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
           }
         } catch {}
       };
+
+      eventSource.onmessage = (event) => handleIncomingSyncEvent(event.data);
+      eventSource.addEventListener('SYNC_UPDATE', (event: any) => handleIncomingSyncEvent(event.data));
+      eventSource.addEventListener('CONNECTED', (event: any) => handleIncomingSyncEvent(event.data));
     }
   } catch {}
 
