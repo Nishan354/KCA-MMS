@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/sync/:path*",
+      "destination": "https://kca_mms_db.supabase.co/rest/v1/:path*"
+    }
+  ]
+}
