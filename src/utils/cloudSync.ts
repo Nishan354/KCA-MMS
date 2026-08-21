@@ -9,10 +9,13 @@ export interface SyncStatus {
 }
 
 // Environment variables configured in Vercel / AI Studio
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://jvwetoapdaxuweannrgq.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const metaEnv = (import.meta as any).env || {};
+const supabaseUrl = metaEnv.VITE_SUPABASE_URL || 'https://jvwetoapdaxuweannrgq.supabase.co';
+const supabaseAnonKey = metaEnv.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder';
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { persistSession: false },
+});
 
 let currentSyncStatus: SyncStatus = {
   isConnected: true,
@@ -102,33 +105,44 @@ export async function pushCloudEntity(entity: string, data: any, user: string = 
   }
 }
 
+// Full restore pushing entire dataset
+export async function pushFullRestore(payload: any): Promise<boolean> {
+  return pushCloudEntity('all', payload, 'System Restore');
+}
+
 // Subscribe to real-time changes across all connected devices
 export function startCloudSyncManager(onRemoteUpdate: (cloudState: any) => void): () => void {
   fetchCloudState().then((state) => {
     if (state) onRemoteUpdate(state);
   });
 
-  const channel = supabase
-    .channel('realtime_kca_sync')
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'app_state' },
-      (payload) => {
-        if (payload.new && (payload.new as any).payload) {
-          updateStatus({
-            isConnected: true,
-            lastSyncTime: new Date(),
-            version: (payload.new as any).version || 1,
-          });
-          onRemoteUpdate((payload.new as any).payload);
+  try {
+    const channel = supabase
+      .channel('realtime_kca_sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'app_state' },
+        (payload) => {
+          if (payload.new && (payload.new as any).payload) {
+            updateStatus({
+              isConnected: true,
+              lastSyncTime: new Date(),
+              version: (payload.new as any).version || 1,
+            });
+            onRemoteUpdate((payload.new as any).payload);
+          }
         }
-      }
-    )
-    .subscribe((status) => {
-      updateStatus({ isConnected: status === 'SUBSCRIBED' });
-    });
+      )
+      .subscribe((status) => {
+        updateStatus({ isConnected: status === 'SUBSCRIBED' });
+      });
 
-  return () => {
-    supabase.removeChannel(channel);
-  };
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
+  } catch {
+    return () => {};
+  }
 }

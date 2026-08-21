@@ -68,7 +68,7 @@ export const ReportGeneratorModal: React.FC<ReportGeneratorModalProps> = ({
       // Status filter
       if (selectedStatus !== 'All') {
         if (selectedStatus === 'Active' && m.status !== 'Active') return false;
-        if (selectedStatus === 'Inactive' && m.status !== 'Inactive') return false;
+        if (selectedStatus === 'Inactive' && m.status !== 'Expired' && m.status !== 'Suspended') return false;
         if (selectedStatus === 'Expiring') {
           const now = new Date();
           const exp = new Date(m.expiryDate);

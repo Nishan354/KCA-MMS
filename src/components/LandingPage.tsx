@@ -378,7 +378,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 {/* Inline Front ID Card Preview */}
                 <div className="flex flex-col items-center justify-center pt-2">
                   <div className="p-2 sm:p-4 bg-slate-950 rounded-xl border border-slate-800 shadow-xl max-w-full overflow-x-auto">
-                    <IdCard member={verifiedMember} customFields={customFields} showBackSide={false} />
+                    <IdCard member={verifiedMember} customFields={customFields} side="front" />
                   </div>
                 </div>
               </div>

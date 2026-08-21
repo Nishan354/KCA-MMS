@@ -362,7 +362,7 @@ export const PublicVerifyCardView: React.FC<PublicVerifyCardViewProps> = ({
         {/* Digital Identity Card View */}
         <div className="flex flex-col items-center justify-center py-4 space-y-6">
           <div className="p-2 sm:p-4 bg-slate-900/90 rounded-2xl border border-slate-800 shadow-2xl inline-block max-w-full overflow-x-auto">
-            <IdCard member={resolvedMember} customFields={customFields} showBackSide={false} />
+            <IdCard member={resolvedMember} customFields={customFields} side="front" />
           </div>
           <p className="text-xs text-slate-400 text-center max-w-md">
             Official high-resolution digital identification card recognized across all KCA Fujairah units &amp; affiliated events.

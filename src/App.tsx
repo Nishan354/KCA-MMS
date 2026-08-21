@@ -801,8 +801,9 @@ export default function App() {
   };
 
   // Handler: Update Unit for member
-  const handleUpdateMemberUnit = (memberId: string, newUnit: string) => {
-    const target = members.find((m) => m.id === memberId);
+  const handleUpdateMemberUnit = (targetInput: Member | string, newUnit: string) => {
+    const memberId = typeof targetInput === 'string' ? targetInput : targetInput.id;
+    const target = members.find((m) => m.id === memberId || m.membershipId === memberId);
     if (!target) return;
     const oldUnit = target.unit;
     const updatedMember: Member = {
@@ -845,8 +846,9 @@ export default function App() {
   };
 
   // Handler: Update Member Documents (Passport, Emirates ID, Visa, Photo)
-  const handleUpdateMemberDocuments = (memberId: string, documents: MemberDocument[]) => {
-    const target = members.find((m) => m.id === memberId);
+  const handleUpdateMemberDocuments = (targetInput: Member | string, documents: MemberDocument[]) => {
+    const memberId = typeof targetInput === 'string' ? targetInput : targetInput.id;
+    const target = members.find((m) => m.id === memberId || m.membershipId === memberId);
     if (!target) return;
     const updatedMember: Member = {
       ...target,
@@ -1754,9 +1756,12 @@ export default function App() {
         isOpen={showFieldManagerModal}
         customFields={customFields}
         onClose={() => setShowFieldManagerModal(false)}
-        onSaveField={handleSaveCustomField}
-        onDeleteField={handleDeleteCustomField}
-        onReorderFields={handleReorderCustomFields}
+        onSaveCustomFields={(fields) => {
+          setCustomFields(fields);
+          saveCustomFields(fields);
+          broadcastSync('CUSTOM_FIELDS_SYNC');
+          pushCloudEntity('customFields', fields, userSession?.username || 'User');
+        }}
       />
 
       {/* 8. Admin Accounts Management Modal */}
@@ -1837,7 +1842,8 @@ export default function App() {
           setWhatsAppTargetMember(undefined);
         }}
         members={visibleMembers}
-        targetMember={whatsAppTargetMember}
+        initialMember={whatsAppTargetMember}
+        userSession={userSession}
       />
 
       {/* 16. Dedicated Official Mailbox Modal */}

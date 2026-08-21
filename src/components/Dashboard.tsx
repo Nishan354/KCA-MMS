@@ -139,7 +139,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const availableQuantitySum = displayedInventory.reduce((sum, i) => sum + (i.availableQuantity || 0), 0);
   const issuedQuantitySum = displayedInventory.reduce((sum, i) => sum + (i.issuedQuantity || 0), 0);
   const totalInventoryValuationAED = displayedInventory.reduce(
-    (sum, i) => sum + (i.unitCostAED ? i.unitCostAED * i.totalQuantity : 0),
+    (sum, i) => sum + (i.purchasePriceAED ? i.purchasePriceAED * i.totalQuantity : 0),
     0
   );
 
