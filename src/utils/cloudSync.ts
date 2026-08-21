@@ -912,4 +912,46 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
       } catch {}
     }
   };
+}export async function pushCloudEntity(entity: string, data: any, user: string = 'KCA User'): Promise<boolean> {
+  updateStatus({ isSyncing: true });
+  try {
+    // Retrieve custom logo and theme configuration stored in localStorage
+    const savedLogo = localStorage.getItem('kca_custom_logo') || localStorage.getItem('customLogo');
+    const savedTheme = localStorage.getItem('kca_portal_theme') || localStorage.getItem('theme');
+    const savedCustomFields = localStorage.getItem('kca_custom_fields');
+
+    // Bundle core payload with portal customization options
+    const fullPayload = {
+      appData: data,
+      branding: {
+        customLogo: savedLogo ? JSON.parse(savedLogo) : null,
+        portalTheme: savedTheme ? JSON.parse(savedTheme) : null,
+        customFields: savedCustomFields ? JSON.parse(savedCustomFields) : null,
+      },
+    };
+
+    const newVersion = currentSyncStatus.version + 1;
+    const { error } = await supabase.from('app_state').upsert({
+      id: 1,
+      entity: entity || 'all',
+      payload: fullPayload,
+      updated_by: user,
+      version: newVersion,
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) throw error;
+
+    updateStatus({
+      isSyncing: false,
+      isConnected: true,
+      lastSyncTime: new Date(),
+      version: newVersion,
+      error: null,
+    });
+    return true;
+  } catch (err: any) {
+    updateStatus({ isSyncing: false, isConnected: false, error: err.message });
+    return false;
+  }
 }
