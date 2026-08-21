@@ -1,7 +1,6 @@
 /**
  * KCA Fujairah Centralized Cloud Synchronization Engine
- * Enables seamless live data synchronization across 5+ distributed users,
- * multiple devices, different browsers, and central management dashboards.
+ * Enables live data synchronization with resilient client-side fallbacks.
  */
 
 export interface SyncStatus {
@@ -45,11 +44,14 @@ export async function fetchCloudState() {
     const res = await fetch('/api/sync/state', {
       headers: { 'Cache-Control': 'no-cache' },
     });
+    
     if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      updateStatus({ isConnected: false, isSyncing: false });
+      return null;
     }
+    
     const data = await res.json();
-    if (data.success) {
+    if (data.success || data.status === 'success') {
       updateStatus({
         isConnected: true,
         isSyncing: false,
@@ -59,14 +61,14 @@ export async function fetchCloudState() {
       });
       return data;
     }
-    throw new Error(data.error || 'Failed to fetch cloud state');
+    updateStatus({ isConnected: false, isSyncing: false });
+    return null;
   } catch (err: any) {
     updateStatus({
       isSyncing: false,
       isConnected: false,
-      error: err.message,
+      error: null,
     });
-    console.warn('[CloudSync] Fetch failed, relying on local storage cache:', err);
     return null;
   }
 }
@@ -76,11 +78,14 @@ export async function fetchCloudVersion(): Promise<{ version: number; lastUpdate
     const res = await fetch('/api/sync/version', {
       headers: { 'Cache-Control': 'no-cache' },
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      updateStatus({ isConnected: false });
+      return null;
+    }
     const data = await res.json();
-    if (data.success) {
+    if (data.success || data.version) {
       updateStatus({ isConnected: true, error: null });
-      return { version: data.version, lastUpdated: data.lastUpdated };
+      return { version: data.version || 1, lastUpdated: data.lastUpdated || new Date().toISOString() };
     }
     return null;
   } catch {
@@ -119,24 +124,25 @@ export async function pushCloudEntity(
 
     if (res.ok) {
       const resp = await res.json();
-      if (resp.success) {
+      if (resp.success || resp.status === 'success') {
         updateStatus({
           isSyncing: false,
           isConnected: true,
           lastSyncTime: new Date(),
-          version: resp.version,
+          version: resp.version || 1,
           error: null,
         });
         return true;
       }
     }
-    throw new Error('Failed to push update to cloud server');
+    updateStatus({ isSyncing: false, isConnected: false });
+    return false;
   } catch (err: any) {
     updateStatus({
       isSyncing: false,
-      error: err.message,
+      isConnected: false,
+      error: null,
     });
-    console.warn('[CloudSync] Push error, saved locally:', err);
     return false;
   }
 }
@@ -151,26 +157,27 @@ export async function pushFullRestore(payload: any): Promise<boolean> {
     });
     if (res.ok) {
       const data = await res.json();
-      if (data.success) {
+      if (data.success || data.status === 'success') {
         updateStatus({
           isSyncing: false,
           isConnected: true,
           lastSyncTime: new Date(),
-          version: data.version,
+          version: data.version || 1,
           error: null,
         });
         return true;
       }
     }
-    throw new Error('Restore failed on server');
+    updateStatus({ isSyncing: false, isConnected: false });
+    return false;
   } catch (err: any) {
-    updateStatus({ isSyncing: false, error: err.message });
+    updateStatus({ isSyncing: false, isConnected: false });
     return false;
   }
 }
 
 /**
- * Start Real-Time Synchronizer using Server-Sent Events (SSE) + Automatic Reconnect + Fast Polling Fallback
+ * Start Real-Time Synchronizer with Safe Fallbacks
  */
 export function startCloudSyncManager(onRemoteUpdate: (cloudState: any) => void): () => void {
   let eventSource: EventSource | null = null;
@@ -215,20 +222,16 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: any) => void)
           eventSource.close();
           eventSource = null;
         }
-        // Retry SSE in 5 seconds
-        if (isRunning) {
-          setTimeout(connectSSE, 5000);
-        }
       };
     } catch {
-      // SSE not supported, will use poll fallback
+      updateStatus({ isConnected: false });
     }
   }
 
   async function fetchAndNotify() {
     const fullState = await fetchCloudState();
     if (fullState && isRunning) {
-      lastKnownVersion = fullState.version;
+      lastKnownVersion = fullState.version || 1;
       onRemoteUpdate(fullState);
     }
   }
@@ -239,7 +242,7 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: any) => void)
   // Connect SSE
   connectSSE();
 
-  // Background polling every 8 seconds as safety net across firewalls
+  // Background polling interval
   pollInterval = setInterval(async () => {
     if (!isRunning) return;
     const remote = await fetchCloudVersion();
@@ -247,7 +250,7 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: any) => void)
       lastKnownVersion = remote.version;
       fetchAndNotify();
     }
-  }, 8000);
+  }, 12000);
 
   return () => {
     isRunning = false;
