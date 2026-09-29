@@ -30,12 +30,6 @@ export const LogoManagerModal: React.FC<LogoManagerModalProps> = ({ isOpen, onCl
       return;
     }
 
-    // Validate size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setErrorMsg('File size too large. Please upload an image under 5MB.');
-      return;
-    }
-
     const reader = new FileReader();
     reader.onload = (e) => {
       const dataUrl = e.target?.result as string;
@@ -64,21 +58,30 @@ export const LogoManagerModal: React.FC<LogoManagerModalProps> = ({ isOpen, onCl
   const handleSave = () => {
     saveCustomLogo(previewLogo);
     pushCloudEntity('customLogo', previewLogo, 'Logo Admin');
-    setSuccessMsg('Logo updated successfully! All ID cards & headers are now updated.');
+
+    // Update dynamic browser / electron window favicon
+    if (previewLogo) {
+      const favEl = document.getElementById('app-favicon') as HTMLLinkElement;
+      if (favEl) favEl.href = previewLogo;
+    }
+
+    setSuccessMsg('KCA-MMS App Icon & Logo updated successfully! All ID cards, portal headers & window icons are now synchronized.');
     confetti({ particleCount: 35, spread: 60 });
     setTimeout(() => {
       onClose();
-    }, 900);
+    }, 1100);
   };
 
   const handleResetToDefault = () => {
     resetCustomLogo();
     pushCloudEntity('customLogo', null, 'Logo Admin');
     setPreviewLogo(null);
-    setSuccessMsg('Reset to official original KCA Fujairah emblem.');
+    const favEl = document.getElementById('app-favicon') as HTMLLinkElement;
+    if (favEl) favEl.href = '/favicon.ico';
+    setSuccessMsg('Reset to official original KCA Fujairah emblem & default app icon.');
     setTimeout(() => {
       onClose();
-    }, 900);
+    }, 1100);
   };
 
   return (
@@ -90,10 +93,10 @@ export const LogoManagerModal: React.FC<LogoManagerModalProps> = ({ isOpen, onCl
             <Sparkles className="w-5 h-5 text-amber-300" />
             <div>
               <h3 className="font-display font-bold text-lg text-white">
-                KCA Logo Customizer
+                KCA-MMS App Icon &amp; Logo Customizer
               </h3>
               <p className="text-xs text-red-100">
-                Upload custom association logo or retain original KCA seal
+                Customize the association emblem, desktop window icon, and ID card headers
               </p>
             </div>
           </div>

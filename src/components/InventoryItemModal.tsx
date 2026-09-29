@@ -64,7 +64,7 @@ export const InventoryItemModal: React.FC<InventoryItemModalProps> = ({
         setIssuedQuantity(item.issuedQuantity);
         setUnitOfMeasure(item.unitOfMeasure || 'Pieces');
         setCondition(item.condition);
-        setStatus(item.status);
+        setStatus((item.status as InventoryItemStatus) || 'In Stock');
         setPurchaseDate(item.purchaseDate || '');
         setPurchasePriceAED(item.purchasePriceAED !== undefined ? item.purchasePriceAED : '');
         setCustodianName(item.custodianName || '');

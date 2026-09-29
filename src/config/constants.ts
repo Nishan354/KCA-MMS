@@ -4,6 +4,9 @@
  */
 export const PUBLISHED_PORTAL_URL = 'https://ais-pre-m2j4i76aqzeukeo3v6v6lx-309601622756.europe-west2.run.app';
 export const OFFICIAL_ORG_NAME = 'Kairali Cultural Association Fujairah';
-export const OFFICIAL_EMAIL = 'kairalicaf@gmail.com';
+export const OFFICIAL_AFFILIATION = 'A Norka affiliated Organisation';
+export const OFFICIAL_EMAIL = ''; // Removed from cards/vouchers/receipts/certificates as requested
+export const OFFICIAL_LETTER_EMAIL = 'kairalicaf@gmail.com';
 export const OFFICIAL_PHONE = '+971 9 222 0000';
 export const OFFICIAL_LOCATION = 'Fujairah, United Arab Emirates';
+

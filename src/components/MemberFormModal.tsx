@@ -10,9 +10,12 @@ import {
   UserSession,
   MemberDocument,
   DocumentCategory,
+  MemberStatus,
 } from '../types/member';
 import { getNextMembershipId, getDefaultExpiryDate, getNextMarch31Date, getUnitIdPrefix, getNextMemberReceiptNumber } from '../utils/idGenerator';
 import { DynamicFieldInput } from './DynamicFieldInput';
+import { optimizeImageFile } from '../utils/imageOptimizer';
+import { saveMemberPhotoToDb } from '../utils/indexedDbStorage';
 import {
   X,
   User,
@@ -38,7 +41,12 @@ import {
   Trash2,
   Download,
   FileUp,
+  UserCheck,
+  Award,
+  Crown,
 } from 'lucide-react';
+import { loadSubcommittees, EXECUTIVE_DESIGNATIONS, SUBCOMMITTEE_DESIGNATIONS } from '../types/subcommittee';
+import { CommitteeBadge } from './CommitteeBadge';
 
 interface MemberFormModalProps {
   member?: Member | null;
@@ -46,6 +54,7 @@ interface MemberFormModalProps {
   units: string[];
   customFields: CustomFieldDefinition[];
   lockedUnit?: string;
+  initialGender?: 'Male' | 'Female' | 'Other';
   userSession?: UserSession;
   isOpen: boolean;
   onClose: () => void;
@@ -72,23 +81,13 @@ const KERALA_DISTRICTS = [
   'Wayanad',
 ];
 
-const PRESET_AVATARS = [
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=400&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=400&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=400&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=400&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=400&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=400&auto=format&fit=crop&q=80',
-];
-
 export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   member,
   existingMembers,
   units,
   customFields,
   lockedUnit,
+  initialGender,
   userSession,
   isOpen,
   onClose,
@@ -104,18 +103,30 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   // Form State
   const [membershipId, setMembershipId] = useState('');
   const [fullName, setFullName] = useState('');
+  const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>((member?.gender as any) || initialGender || 'Male');
   const [dateOfBirth, setDateOfBirth] = useState('1990-01-01');
   const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O+');
   const [unit, setUnit] = useState(effectiveDefaultUnit);
   const [isCustomUnit, setIsCustomUnit] = useState(false);
   const [customUnitInput, setCustomUnitInput] = useState('');
-  const [photoUrl, setPhotoUrl] = useState(PRESET_AVATARS[0]);
+  const [photoUrl, setPhotoUrl] = useState(member?.photoUrl || '');
+  const [isOptimizingPhoto, setIsOptimizingPhoto] = useState(false);
+  const [photoStatusMessage, setPhotoStatusMessage] = useState<string | null>(null);
   const [expiryDate, setExpiryDate] = useState(getDefaultExpiryDate());
   const [membershipType, setMembershipType] = useState<MembershipType>('General Member');
   const [registrationCategory, setRegistrationCategory] = useState<RegistrationCategory>('New');
   const [paymentPurpose, setPaymentPurpose] = useState<'New Membership Fee' | 'Renewal Fee'>('New Membership Fee');
   const [registrationDate, setRegistrationDate] = useState(new Date().toISOString().split('T')[0]);
-  const [status, setStatus] = useState<'Active' | 'Expired' | 'Pending' | 'Suspended'>('Active');
+  const [status, setStatus] = useState<MemberStatus>('Active');
+
+  // Committee & Subcommittee Framework State
+  const [committeeTier, setCommitteeTier] = useState<'Central' | 'Unit' | 'General'>('General');
+  const [subcommittee, setSubcommittee] = useState<string>('');
+  const [designation, setDesignation] = useState<string>('');
+  const [isCustomSubcommittee, setIsCustomSubcommittee] = useState(false);
+  const [customSubcommitteeInput, setCustomSubcommitteeInput] = useState('');
+  const [isCustomDesignation, setIsCustomDesignation] = useState(false);
+  const [customDesignationInput, setCustomDesignationInput] = useState('');
 
   // Contact
   const [phoneUAE, setPhoneUAE] = useState('+971 50 ');
@@ -143,6 +154,12 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   const [emergencyContactRelation, setEmergencyContactRelation] = useState('Spouse');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('+971 ');
 
+  // Reference / Introduced By (Proposer)
+  const [introducedByType, setIntroducedByType] = useState<'none' | 'existing' | 'manual'>('none');
+  const [introducedByMemberId, setIntroducedByMemberId] = useState<string>('');
+  const [introducedByName, setIntroducedByName] = useState<string>('');
+  const [introducedByPhone, setIntroducedByPhone] = useState<string>('');
+
   // Payment in AED
   const [feeAmountAED, setFeeAmountAED] = useState<number>(30);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Paid');
@@ -166,6 +183,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
       if (member) {
         setMembershipId(member.membershipId);
         setFullName(member.fullName);
+        setGender((member.gender as any) || 'Male');
         setDateOfBirth(member.dateOfBirth || '1990-01-01');
         setBloodGroup(member.bloodGroup || 'O+');
 
@@ -179,13 +197,22 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
           setCustomUnitInput(member.unit);
         }
 
-        setPhotoUrl(member.photoUrl || PRESET_AVATARS[0]);
+        setPhotoUrl(member.photoUrl || '');
         setExpiryDate(member.expiryDate || getDefaultExpiryDate());
         setMembershipType(member.membershipType || 'General Member');
         setRegistrationCategory(member.registrationCategory || 'Renewal');
         setPaymentPurpose(member.registrationCategory === 'New' ? 'New Membership Fee' : 'Renewal Fee');
         setRegistrationDate(member.registrationDate || new Date().toISOString().split('T')[0]);
         setStatus(member.status || 'Active');
+
+        // Sync committee fields
+        setCommitteeTier(member.committeeTier || (member.membershipType === 'Central Committee Member' ? 'Central' : member.membershipType === 'Executive Member' ? 'Unit' : 'General'));
+        setSubcommittee(member.subcommittee || '');
+        setDesignation(member.designation || '');
+        setIsCustomSubcommittee(false);
+        setCustomSubcommitteeInput('');
+        setIsCustomDesignation(false);
+        setCustomDesignationInput('');
 
         setPhoneUAE(member.phoneUAE || '+971 50 ');
         setWhatsapp(member.whatsapp || member.phoneUAE || '');
@@ -205,6 +232,31 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         setEmergencyContactRelation(member.emergencyContactRelation || 'Spouse');
         setEmergencyContactPhone(member.emergencyContactPhone || member.phoneUAE || '+971 ');
 
+        // Populate Introduced By
+        if (member.introducedBy) {
+          if (typeof member.introducedBy === 'object') {
+            if (member.introducedBy.memberId) {
+              setIntroducedByType('existing');
+              setIntroducedByMemberId(member.introducedBy.memberId);
+              setIntroducedByName(member.introducedBy.name || '');
+              setIntroducedByPhone(member.introducedBy.phone || '');
+            } else {
+              setIntroducedByType('manual');
+              setIntroducedByName(member.introducedBy.name || '');
+              setIntroducedByPhone(member.introducedBy.phone || '');
+            }
+          } else {
+            setIntroducedByType('manual');
+            setIntroducedByName(String(member.introducedBy));
+            setIntroducedByPhone('');
+          }
+        } else {
+          setIntroducedByType('none');
+          setIntroducedByMemberId('');
+          setIntroducedByName('');
+          setIntroducedByPhone('');
+        }
+
         setFeeAmountAED(member.feeAmountAED !== undefined ? member.feeAmountAED : 30);
         setPaymentStatus(member.paymentStatus || 'Paid');
         setPaymentMethod(member.paymentMethod || 'Cash');
@@ -220,13 +272,22 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         setUnit(targetUnit);
         setIsCustomUnit(false);
         setCustomUnitInput('');
-        setPhotoUrl(PRESET_AVATARS[Math.floor(Math.random() * PRESET_AVATARS.length)]);
+        setPhotoUrl('');
         setExpiryDate(getDefaultExpiryDate());
         setMembershipType('General Member');
         setRegistrationCategory('New');
         setPaymentPurpose('New Membership Fee');
         setRegistrationDate(new Date().toISOString().split('T')[0]);
         setStatus('Active');
+
+        // Reset committee fields
+        setCommitteeTier('General');
+        setSubcommittee('');
+        setDesignation('');
+        setIsCustomSubcommittee(false);
+        setCustomSubcommitteeInput('');
+        setIsCustomDesignation(false);
+        setCustomDesignationInput('');
 
         setPhoneUAE('+971 50 ');
         setWhatsapp('');
@@ -245,6 +306,12 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         setEmergencyContactName('');
         setEmergencyContactRelation('Spouse');
         setEmergencyContactPhone('+971 ');
+
+        // Reset Introduced By for new member
+        setIntroducedByType('none');
+        setIntroducedByMemberId('');
+        setIntroducedByName('');
+        setIntroducedByPhone('');
 
         setFeeAmountAED(30);
         setPaymentStatus('Paid');
@@ -275,14 +342,43 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handlePhotoFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
+    if (!file) return;
+
+    try {
+      setIsOptimizingPhoto(true);
+      setPhotoStatusMessage('Optimizing photo for ID storage...');
+      const { dataUrl, optimizedSize } = await optimizeImageFile(file, {
+        maxWidth: 480,
+        maxHeight: 600,
+        quality: 0.85,
+      });
+
+      setPhotoUrl(dataUrl);
+      const sizeKB = Math.round(optimizedSize / 1024);
+      setPhotoStatusMessage(`Optimized (${sizeKB} KB) - Ready & saved`);
+
+      // Immediately save to IndexedDB as well
+      if (member?.id) {
+        saveMemberPhotoToDb(member.id, dataUrl);
+      }
+      if (membershipId) {
+        saveMemberPhotoToDb(membershipId, dataUrl);
+      }
+
+      setTimeout(() => setPhotoStatusMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to optimize uploaded photo:', err);
+      // Fallback to basic file reader if canvas fails
       const reader = new FileReader();
       reader.onloadend = () => {
         setPhotoUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
+    } finally {
+      setIsOptimizingPhoto(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -342,6 +438,8 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
     }
 
     const finalUnit = isCustomUnit && customUnitInput.trim() ? customUnitInput.trim() : unit;
+    const finalSubcommittee = isCustomSubcommittee && customSubcommitteeInput.trim() ? customSubcommitteeInput.trim() : subcommittee.trim();
+    const finalDesignation = isCustomDesignation && customDesignationInput.trim() ? customDesignationInput.trim() : designation.trim();
 
     let updatedPaymentHistory = member?.paymentHistory || [];
 
@@ -373,10 +471,16 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
       updatedPaymentHistory = [renewalPaymentRecord, ...(member.paymentHistory || [])];
     }
 
+    const effectiveSubcommittee =
+      gender === 'Female' && (!finalSubcommittee || finalSubcommittee === 'General')
+        ? 'Ladies Wing'
+        : finalSubcommittee;
+
     const savedMember: Member = {
       id: member?.id || `kca-mem-${Date.now()}`,
       membershipId: membershipId.trim(),
       fullName: fullName.trim(),
+      gender,
       dateOfBirth,
       bloodGroup,
       unit: finalUnit,
@@ -387,6 +491,9 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
       registrationDate,
       lastRenewalDate: registrationCategory === 'Renewal' ? registrationDate : member?.lastRenewalDate,
       status,
+      committeeTier,
+      subcommittee: effectiveSubcommittee || undefined,
+      designation: finalDesignation || undefined,
       phoneUAE: phoneUAE.trim(),
       whatsapp: (whatsapp || phoneUAE).trim(),
       email: email.trim() || 'member@kca-fujairah.ae',
@@ -401,6 +508,20 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
       emergencyContactName: emergencyContactName.trim() || 'KCA Helpline',
       emergencyContactRelation: emergencyContactRelation.trim() || 'Relation',
       emergencyContactPhone: emergencyContactPhone.trim() || phoneUAE,
+      introducedBy:
+        introducedByType === 'existing' && introducedByMemberId
+          ? {
+              memberId: introducedByMemberId,
+              membershipId: existingMembers.find((m) => m.id === introducedByMemberId)?.membershipId || '',
+              name: existingMembers.find((m) => m.id === introducedByMemberId)?.fullName || introducedByName,
+              phone: existingMembers.find((m) => m.id === introducedByMemberId)?.phoneUAE || introducedByPhone,
+            }
+          : introducedByType === 'manual' && introducedByName.trim()
+          ? {
+              name: introducedByName.trim(),
+              phone: introducedByPhone.trim() || undefined,
+            }
+          : undefined,
       feeAmountAED: Number(feeAmountAED),
       paymentStatus,
       paymentMethod,
@@ -437,7 +558,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                 {isEditing ? `Edit Member: ${member?.fullName} (${member?.membershipId})` : 'Register New KCA Member'}
               </h3>
               <p className="text-xs text-red-100 mt-1">
-                Kairali Cultural Association Fujairah &bull; NORKA Affiliated
+                Kairali Cultural Association Fujairah &bull; A Norka affiliated Organisation
               </p>
             </div>
           </div>
@@ -557,6 +678,43 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
               />
             </div>
 
+            {/* Gender Selection */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Gender <span className="text-red-600">*</span>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['Male', 'Female', 'Other'] as const).map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => {
+                      setGender(g);
+                      if (g === 'Female' && (!subcommittee || subcommittee === 'General')) {
+                        setSubcommittee('Ladies Wing');
+                      }
+                    }}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold transition-all border flex items-center justify-center gap-1.5 cursor-pointer ${
+                      gender === g
+                        ? g === 'Female'
+                          ? 'bg-pink-600 text-white border-pink-700 shadow-xs'
+                          : 'bg-[#8b0000] text-white border-[#730000] shadow-xs'
+                        : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                    }`}
+                  >
+                    {g === 'Female' && <span className="w-1.5 h-1.5 rounded-full bg-pink-300"></span>}
+                    <span>{g}</span>
+                    {g === 'Female' && <span className="text-[10px] opacity-90">(Ladies Wing)</span>}
+                  </button>
+                ))}
+              </div>
+              {gender === 'Female' && (
+                <p className="text-[11px] text-pink-700 font-medium mt-1.5 flex items-center gap-1">
+                  <span>✓</span> Female members automatically route to the <strong>KCA Fujairah Ladies Wing</strong>.
+                </p>
+              )}
+            </div>
+
             {/* DOB, Blood Group, Unit Editing */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
@@ -663,8 +821,8 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
               </div>
             )}
 
-            {/* Member Joined Date & Manually Settable Expiry Date */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Member Joined Date, Expiry Date & Status */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
                   Member Joined Date <span className="text-red-600">*</span>
@@ -677,14 +835,14 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                   className="w-full px-3 py-1.5 border border-slate-200 rounded-md text-slate-900 font-mono font-bold text-sm bg-white focus:ring-1 focus:ring-[#8b0000] outline-none"
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Date when member officially joined KCA
+                  Joined Date
                 </p>
               </div>
 
               <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    Validity & Expiry Date <span className="text-red-600">*</span>
+                    Validity / Expiry <span className="text-red-600">*</span>
                   </label>
                   <div className="flex gap-1 text-xs">
                     <button
@@ -701,13 +859,6 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                     >
                       +2Y
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSetQuickExpiry(3)}
-                      className="px-1.5 py-0.5 bg-white hover:bg-slate-100 border border-slate-200 rounded text-[11px] text-slate-700 font-semibold"
-                    >
-                      +3Y
-                    </button>
                   </div>
                 </div>
                 <input
@@ -718,7 +869,190 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                   className="w-full px-3 py-1.5 border border-slate-200 rounded-md text-slate-900 font-mono font-bold text-sm bg-white focus:ring-1 focus:ring-[#8b0000] outline-none"
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
-                  Printed on the generated CR80 ID card
+                  CR80 Expiry
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                  Member Status <span className="text-red-600">*</span>
+                </label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  className={`w-full px-3 py-1.5 border rounded-md font-bold text-sm bg-white focus:ring-1 focus:ring-[#8b0000] outline-none cursor-pointer ${
+                    status === 'Active'
+                      ? 'text-emerald-800 border-emerald-300'
+                      : status === 'Inactive' || status === 'Expired'
+                      ? 'text-rose-800 border-rose-300'
+                      : 'text-amber-800 border-amber-300'
+                  }`}
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="Pending">Pending Approval</option>
+                  <option value="Suspended">Suspended</option>
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Membership activity state
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Section: Central & Unit Subcommittee Framework & Designations */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
+                <Crown className="w-4 h-4 text-[#8b0000]" />
+                Committee & Subcommittee Framework
+              </h4>
+              {/* Live Badge Preview */}
+              {(subcommittee || designation || committeeTier !== 'General') && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-500">Live Badge:</span>
+                  <CommitteeBadge
+                    member={{
+                      membershipType,
+                      committeeTier,
+                      subcommittee: isCustomSubcommittee && customSubcommitteeInput.trim() ? customSubcommitteeInput.trim() : subcommittee,
+                      designation: isCustomDesignation && customDesignationInput.trim() ? customDesignationInput.trim() : designation,
+                      unit,
+                    }}
+                    size="sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* Committee Tier */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Committee Level / Tier
+                </label>
+                <select
+                  value={committeeTier}
+                  onChange={(e) => {
+                    const newTier = e.target.value as 'Central' | 'Unit' | 'General';
+                    setCommitteeTier(newTier);
+                    if (newTier === 'Central') {
+                      setMembershipType('Central Committee Member');
+                    } else if (newTier === 'Unit') {
+                      setMembershipType('Executive Member');
+                    } else {
+                      setMembershipType('General Member');
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-semibold bg-white focus:ring-1 focus:ring-[#8b0000] outline-none"
+                >
+                  <option value="General">General Member (No Committee)</option>
+                  <option value="Central">Central Committee / Central Wing</option>
+                  <option value="Unit">Unit Executive / Unit Subcommittee</option>
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Scope of authority & leadership
+                </p>
+              </div>
+
+              {/* Subcommittee Wing */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Subcommittee Wing
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomSubcommittee(!isCustomSubcommittee);
+                      if (!isCustomSubcommittee) setCustomSubcommitteeInput('');
+                    }}
+                    className="text-[11px] font-semibold text-[#8b0000] hover:underline"
+                  >
+                    {isCustomSubcommittee ? 'Select Preset' : '+ Custom Wing'}
+                  </button>
+                </div>
+
+                {isCustomSubcommittee ? (
+                  <input
+                    type="text"
+                    value={customSubcommitteeInput}
+                    onChange={(e) => setCustomSubcommitteeInput(e.target.value)}
+                    placeholder="e.g. Literary Wing / IT Support"
+                    className="w-full px-3 py-2 border border-amber-300 bg-amber-50/50 rounded-md text-slate-900 font-semibold focus:ring-1 focus:ring-[#8b0000] outline-none text-xs"
+                    autoFocus
+                  />
+                ) : (
+                  <select
+                    value={subcommittee}
+                    onChange={(e) => setSubcommittee(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-medium bg-white focus:ring-1 focus:ring-[#8b0000] outline-none"
+                  >
+                    <option value="">-- None / General Wing --</option>
+                    {loadSubcommittees().map((sub) => (
+                      <option key={sub.id} value={sub.name}>
+                        {sub.name} ({sub.scope} Level)
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Specialized functional wing
+                </p>
+              </div>
+
+              {/* Dynamic Designation */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Designation / Title
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomDesignation(!isCustomDesignation);
+                      if (!isCustomDesignation) setCustomDesignationInput('');
+                    }}
+                    className="text-[11px] font-semibold text-[#8b0000] hover:underline"
+                  >
+                    {isCustomDesignation ? 'Select Preset' : '+ Custom Title'}
+                  </button>
+                </div>
+
+                {isCustomDesignation ? (
+                  <input
+                    type="text"
+                    value={customDesignationInput}
+                    onChange={(e) => setCustomDesignationInput(e.target.value)}
+                    placeholder="e.g. Program Coordinator"
+                    className="w-full px-3 py-2 border border-amber-300 bg-amber-50/50 rounded-md text-slate-900 font-semibold focus:ring-1 focus:ring-[#8b0000] outline-none text-xs"
+                    autoFocus
+                  />
+                ) : (
+                  <select
+                    value={designation}
+                    onChange={(e) => setDesignation(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-semibold bg-white focus:ring-1 focus:ring-[#8b0000] outline-none"
+                  >
+                    <option value="">-- None (Member) --</option>
+                    <optgroup label="Executive & Central Leadership">
+                      {EXECUTIVE_DESIGNATIONS.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Subcommittee & Wing Roles">
+                      {SUBCOMMITTEE_DESIGNATIONS.map((d) => (
+                        <option key={d} value={d}>
+                          {d}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                )}
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Appears on Digital ID & Certificate
                 </p>
               </div>
             </div>
@@ -726,69 +1060,104 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 
           {/* Section 2: Member Photo */}
           <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
-            <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-2">
-              <Camera className="w-4 h-4 text-[#8b0000]" />
-              Member ID Photograph
-            </h4>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h4 className="font-display font-bold text-sm text-slate-900 flex items-center gap-2">
+                <Camera className="w-4 h-4 text-[#8b0000]" />
+                Member ID Photograph
+              </h4>
+              <span className="text-[11px] text-slate-500">
+                Official passport-style portrait for digital ID card
+              </span>
+            </div>
 
             <div className="flex flex-col sm:flex-row items-center gap-6">
-              {/* Photo Preview */}
-              <div className="relative w-28 h-32 rounded-lg border-2 border-[#8b0000] overflow-hidden shadow-xs bg-slate-100 shrink-0">
-                <img
-                  src={photoUrl}
-                  alt="Member Preview"
-                  className="w-full h-full object-cover"
-                />
+              {/* Photo Preview / Placeholder */}
+              <div className="relative w-28 h-34 rounded-xl border-2 border-slate-300 bg-slate-100 overflow-hidden shadow-xs shrink-0 flex flex-col items-center justify-center">
+                {photoUrl ? (
+                  <>
+                    <img
+                      src={photoUrl}
+                      alt="Member Preview"
+                      className="w-full h-full object-cover"
+                      onError={() => setPhotoUrl('')}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setPhotoUrl('')}
+                      className="absolute bottom-1 right-1 p-1 bg-rose-600 hover:bg-rose-700 text-white rounded-md text-[10px] shadow-sm transition-colors cursor-pointer"
+                      title="Remove photo"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-slate-400 p-2 text-center">
+                    <User className="w-12 h-12 text-slate-300 stroke-[1.5]" />
+                    <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-wider">
+                      No Photo
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {/* Upload Controls & Presets */}
+              {/* Upload Controls */}
               <div className="flex-1 space-y-3 w-full">
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handlePhotoFileUpload}
-                    accept="image/*"
+                    accept="image/*,.jpg,.jpeg,.png,.webp,.bmp"
                     className="hidden"
                   />
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-slate-900 hover:bg-black text-white text-xs font-medium transition-colors"
+                    disabled={isOptimizingPhoto}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-900 hover:bg-black text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
                   >
-                    <Upload className="w-4 h-4" />
-                    Upload Photo from PC
+                    {isOptimizingPhoto ? (
+                      <RefreshCw className="w-4 h-4 text-rose-300 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4 text-rose-300" />
+                    )}
+                    {isOptimizingPhoto ? 'Optimizing & Storing Photo...' : 'Upload Photo from PC / Device'}
                   </button>
 
+                  {photoStatusMessage && (
+                    <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-1 rounded border border-emerald-200 dark:border-emerald-800">
+                      {photoStatusMessage}
+                    </span>
+                  )}
+
+                  {photoUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setPhotoUrl('')}
+                      className="inline-flex items-center gap-1 px-3 py-2 rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50 text-xs font-medium transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                      Clear Photo
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] font-medium text-slate-500 block">
+                    Or enter photo image web URL:
+                  </label>
                   <input
                     type="text"
                     value={photoUrl}
                     onChange={(e) => setPhotoUrl(e.target.value)}
-                    placeholder="Or paste photo image URL..."
-                    className="flex-1 min-w-[200px] px-3 py-1.5 border border-slate-200 rounded-md text-xs font-mono text-slate-700 focus:ring-1 focus:ring-[#8b0000] outline-none"
+                    placeholder="https://example.com/photo.jpg"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-mono text-slate-700 focus:ring-1 focus:ring-[#8b0000] outline-none"
                   />
                 </div>
 
-                {/* Preset sample avatars */}
-                <div>
-                  <div className="text-[11px] font-medium text-slate-500 mb-1.5">
-                    Or select sample portrait avatar:
-                  </div>
-                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                    {PRESET_AVATARS.map((avatar, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => setPhotoUrl(avatar)}
-                        className={`w-9 h-9 rounded-md overflow-hidden border-2 transition-all shrink-0 ${
-                          photoUrl === avatar ? 'border-[#8b0000] scale-105 shadow-xs' : 'border-slate-200 opacity-70 hover:opacity-100'
-                        }`}
-                      >
-                        <img src={avatar} alt="Preset" className="w-full h-full object-cover" />
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <p className="text-[11px] text-slate-400">
+                  Supported formats: JPG, PNG, WEBP. Uploading from device will automatically optimize for ID card printing.
+                </p>
               </div>
             </div>
           </div>
@@ -1087,7 +1456,130 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
             )}
           </div>
 
-          {/* Section 6: Other / Miscellaneous Dynamic Fields */}
+          {/* Section: Introduced By / Proposer (Reference Member) */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+            <h4 className="font-display font-bold text-sm text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2">
+              <span className="flex items-center gap-2">
+                <UserCheck className="w-4 h-4 text-[#8b0000]" />
+                Introduced By / Proposer (Reference Member)
+              </span>
+              <span className="text-[11px] text-slate-500 font-normal">Optional</span>
+            </h4>
+
+            <div className="space-y-3">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIntroducedByType('none');
+                    setIntroducedByMemberId('');
+                    setIntroducedByName('');
+                    setIntroducedByPhone('');
+                  }}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors cursor-pointer ${
+                    introducedByType === 'none'
+                      ? 'bg-slate-800 text-white border-slate-800'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  None (Direct Walk-in)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntroducedByType('existing')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors cursor-pointer ${
+                    introducedByType === 'existing'
+                      ? 'bg-[#8b0000] text-white border-[#8b0000]'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  Select Existing KCA Member
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntroducedByType('manual')}
+                  className={`px-3 py-1.5 rounded-md text-xs font-semibold border transition-colors cursor-pointer ${
+                    introducedByType === 'manual'
+                      ? 'bg-[#8b0000] text-white border-[#8b0000]'
+                      : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  Manual Proposer Entry
+                </button>
+              </div>
+
+              {introducedByType === 'existing' && (
+                <div className="space-y-3 p-3.5 bg-slate-50 rounded-lg border border-slate-200">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Select Proposer from Existing Members <span className="text-red-600">*</span>
+                    </label>
+                    <select
+                      value={introducedByMemberId}
+                      onChange={(e) => {
+                        const selectedId = e.target.value;
+                        setIntroducedByMemberId(selectedId);
+                        const found = existingMembers.find((m) => m.id === selectedId);
+                        if (found) {
+                          setIntroducedByName(found.fullName);
+                          setIntroducedByPhone(found.phoneUAE);
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white font-medium focus:ring-1 focus:ring-[#8b0000] outline-none"
+                    >
+                      <option value="">-- Choose registered member --</option>
+                      {existingMembers
+                        .filter((m) => !member || m.id !== member.id)
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            [{m.membershipId}] {m.fullName} &bull; {m.unit} Unit ({m.phoneUAE})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+
+                  {introducedByMemberId && (
+                    <div className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>
+                        Proposer Linked: <strong>{introducedByName}</strong> (
+                        {existingMembers.find((m) => m.id === introducedByMemberId)?.membershipId}) &bull; {introducedByPhone}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {introducedByType === 'manual' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-lg border border-slate-200">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Proposer / Referrer Name <span className="text-red-600">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={introducedByName}
+                      onChange={(e) => setIntroducedByName(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white focus:ring-1 focus:ring-[#8b0000] outline-none"
+                      placeholder="e.g. Ramesh V. K."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Proposer Contact Number
+                    </label>
+                    <input
+                      type="text"
+                      value={introducedByPhone}
+                      onChange={(e) => setIntroducedByPhone(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white font-mono focus:ring-1 focus:ring-[#8b0000] outline-none"
+                      placeholder="+971 50 123 4567"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
           {otherCustomFields.length > 0 && (
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
@@ -1319,9 +1811,8 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                 >
                   <option value="Cash">Cash (Dirhams)</option>
                   <option value="Bank Transfer">Bank Transfer (UAE)</option>
-                  <option value="Credit/Debit Card">Credit/Debit Card</option>
-                  <option value="UAE Pass / Online">UAE Pass / Online</option>
                 </select>
+
               </div>
             </div>
 
@@ -1370,7 +1861,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
               <div>
                 {membershipType === 'Central Committee Member' ? (
                   <p>
-                    <strong>Central Committee Finance Ledger:</strong> As a <strong>Central Committee Member</strong> assigned to <strong>{unit || 'Unit'}</strong>, this membership payment of <strong>AED {feeAmountAED}</strong> will be recorded in the <strong>Central Unit finance ledger</strong>, with zero payment deducted in the local {unit || 'Unit'} ledger.
+                    <strong>Central Committee Finance Ledger:</strong> As a <strong>Central Committee Member</strong> assigned to <strong>{unit || 'Unit'}</strong>, this membership payment of <strong>AED {feeAmountAED}</strong> will be recorded in the <strong>Central Committee finance ledger</strong>, with zero payment deducted in the local {unit || 'Unit'} ledger.
                   </p>
                 ) : (
                   <p>

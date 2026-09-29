@@ -4,11 +4,14 @@ import {
   saveToLocalPcFolder,
   downloadMembersCsv,
   downloadFullJsonBackup,
+  downloadFullSystemDatabaseBackup,
+  importFullDatabaseSnapshot,
   getBackupMetadata,
   setBackupMetadata,
   getLocalRecoverySnapshots,
   LocalStorageSnapshot,
 } from '../utils/storage';
+import { downloadSystemDocumentationPdf } from '../utils/systemDocumentationPdfGenerator';
 import {
   getSupabaseCredentials,
   saveCustomSupabaseCredentials,
@@ -48,8 +51,8 @@ import {
   Globe,
   ShieldAlert,
   ShieldCheck,
+  FileText,
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 
 interface BackupAndStorageModalProps {
   members: Member[];
@@ -57,6 +60,7 @@ interface BackupAndStorageModalProps {
   isOpen: boolean;
   onClose: () => void;
   onRestoreBackup: (members: Member[], logs: AuditLogItem[]) => void;
+  onSmartMergeBackup?: (importedData: any) => { addedMembersCount: number; updatedMembersCount: number; totalMembers: number };
   fullDataPayload?: any;
   onCloudStateReloaded?: (state: any) => void;
   userSession?: UserSession | null;
@@ -68,10 +72,12 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
   isOpen,
   onClose,
   onRestoreBackup,
+  onSmartMergeBackup,
   fullDataPayload,
   onCloudStateReloaded,
   userSession,
 }) => {
+
   const isAdmin = userSession ? isSuperAdminOrAdmin(userSession.role) : false;
 
   const [backupMeta, setBackupMetaState] = useState<BackupMetadata>(getBackupMetadata());
@@ -172,9 +178,6 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
           type: 'success',
           text: 'Supabase credentials saved and active. Real-time sync is operational across all devices.',
         });
-        try {
-          confetti({ particleCount: 30, spread: 60, origin: { y: 0.6 } });
-        } catch {}
       } else {
         setCloudOpMessage({
           type: testRes.sqlNeeded ? 'warning' : 'error',
@@ -209,9 +212,6 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
           type: 'success',
           text: `Successfully uploaded ${members.length} members & full database to Cloud. All devices are synchronized.`,
         });
-        try {
-          confetti({ particleCount: 40, spread: 70, origin: { y: 0.5 } });
-        } catch {}
       } else {
         setCloudOpMessage({
           type: 'error',
@@ -291,6 +291,34 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
         const content = event.target?.result as string;
         const parsed = JSON.parse(content);
 
+        // 1. Check if this is a Full System Database Backup (v2/v3) with tables
+        if (parsed?.backupType === 'FULL_SYSTEM_DATABASE_BACKUP' || parsed?.tables) {
+          const restoreRes = importFullDatabaseSnapshot(content);
+          if (!restoreRes.success) {
+            throw new Error(restoreRes.error || 'Failed to restore full system database snapshot.');
+          }
+
+          setBackupMetadata({ lastBackupDate: new Date().toISOString() });
+          setBackupMetaState(getBackupMetadata());
+          alert(
+            `Full System Database Restored Successfully!\n\n` +
+            `• System Tables Restored: ${restoreRes.tablesRestored}\n` +
+            `• Total Data Records Restored: ${restoreRes.totalRecordsRestored}\n\n` +
+            `The application state has been fully synchronized.`
+          );
+
+          if (onCloudStateReloaded) {
+            onCloudStateReloaded(parsed.tables || parsed);
+          } else {
+            // Trigger storage event so all hooks update
+            window.dispatchEvent(new Event('storage'));
+            window.location.reload();
+          }
+          onClose();
+          return;
+        }
+
+        // 2. Legacy Member Array or Member JSON File
         let parsedMembers: Member[] = [];
         let parsedLogs: AuditLogItem[] = [];
 
@@ -306,14 +334,22 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
         }
 
         if (parsedMembers.length === 0) {
-          throw new Error('No valid member records found in this JSON file.');
+          throw new Error('No valid database records found in this JSON backup file.');
         }
 
-        onRestoreBackup(parsedMembers, parsedLogs);
-        setBackupMetadata({ lastBackupDate: new Date().toISOString() });
-        setBackupMetaState(getBackupMetadata());
-        alert(`Successfully restored ${parsedMembers.length} member records!`);
+        if (onSmartMergeBackup) {
+          const result = onSmartMergeBackup(parsed);
+          setBackupMetadata({ lastBackupDate: new Date().toISOString() });
+          setBackupMetaState(getBackupMetadata());
+          alert(`Smart Merge Completed: Added ${result.addedMembersCount} new members, updated ${result.updatedMembersCount} existing records without data loss.`);
+        } else {
+          onRestoreBackup(parsedMembers, parsedLogs);
+          setBackupMetadata({ lastBackupDate: new Date().toISOString() });
+          setBackupMetaState(getBackupMetadata());
+          alert(`Successfully restored ${parsedMembers.length} member records!`);
+        }
         onClose();
+
       } catch (err: any) {
         setImportError(err.message || 'Failed to read or parse JSON backup file.');
       }
@@ -396,36 +432,72 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
 
               {/* Data Export Options for Staff */}
               <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
-                <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-3">
-                  <Download className="w-4 h-4 text-slate-600" />
-                  Offline Data Export & Reports
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    <HardDrive className="w-4 h-4 text-slate-600" />
+                    Local PC Data Storage &amp; Offline Backup
+                  </h4>
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                    Always Saved on Local PC
+                  </span>
+                </div>
+                <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+                  Your data is permanently stored on this computer in local storage. It remains completely available even when disconnected from the internet. You can backup or restore the entire database snapshot at any time.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <button
                     type="button"
                     onClick={() => downloadMembersCsv(members)}
-                    className="p-4 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/40 text-left transition-all group cursor-pointer"
+                    className="p-3.5 rounded-xl border border-slate-200 hover:border-emerald-500 hover:bg-emerald-50/40 text-left transition-all group cursor-pointer"
                   >
                     <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-emerald-800">
                       <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
-                      Download Excel / CSV Roster
+                      Download Excel / CSV
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Export all {members.length} member profiles with contact details to spreadsheet.
+                      Export {members.length} members to spreadsheet.
                     </p>
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => downloadFullJsonBackup(members, auditLogs)}
-                    className="p-4 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/40 text-left transition-all group cursor-pointer"
+                    onClick={() => downloadFullSystemDatabaseBackup()}
+                    className="p-3.5 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/40 text-left transition-all group cursor-pointer"
                   >
                     <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-blue-800">
                       <Download className="w-4 h-4 text-blue-600" />
-                      Download Personal Backup (JSON)
+                      Full System Backup (JSON)
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Download complete structured JSON snapshot for personal record keeping.
+                      Save complete system snapshot to PC.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => importFileRef.current?.click()}
+                    className="p-3.5 rounded-xl border border-slate-200 hover:border-amber-500 hover:bg-amber-50/40 text-left transition-all group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-amber-800">
+                      <Upload className="w-4 h-4 text-amber-600" />
+                      Restore Full Database
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Import backup to restore all tables.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => downloadSystemDocumentationPdf(userSession?.fullName || 'KCA System Administration')}
+                    className="p-3.5 rounded-xl border border-slate-200 hover:border-rose-500 hover:bg-rose-50/40 text-left transition-all group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-rose-800">
+                      <FileText className="w-4 h-4 text-rose-600" />
+                      System Manual (PDF)
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Export architecture &amp; logic manual.
                     </p>
                   </button>
                 </div>
@@ -690,12 +762,21 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                 </div>
               )}
 
-              {/* Traditional Backup & Recovery Options */}
+              {/* Local Storage & Full System Backup / Recovery */}
               <div className="pt-4 border-t border-slate-200">
-                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-                  Local Backups & Spreadsheet Exports
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <HardDrive className="w-3.5 h-3.5 text-slate-500" />
+                    Local PC Storage &amp; Full System Backups
+                  </h4>
+                  <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Default &amp; Permanent on Local PC
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 mb-3">
+                  All databases (members, finance, inventory, classes, letters, documents, contact bank, portal settings, audit logs) reside on your local PC storage and remain 100% accessible offline.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                   <button
                     type="button"
                     onClick={() => downloadMembersCsv(members)}
@@ -710,14 +791,14 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => downloadFullJsonBackup(members, auditLogs)}
+                    onClick={() => downloadFullSystemDatabaseBackup()}
                     className="p-3 rounded-xl border border-slate-200 hover:border-slate-300 bg-white text-left transition-all hover:shadow-xs group cursor-pointer"
                   >
                     <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-blue-700">
                       <Download className="w-4 h-4 text-blue-600" />
-                      Download JSON Backup
+                      Full System Backup (JSON)
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1">Full database state file</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Export all system tables &amp; ledger state</p>
                   </button>
 
                   <button
@@ -727,9 +808,21 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                   >
                     <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-amber-700">
                       <Upload className="w-4 h-4 text-amber-600" />
-                      Restore from JSON
+                      Restore Full Database
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1">Import file to restore state</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Import backup JSON to restore entire system</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => downloadSystemDocumentationPdf(userSession?.fullName || 'KCA System Administration')}
+                    className="p-3 rounded-xl border border-slate-200 hover:border-slate-300 bg-white text-left transition-all hover:shadow-xs group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-rose-700">
+                      <FileText className="w-4 h-4 text-rose-600" />
+                      System Manual (PDF)
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">Export architecture &amp; logic manual</p>
                   </button>
                   <input
                     ref={importFileRef}

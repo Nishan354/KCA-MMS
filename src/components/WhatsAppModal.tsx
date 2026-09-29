@@ -278,7 +278,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
     switch (templateKey) {
       case 'id_card': {
-        content = `*KAIRALI CULTURAL ASSOCIATION FUJAIRAH*\n*OFFICIAL DIGITAL MEMBERSHIP ID CARD*\n\nDear *${m.fullName}*,\n\nYour official KCA Fujairah Membership ID Card has been updated and active in our central register.\n\n📋 *Membership Summary:*\n• *Member ID:* ${m.membershipId}\n• *Full Name:* ${m.fullName}${m.malayalamName ? ` (${m.malayalamName})` : ''}\n• *Unit:* ${m.unit} Unit\n• *Blood Group:* ${m.bloodGroup}\n• *Validity:* ${formatCardDate(m.expiryDate)}\n${m.joinDate ? `• *Join Date:* ${formatDate(m.joinDate)}\n` : ''}`;
+        content = `*KAIRALI CULTURAL ASSOCIATION FUJAIRAH*\n*OFFICIAL DIGITAL MEMBERSHIP ID CARD*\n\nDear *${m.fullName}*,\n\nYour official KCA Fujairah Membership ID Card has been updated and active in our central register.\n\n📋 *Membership Summary:*\n• *Member ID:* ${m.membershipId}\n• *Full Name:* ${m.fullName}\n• *Unit:* ${m.unit} Unit\n• *Blood Group:* ${m.bloodGroup}\n• *Validity:* ${formatCardDate(m.expiryDate)}\n${m.joinDate ? `• *Join Date:* ${formatDate(m.joinDate)}\n` : ''}`;
 
         if (includeAttachmentInBody && attachDesc && attachmentType !== 'id_card_png') {
           content += `\n${attachDesc}\n`;
@@ -298,7 +298,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
           (!!m.lastRenewalDate && m.lastRenewalDate !== m.registrationDate);
         const feeDesc = isRenewal ? 'Renewal Membership Fee' : 'New Membership Fee';
 
-        content = `*KAIRALI CULTURAL ASSOCIATION FUJAIRAH*\n*OFFICIAL PAYMENT RECEIPT (AED)*\n\nDear *${m.fullName}*,\n\nWe acknowledge with thanks the receipt of your membership subscription.\n\n🧾 *Receipt Voucher:* ${m.receiptNumber || 'REC-' + m.membershipId}\n• *Member ID:* ${m.membershipId}\n• *Description:* ${feeDesc}\n• *Amount Received:* ${formatAED(m.feeAmountAED)}\n• *Payment Mode:* ${m.paymentMethod || 'Cash'}\n• *Valid Thru:* ${formatDate(m.expiryDate)}\n• *Status:* ${m.paymentStatus}\n`;
+        content = `*KAIRALI CULTURAL ASSOCIATION FUJAIRAH*\n*OFFICIAL PAYMENT RECEIPT (AED)*\n\nDear *${m.fullName}*,\n\nWe acknowledge with thanks the receipt of your membership subscription.\n\n🧾 *Official Receipt No:* ${m.receiptNumber || 'REC-' + m.membershipId}\n• *Member ID:* ${m.membershipId}\n• *Description:* ${feeDesc}\n• *Amount Received:* ${formatAED(m.feeAmountAED)}\n• *Payment Mode:* ${m.paymentMethod || 'Cash'}\n• *Valid Thru:* ${formatDate(m.expiryDate)}\n• *Status:* ${m.paymentStatus}\n`;
 
         if (includeAttachmentInBody && attachDesc && attachmentType !== 'receipt_pdf') {
           content += `\n${attachDesc}\n`;
@@ -1168,12 +1168,19 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                           )}
                         </button>
 
-                        <div className="w-9 h-9 rounded-full overflow-hidden border border-slate-200 shrink-0">
-                          <img
-                            src={m.photoUrl}
-                            alt={m.fullName}
-                            className="w-full h-full object-cover"
-                          />
+                        <div className="w-9 h-9 rounded-full overflow-hidden border border-slate-200 shrink-0 bg-slate-100 flex items-center justify-center">
+                          {m.photoUrl ? (
+                            <img
+                              src={m.photoUrl}
+                              alt={m.fullName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <User className="w-4.5 h-4.5 text-slate-400" />
+                          )}
                         </div>
 
                         <div className="min-w-0">

@@ -1,8 +1,9 @@
 import { PortalBrandingConfig } from '../types/portal';
+import { AdminAccount } from '../types/member';
 
 export const INITIAL_PORTAL_CONFIG: PortalBrandingConfig = {
   portalName: 'Kairali Cultural Association Fujairah',
-  shortName: 'KCA FUJAIRAH',
+  shortName: 'KCA-MMS',
   subtitle: 'Official Central Register & Membership Portal',
   jurisdiction: 'Fujairah • East Coast UAE',
   affiliationText: 'NORKA Roots Affiliated',
@@ -12,13 +13,22 @@ export const INITIAL_PORTAL_CONFIG: PortalBrandingConfig = {
 };
 
 // Plain text password matching login component check
-export const INITIAL_ADMIN_ACCOUNTS = [
+export const INITIAL_ADMIN_ACCOUNTS: AdminAccount[] = [
   {
     id: 'usr_admin_main',
     username: 'admin',
+    fullName: 'KCA Central Administrator',
+    email: 'admin@kca-fujairah.ae',
     password: '12345',
-    role: 'admin',
+    role: 'Super Admin',
+    status: 'Active',
     createdAt: new Date().toISOString(),
+    permissions: {
+      canManageUsers: true,
+      canManageStorage: true,
+      canEditMembers: true,
+      canExportData: true,
+    },
   },
 ];
 

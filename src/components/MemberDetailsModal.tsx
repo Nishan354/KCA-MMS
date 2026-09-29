@@ -10,8 +10,11 @@ import {
   isUnitOperatorRole,
   MemberDocument,
   DocumentCategory,
+  MemberStatus,
 } from '../types/member';
-import { formatDate, formatAED, getExpiryStatus, formatCardDate, getMemberVerifyUrl } from '../utils/idGenerator';
+import { formatDate, formatAED, getExpiryStatus, formatCardDate, getMemberVerifyUrl, isMemberEffectivelyActive } from '../utils/idGenerator';
+import { optimizeImageFile } from '../utils/imageOptimizer';
+import { saveMemberPhotoToDb } from '../utils/indexedDbStorage';
 import {
   X,
   CreditCard,
@@ -37,12 +40,14 @@ import {
   Building2,
   Paperclip,
   Upload,
+  User,
   Download,
   Trash2,
   FileUp,
   Send,
   Save,
   UserCheck,
+  Camera,
 } from 'lucide-react';
 
 interface MemberDetailsModalProps {
@@ -62,6 +67,7 @@ interface MemberDetailsModalProps {
   onOpenWhatsApp?: (member: Member) => void;
   onUpdateMemberDocuments?: (member: Member, updatedDocuments: MemberDocument[]) => void;
   onDeleteMember?: (memberId: string) => void;
+  onGenerateCertificate?: (member: Member) => void;
 }
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
@@ -100,6 +106,7 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   onOpenWhatsApp,
   onUpdateMemberDocuments,
   onDeleteMember,
+  onGenerateCertificate,
 }) => {
   const isAdmin = !userSession || hasAdminPrivilege(userSession.role);
   const isUnitOp = !!userSession && isUnitOperatorRole(userSession.role);
@@ -131,8 +138,11 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   const [emergencyContactName, setEmergencyContactName] = useState('');
   const [emergencyContactRelation, setEmergencyContactRelation] = useState('');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
+  const [introducedByName, setIntroducedByName] = useState('');
+  const [introducedByPhone, setIntroducedByPhone] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Paid');
-  const [status, setStatus] = useState<'Active' | 'Expired' | 'Pending' | 'Suspended'>('Active');
+
+  const [status, setStatus] = useState<MemberStatus>('Active');
 
   const [isChangingUnit, setIsChangingUnit] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState('');
@@ -141,6 +151,8 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [newDocCategory, setNewDocCategory] = useState<DocumentCategory>('emirates_id');
   const [newDocTitle, setNewDocTitle] = useState('');
+  const [isOptimizingPhoto, setIsOptimizingPhoto] = useState(false);
+  const [photoStatusMsg, setPhotoStatusMsg] = useState<string | null>(null);
 
   // Synchronize state from member
   useEffect(() => {
@@ -167,7 +179,18 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
       setEmergencyContactName(member.emergencyContactName || '');
       setEmergencyContactRelation(member.emergencyContactRelation || '');
       setEmergencyContactPhone(member.emergencyContactPhone || '');
+      setIntroducedByName(
+        typeof member.introducedBy === 'object'
+          ? member.introducedBy.name || ''
+          : typeof member.introducedBy === 'string'
+          ? member.introducedBy
+          : ''
+      );
+      setIntroducedByPhone(
+        typeof member.introducedBy === 'object' ? member.introducedBy.phone || '' : ''
+      );
       setPaymentStatus(member.paymentStatus || 'Paid');
+
       setStatus(member.status || 'Active');
       setIsInlineEditing(false);
       setIsChangingUnit(false);
@@ -186,16 +209,52 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
     setIsChangingUnit(false);
   };
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setPhotoUrl(event.target.result as string);
+
+    try {
+      setIsOptimizingPhoto(true);
+      setPhotoStatusMsg('Optimizing photo...');
+      const { dataUrl, optimizedSize } = await optimizeImageFile(file, {
+        maxWidth: 480,
+        maxHeight: 600,
+        quality: 0.85,
+      });
+
+      setPhotoUrl(dataUrl);
+      const sizeKB = Math.round(optimizedSize / 1024);
+      setPhotoStatusMsg(`Photo optimized (${sizeKB} KB) & saved`);
+
+      // Persist to IndexedDB immediately
+      await saveMemberPhotoToDb(member.id, dataUrl);
+      if (member.membershipId) {
+        await saveMemberPhotoToDb(member.membershipId, dataUrl);
       }
-    };
-    reader.readAsDataURL(file);
+
+      // If user is viewing (not in full form edit mode), also update member directly
+      if (onUpdateMember) {
+        const updated: Member = {
+          ...member,
+          photoUrl: dataUrl,
+        };
+        onUpdateMember(updated);
+      }
+
+      setTimeout(() => setPhotoStatusMsg(null), 3500);
+    } catch (err) {
+      console.error('Failed to optimize photo in details modal:', err);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          setPhotoUrl(event.target.result as string);
+        }
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsOptimizingPhoto(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleSaveInlineEdits = (e?: React.FormEvent) => {
@@ -229,7 +288,14 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
       emergencyContactName: emergencyContactName.trim(),
       emergencyContactRelation: emergencyContactRelation.trim(),
       emergencyContactPhone: emergencyContactPhone.trim(),
+      introducedBy: introducedByName.trim()
+        ? {
+            name: introducedByName.trim(),
+            phone: introducedByPhone.trim() || undefined,
+          }
+        : member.introducedBy,
       paymentStatus,
+
       status,
       updatedAt: new Date().toISOString(),
     };
@@ -283,7 +349,7 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
       const targetPhone = (member.whatsapp || member.phoneUAE || '').replace(/[^\d+]/g, '');
       const cleanPhone = targetPhone.startsWith('+') ? targetPhone.slice(1) : targetPhone;
       const verifyLink = getMemberVerifyUrl(member);
-      const message = `*KAIRALI CULTURAL ASSOCIATION FUJAIRAH*\n*OFFICIAL DIGITAL MEMBERSHIP ID CARD*\n\nDear *${member.fullName}*,\n\nYour official KCA Fujairah Membership ID Card is ready and active in our database.\n\n📋 *Membership Details:*\n• *Member ID:* ${member.membershipId}\n• *Full Name:* ${member.fullName}${member.malayalamName ? ` (${member.malayalamName})` : ''}\n• *Unit:* ${member.unit} Unit\n• *Blood Group:* ${member.bloodGroup}\n• *Validity:* ${formatCardDate(member.expiryDate)}\n\n🔗 *View & Download Your ID Card:*\n${verifyLink}\n\nPlease keep this digital card for association events, programs, and welfare benefits.\n\n_Warm Regards,_\n*Kairali Cultural Association Fujairah*`;
+      const message = `*KAIRALI CULTURAL ASSOCIATION FUJAIRAH*\n*OFFICIAL DIGITAL MEMBERSHIP ID CARD*\n\nDear *${member.fullName}*,\n\nYour official KCA Fujairah Membership ID Card is ready and active in our database.\n\n📋 *Membership Details:*\n• *Member ID:* ${member.membershipId}\n• *Full Name:* ${member.fullName}\n• *Unit:* ${member.unit} Unit\n• *Blood Group:* ${member.bloodGroup}\n• *Validity:* ${formatCardDate(member.expiryDate)}\n\n🔗 *View & Download Your ID Card:*\n${verifyLink}\n\nPlease keep this digital card for association events, programs, and welfare benefits.\n\n_Warm Regards,_\n*Kairali Cultural Association Fujairah*`;
       const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
       window.open(url, '_blank');
     }
@@ -294,11 +360,35 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
       <div className="bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden my-auto">
+        {/* Hidden global photo upload input */}
+        <input
+          type="file"
+          ref={photoInputRef}
+          accept="image/*,.jpg,.jpeg,.png,.webp,.bmp"
+          onChange={handlePhotoUpload}
+          className="hidden"
+        />
+
         {/* Header */}
         <div className="px-6 py-4 bg-[#8b0000] text-white flex items-center justify-between border-b border-[#730000]">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-white/40 shrink-0 shadow-sm">
-              <img src={member.photoUrl} alt={member.fullName} className="w-full h-full object-cover" />
+            <div
+              onClick={() => photoInputRef.current?.click()}
+              className="relative group/avatar cursor-pointer w-11 h-11 rounded-full overflow-hidden border-2 border-white/40 shrink-0 shadow-sm bg-white/10 flex items-center justify-center"
+              title="Click to upload or change member photo"
+            >
+              {(photoUrl || member.photoUrl) ? (
+                <img src={photoUrl || member.photoUrl} alt={member.fullName} className="w-full h-full object-cover" />
+              ) : (
+                <User className="w-6 h-6 text-white/80" />
+              )}
+              <div className="absolute inset-0 bg-black/50 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity">
+                {isOptimizingPhoto ? (
+                  <RefreshCw className="w-4 h-4 text-white animate-spin" />
+                ) : (
+                  <Camera className="w-4 h-4 text-white" />
+                )}
+              </div>
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -312,6 +402,21 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
                   <span className="px-2 py-0.5 rounded bg-emerald-500 text-white text-[11px] font-semibold flex items-center gap-1 shadow-xs animate-bounce">
                     <Check className="w-3 h-3" /> Saved!
                   </span>
+                )}
+                {photoStatusMsg && (
+                  <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-semibold flex items-center gap-1 shadow-xs">
+                    <Check className="w-3 h-3" /> {photoStatusMsg}
+                  </span>
+                )}
+                {!member.photoUrl && !photoUrl && !isInlineEditing && (
+                  <button
+                    type="button"
+                    onClick={() => photoInputRef.current?.click()}
+                    disabled={isOptimizingPhoto}
+                    className="px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Camera className="w-3 h-3" /> Add Photo
+                  </button>
                 )}
               </div>
             </div>
@@ -387,54 +492,47 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
               {/* Photo & Core Identity Header */}
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <div className="relative group shrink-0">
-                  <img
-                    src={photoUrl || member.photoUrl}
-                    alt={fullName}
-                    className="w-16 h-16 rounded-full object-cover border-2 border-[#8b0000] shadow-xs"
-                  />
-                  <input
-                    type="file"
-                    ref={photoInputRef}
-                    accept="image/*"
-                    onChange={handlePhotoUpload}
-                    className="hidden"
-                  />
+                  <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-[#8b0000] shadow-xs bg-slate-200 flex items-center justify-center">
+                    {(photoUrl || member.photoUrl) ? (
+                      <img
+                        src={photoUrl || member.photoUrl}
+                        alt={fullName}
+                        className="w-full h-full object-cover"
+                        onError={() => setPhotoUrl('')}
+                      />
+                    ) : (
+                      <User className="w-8 h-8 text-slate-400" />
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-1 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => photoInputRef.current?.click()}
-                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors shadow-xs"
+                      disabled={isOptimizingPhoto}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-300 rounded text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
                     >
-                      <Upload className="w-3.5 h-3.5 text-[#8b0000]" />
-                      Change Photo
+                      {isOptimizingPhoto ? (
+                        <RefreshCw className="w-3.5 h-3.5 text-[#8b0000] animate-spin" />
+                      ) : (
+                        <Upload className="w-3.5 h-3.5 text-[#8b0000]" />
+                      )}
+                      {isOptimizingPhoto ? 'Optimizing...' : 'Upload Photo'}
                     </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPhotoUrl(
-                          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80'
-                        )
-                      }
-                      className="px-2 py-1 bg-white border border-slate-200 rounded text-[11px] text-slate-600 hover:bg-slate-50"
-                    >
-                      Male Preset
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setPhotoUrl(
-                          'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80'
-                        )
-                      }
-                      className="px-2 py-1 bg-white border border-slate-200 rounded text-[11px] text-slate-600 hover:bg-slate-50"
-                    >
-                      Female Preset
-                    </button>
+                    {(photoUrl || member.photoUrl) && (
+                      <button
+                        type="button"
+                        onClick={() => setPhotoUrl('')}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 bg-white border border-rose-200 rounded text-xs text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3 h-3 text-rose-600" />
+                        Remove Photo
+                      </button>
+                    )}
                   </div>
                   <p className="text-[11px] text-slate-500">
-                    Upload passport photo or portrait for digital ID card & public verification
+                    Upload passport photo or portrait for digital ID card &amp; public verification
                   </p>
                 </div>
               </div>
@@ -733,7 +831,36 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
                 </div>
               </div>
 
+              {/* Row 7: Introduced By / Proposer */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Introduced By (Proposer Name)
+                  </label>
+                  <input
+                    type="text"
+                    value={introducedByName}
+                    onChange={(e) => setIntroducedByName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
+                    placeholder="e.g. Ramesh V. K."
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Proposer Phone Number
+                  </label>
+                  <input
+                    type="text"
+                    value={introducedByPhone}
+                    onChange={(e) => setIntroducedByPhone(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-mono text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
+                    placeholder="+971 50 ..."
+                  />
+                </div>
+              </div>
+
               {/* Inline Action Buttons */}
+
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-200">
                 <button
                   type="button"
@@ -815,8 +942,46 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
                 </div>
 
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Validity Status</div>
-                  <div className={`text-xs font-semibold px-2 py-0.5 rounded mt-0.5 inline-block ${expiry.color}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Member Status</span>
+                    {onUpdateMember && (
+                      <button
+                        onClick={() => {
+                          const newStatus = isMemberEffectivelyActive(member) ? 'Inactive' : 'Active';
+                          onUpdateMember({
+                            ...member,
+                            status: newStatus,
+                          });
+                        }}
+                        className={`text-[10px] font-bold underline cursor-pointer ${
+                          isMemberEffectivelyActive(member) ? 'text-rose-600 hover:text-rose-800' : 'text-emerald-700 hover:text-emerald-900'
+                        }`}
+                        title="Click to toggle member status"
+                      >
+                        {isMemberEffectivelyActive(member) ? 'Set Inactive' : 'Set Active'}
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-1">
+                    {isMemberEffectivelyActive(member) ? (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        <span className="w-2 h-2 rounded-full bg-emerald-600"></span> Active (Valid)
+                      </span>
+                    ) : member.status === 'Pending' ? (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                        <span className="w-2 h-2 rounded-full bg-amber-600"></span> Pending
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                        <span className="w-2 h-2 rounded-full bg-rose-600"></span> Inactive / Expired
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Validity &amp; Expiry</div>
+                  <div className={`text-xs font-semibold px-2 py-0.5 rounded mt-1 inline-block ${expiry.color}`}>
                     {expiry.label}
                   </div>
                 </div>
@@ -936,6 +1101,28 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
                         <div className="font-mono text-[#8b0000] font-bold">{member.emergencyContactPhone}</div>
                       </div>
                     </div>
+
+                    {member.introducedBy && (
+                      <div className="pt-2 border-t border-slate-100">
+                        <span className="text-slate-500 font-bold block text-[10px] uppercase mb-1">
+                          Introduced By / Proposer:
+                        </span>
+                        <div className="flex items-center gap-2 p-2 bg-rose-50/70 border border-rose-200/80 rounded text-xs text-rose-950">
+                          <UserCheck className="w-4 h-4 text-[#8b0000] shrink-0" />
+                          <div className="font-semibold truncate">
+                            {typeof member.introducedBy === 'object' ? (
+                              <span>
+                                {member.introducedBy.name || 'Member'}{' '}
+                                {member.introducedBy.membershipId ? `[${member.introducedBy.membershipId}]` : ''}{' '}
+                                {member.introducedBy.phone ? `(${member.introducedBy.phone})` : ''}
+                              </span>
+                            ) : (
+                              <span>{String(member.introducedBy)}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1168,6 +1355,18 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {onGenerateCertificate && (
+              <button
+                type="button"
+                onClick={() => onGenerateCertificate(member)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-md bg-amber-500 hover:bg-amber-600 text-white shadow-xs transition-colors cursor-pointer"
+                title="Generate Official KCA Certificate"
+              >
+                <Award className="w-4 h-4" />
+                Issue Certificate
+              </button>
+            )}
+
             <button
               type="button"
               onClick={handleQuickWhatsApp}

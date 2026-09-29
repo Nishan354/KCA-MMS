@@ -102,3 +102,44 @@ export function applyThemeToCss(theme: ThemePreset): void {
   const rgb = hexToRgb(theme.primary);
   root.style.setProperty('--color-primary-rgb', `${rgb.r}, ${rgb.g}, ${rgb.b}`);
 }
+
+export const STORAGE_KEY_DARK_MODE = 'kca_theme_mode';
+
+/**
+ * Checks if dark mode is currently active
+ */
+export function getIsDarkMode(): boolean {
+  if (typeof window === 'undefined') return false;
+  const saved = localStorage.getItem(STORAGE_KEY_DARK_MODE);
+  if (saved === 'dark') return true;
+  if (saved === 'light') return false;
+  return document.documentElement.classList.contains('dark');
+}
+
+/**
+ * Sets dark mode on document element, localStorage and dispatches global event
+ */
+export function setDarkMode(isDark: boolean): void {
+  if (typeof document === 'undefined') return;
+  if (isDark) {
+    document.documentElement.classList.add('dark');
+    localStorage.setItem(STORAGE_KEY_DARK_MODE, 'dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+    localStorage.setItem(STORAGE_KEY_DARK_MODE, 'light');
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('kca-darkmode-changed', { detail: { isDark } }));
+  }
+}
+
+/**
+ * Toggles dark mode state
+ */
+export function toggleDarkMode(): boolean {
+  const current = getIsDarkMode();
+  const next = !current;
+  setDarkMode(next);
+  return next;
+}
+

@@ -5,35 +5,39 @@ import { FinanceTransaction } from '../types/finance';
 import { InventoryItem, InventoryMovementLog } from '../types/inventory';
 import { CulturalClass, ClassParticipant } from '../types/classes';
 import { formatAED, formatDate } from './idGenerator';
-import { PUBLISHED_PORTAL_URL } from '../config/constants';
-import { getActiveLogoDataUrl } from '../components/Logo';
+import { OFFICIAL_LOCATION } from '../config/constants';
+import { getActiveLogoPngDataUrl } from '../components/Logo';
 
 export interface ComprehensiveDashboardReportParams {
   unitFilter: string;
   members: Member[];
   financeTransactions: FinanceTransaction[];
-  inventoryItems: InventoryItem[];
+  inventoryItems?: InventoryItem[];
   inventoryLogs?: InventoryMovementLog[];
   classes?: CulturalClass[];
   participants?: ClassParticipant[];
   generatedBy?: string;
+  includeInventory?: boolean; // Defaults to false as requested
+  includeClasses?: boolean;
 }
 
 /**
- * Generates an executive-level Comprehensive Management Dashboard Report in PDF format.
- * Covers Membership metrics, Finance Ledger & Vouchers, Asset Inventory status, and Cultural Classes & Student Registries.
- * (Note: Blood bank details are explicitly omitted as per executive reporting requirements).
+ * Generates an executive-level Management Dashboard Report in PDF format.
+ * Focuses on Finance (Income, Expenses, Net Treasury) and Members (Directory & Active Status).
+ * Blood donor details are removed. Inventory can be optionally included if needed.
  */
-export function downloadComprehensiveDashboardPdf({
+export async function downloadComprehensiveDashboardPdf({
   unitFilter,
   members,
   financeTransactions,
-  inventoryItems,
+  inventoryItems = [],
   inventoryLogs = [],
   classes = [],
   participants = [],
   generatedBy = 'Central Committee Executive Board',
-}: ComprehensiveDashboardReportParams): void {
+  includeInventory = false,
+  includeClasses = false,
+}: ComprehensiveDashboardReportParams): Promise<void> {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -45,38 +49,33 @@ export function downloadComprehensiveDashboardPdf({
   const slateDark = [30, 41, 59];
   const slateMuted = [100, 116, 139];
 
+  // Deduplicate records to ensure distinct records and prevent duplicate metrics
+  const uniqueMembers = Array.from(new Map(members.map((m) => [m.id, m])).values());
+  const uniqueFinance = Array.from(new Map(financeTransactions.map((f) => [f.id, f])).values());
+  const uniqueInventory = Array.from(new Map(inventoryItems.map((i) => [i.id, i])).values());
+
   // 1. Filter data based on unit
   const isCentralFilter = unitFilter.toLowerCase().startsWith('central');
   const targetMembers =
     unitFilter === 'All'
-      ? members
+      ? uniqueMembers
       : isCentralFilter
-      ? members.filter((m) => m.membershipType === 'Central Committee Member' || m.unit.toLowerCase().startsWith('central'))
-      : members.filter((m) => m.unit.toLowerCase() === unitFilter.toLowerCase());
+      ? uniqueMembers.filter((m) => m.membershipType === 'Central Committee Member' || m.unit.toLowerCase().startsWith('central'))
+      : uniqueMembers.filter((m) => m.membershipType !== 'Central Committee Member' && m.unit.toLowerCase() === unitFilter.toLowerCase());
 
   const targetFinance =
     unitFilter === 'All'
-      ? financeTransactions
+      ? uniqueFinance
       : isCentralFilter
-      ? financeTransactions.filter((f) => f.unit.toLowerCase().startsWith('central'))
-      : financeTransactions.filter((f) => f.unit.toLowerCase() === unitFilter.toLowerCase());
+      ? uniqueFinance.filter((f) => f.unit.toLowerCase().startsWith('central'))
+      : uniqueFinance.filter((f) => f.unit.toLowerCase() === unitFilter.toLowerCase());
 
   const targetInventory =
     unitFilter === 'All'
-      ? inventoryItems
+      ? uniqueInventory
       : isCentralFilter
-      ? inventoryItems.filter((i) => i.unit.toLowerCase().startsWith('central'))
-      : inventoryItems.filter((i) => i.unit.toLowerCase() === unitFilter.toLowerCase());
-
-  const targetClasses =
-    unitFilter === 'All'
-      ? classes
-      : classes.filter((c) => c.unit.toLowerCase() === unitFilter.toLowerCase());
-
-  const targetParticipants =
-    unitFilter === 'All'
-      ? participants
-      : participants.filter((p) => p.unit.toLowerCase() === unitFilter.toLowerCase());
+      ? uniqueInventory.filter((i) => i.unit.toLowerCase().startsWith('central'))
+      : uniqueInventory.filter((i) => i.unit.toLowerCase() === unitFilter.toLowerCase());
 
   // 2. Calculate Key Multi-Module Indicators
   const totalMembers = targetMembers.length;
@@ -94,10 +93,7 @@ export function downloadComprehensiveDashboardPdf({
   const availableAssetQty = targetInventory.reduce((sum, i) => sum + (i.availableQuantity || 0), 0);
   const issuedAssetQty = targetInventory.reduce((sum, i) => sum + (i.issuedQuantity || 0), 0);
 
-  const activeClassesCount = targetClasses.filter((c) => c.status === 'Active').length;
-  const activeStudentsCount = targetParticipants.filter((p) => p.status === 'Active').length;
-
-  // --- PAGE 1: EXECUTIVE BRIEFING & CORE MATRICES ---
+  // --- PAGE 1: EXECUTIVE BRIEFING & CORE MATRICES (FINANCE & MEMBERS) ---
   // Header Banner
   doc.setFillColor(primaryRed[0], primaryRed[1], primaryRed[2]);
   doc.rect(0, 0, 210, 32, 'F');
@@ -107,7 +103,7 @@ export function downloadComprehensiveDashboardPdf({
 
   // Logo insertion
   try {
-    const logoData = getActiveLogoDataUrl();
+    const logoData = await getActiveLogoPngDataUrl();
     doc.addImage(logoData, 'PNG', 10, 4, 24, 24);
   } catch (e) {
     // fallback
@@ -119,7 +115,7 @@ export function downloadComprehensiveDashboardPdf({
   doc.text('KAIRALI CULTURAL ASSOCIATION FUJAIRAH - UAE', 115, 12, { align: 'center' });
 
   doc.setFontSize(10);
-  doc.text('CONSOLIDATED EXECUTIVE MANAGEMENT REPORT', 115, 18, { align: 'center' });
+  doc.text('EXECUTIVE MANAGEMENT SUMMARY: FINANCE & MEMBERSHIP', 115, 18, { align: 'center' });
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
@@ -130,67 +126,86 @@ export function downloadComprehensiveDashboardPdf({
     { align: 'center' }
   );
 
-  // 4 Executive KPI Highlight Cards
+  // Executive KPI Highlight Cards (Finance & Members)
   let yPos = 40;
 
-  // Box 1: Membership
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(12, yPos, 43, 24, 2, 2, 'FD');
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
-  doc.text('TOTAL MEMBERS', 16, yPos + 6);
-  doc.setFontSize(13);
-  doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
-  doc.text(`${totalMembers}`, 16, yPos + 14);
-  doc.setFontSize(7);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text(`${activeMembers} Active • ${expiredMembers} Expired`, 16, yPos + 20);
+  if (includeInventory) {
+    // 3 Cards layout if inventory requested
+    // Box 1: Membership
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(12, yPos, 58, 24, 2, 2, 'FD');
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
+    doc.text('TOTAL MEMBERSHIP', 16, yPos + 6);
+    doc.setFontSize(13);
+    doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
+    doc.text(`${totalMembers}`, 16, yPos + 14);
+    doc.setFontSize(7);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(`${activeMembers} Active Cards • ${expiredMembers} Renewals Due`, 16, yPos + 20);
 
-  // Box 2: Finance
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(59, yPos, 43, 24, 2, 2, 'FD');
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
-  doc.text('NET CASH POSITION', 63, yPos + 6);
-  doc.setFontSize(11.5);
-  doc.setTextColor(netBalance >= 0 ? 16 : 185, netBalance >= 0 ? 120 : 28, netBalance >= 0 ? 60 : 28);
-  doc.text(formatAED(netBalance), 63, yPos + 14);
-  doc.setFontSize(7);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text(`Inc: ${formatAED(totalIncome)} | Exp: ${formatAED(totalExpense)}`, 63, yPos + 20);
+    // Box 2: Finance
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(76, yPos, 60, 24, 2, 2, 'FD');
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
+    doc.text('NET TREASURY SURPLUS (AED)', 80, yPos + 6);
+    doc.setFontSize(12);
+    doc.setTextColor(netBalance >= 0 ? 16 : 185, netBalance >= 0 ? 120 : 28, netBalance >= 0 ? 60 : 28);
+    doc.text(formatAED(netBalance), 80, yPos + 14);
+    doc.setFontSize(7);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(`Inc: ${formatAED(totalIncome)} | Exp: ${formatAED(totalExpense)}`, 80, yPos + 20);
 
-  // Box 3: Inventory
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(106, yPos, 43, 24, 2, 2, 'FD');
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
-  doc.text('EQUIPMENT ASSETS', 110, yPos + 6);
-  doc.setFontSize(13);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text(`${targetInventory.length} Items`, 110, yPos + 14);
-  doc.setFontSize(7);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text(`${availableAssetQty} in Stock • ${issuedAssetQty} Issued`, 110, yPos + 20);
+    // Box 3: Inventory (Optional)
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(142, yPos, 56, 24, 2, 2, 'FD');
+    doc.setFontSize(7.5);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
+    doc.text('EQUIPMENT & ASSETS', 146, yPos + 6);
+    doc.setFontSize(13);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(`${targetInventory.length} Items`, 146, yPos + 14);
+    doc.setFontSize(7);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(`${availableAssetQty} In Stock • ${issuedAssetQty} Issued`, 146, yPos + 20);
+  } else {
+    // 2 Large Prominent Cards: Focus exclusively on Members & Finance
+    // Box 1: Membership
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(226, 232, 240);
+    doc.roundedRect(12, yPos, 90, 25, 2, 2, 'FD');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
+    doc.text('ASSOCIATION MEMBERSHIP OVERVIEW', 18, yPos + 6);
+    doc.setFontSize(14);
+    doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
+    doc.text(`${totalMembers} Total Members`, 18, yPos + 15);
+    doc.setFontSize(7.5);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(`${activeMembers} Active Registered Members  •  ${expiredMembers} Renewals Pending`, 18, yPos + 21);
 
-  // Box 4: Cultural Classes & Students
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(153, yPos, 45, 24, 2, 2, 'FD');
-  doc.setFontSize(7.5);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
-  doc.text('CLASSES & STUDENTS', 157, yPos + 6);
-  doc.setFontSize(13);
-  doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
-  doc.text(`${targetParticipants.length} Students`, 157, yPos + 14);
-  doc.setFontSize(7);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text(`${activeClassesCount} Classes • ${activeStudentsCount} Active`, 157, yPos + 20);
+    // Box 2: Finance Treasury
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(108, yPos, 90, 25, 2, 2, 'FD');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
+    doc.text('TREASURY & FINANCIAL POSITION (AED)', 114, yPos + 6);
+    doc.setFontSize(13);
+    doc.setTextColor(netBalance >= 0 ? 16 : 185, netBalance >= 0 ? 120 : 28, netBalance >= 0 ? 60 : 28);
+    doc.text(formatAED(netBalance), 114, yPos + 15);
+    doc.setFontSize(7.5);
+    doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+    doc.text(`Total Income: ${formatAED(totalIncome)}  •  Total Expense: ${formatAED(totalExpense)}`, 114, yPos + 21);
+  }
 
-  yPos += 30;
+  yPos += 32;
 
   // --- SECTION 1: MEMBERSHIP MATRIX BY UNIT ---
   doc.setFont('helvetica', 'bold');
@@ -219,11 +234,11 @@ export function downloadComprehensiveDashboardPdf({
 
   autoTable(doc, {
     startY: yPos + 3,
-    head: [['Unit / Region', 'Total Registered', 'Active Cards', 'Renewals Due', 'Total Fees (AED)', 'Community Share']],
+    head: [['Unit / Jurisdiction', 'Total Registered', 'Active Cards', 'Renewals Due', 'Total Fees (AED)', 'Community Share']],
     body: unitRows,
     theme: 'grid',
     headStyles: { fillColor: [139, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    styles: { fontSize: 7.5, cellPadding: 2 },
+    styles: { fontSize: 7.5, cellPadding: 2.2 },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     margin: { left: 12, right: 12 },
   });
@@ -234,113 +249,68 @@ export function downloadComprehensiveDashboardPdf({
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
-  doc.text('2. FINANCIAL LEDGER & VOUCHER OVERVIEW', 12, yPos);
+  doc.text('2. FINANCIAL LEDGER & RECENT VOUCHERS', 12, yPos);
 
-  const financeRows = targetFinance.slice(0, 5).map((f) => [
+  const financeRows = targetFinance.slice(0, 8).map((f) => [
     f.receiptNumber,
     formatDate(f.date),
     f.type,
     f.category,
     f.unit,
     f.partyName,
+    f.paymentMethod,
     formatAED(f.amountAED),
   ]);
 
   if (financeRows.length === 0) {
-    financeRows.push(['N/A', 'N/A', 'N/A', 'No financial transactions logged for this unit.', 'N/A', 'N/A', 'AED 0']);
+    financeRows.push(['N/A', 'N/A', 'N/A', 'No financial transactions logged for this unit.', 'N/A', 'N/A', 'N/A', 'AED 0']);
   }
 
   autoTable(doc, {
     startY: yPos + 3,
-    head: [['Voucher / Receipt No', 'Date', 'Type', 'Category', 'Unit', 'Party / Beneficiary', 'Amount (AED)']],
+    head: [['Voucher / Receipt No', 'Date', 'Type', 'Category', 'Unit', 'Party / Beneficiary', 'Method', 'Amount (AED)']],
     body: financeRows,
     theme: 'grid',
     headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    styles: { fontSize: 7.5, cellPadding: 2 },
+    styles: { fontSize: 7.5, cellPadding: 2.2 },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     margin: { left: 12, right: 12 },
   });
 
-  // --- PAGE 2: INVENTORY ASSETS & CULTURAL CLASSES ---
-  doc.addPage('a4', 'portrait');
+  // --- OPTIONAL SECTION 3: INVENTORY (ONLY IF INCLUDED) ---
+  if (includeInventory && targetInventory.length > 0) {
+    yPos = (doc as any).lastAutoTable.finalY + 8;
+    if (yPos > 230) {
+      doc.addPage('a4', 'portrait');
+      yPos = 20;
+    }
 
-  // Header Banner for Page 2
-  doc.setFillColor(primaryRed[0], primaryRed[1], primaryRed[2]);
-  doc.rect(0, 0, 210, 18, 'F');
-  doc.setFillColor(goldAccent[0], goldAccent[1], goldAccent[2]);
-  doc.rect(0, 18, 210, 1.5, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
+    doc.text('3. INVENTORY & EQUIPMENT ASSETS (OPTIONAL ADDITION)', 12, yPos);
 
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.text('KAIRALI CULTURAL ASSOCIATION FUJAIRAH - ASSETS & CULTURAL ACADEMIES', 105, 11, { align: 'center' });
+    const inventoryRows = targetInventory.slice(0, 10).map((item) => [
+      item.itemCode,
+      item.name,
+      item.category,
+      item.unit,
+      `${item.availableQuantity} / ${item.totalQuantity} ${item.unitOfMeasure}`,
+      item.condition,
+      item.status,
+    ]);
 
-  yPos = 26;
-
-  // --- SECTION 3: INVENTORY ASSET AUDIT ---
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
-  doc.text('3. INVENTORY & EQUIPMENT ASSET MANAGEMENT', 12, yPos);
-
-  const inventoryRows = targetInventory.slice(0, 6).map((item) => [
-    item.itemCode,
-    item.name,
-    item.category,
-    item.unit,
-    `${item.availableQuantity} / ${item.totalQuantity} ${item.unitOfMeasure}`,
-    item.condition,
-    item.status,
-  ]);
-
-  if (inventoryRows.length === 0) {
-    inventoryRows.push(['N/A', 'No assets currently recorded in this unit scope.', 'N/A', 'N/A', '0', 'N/A', 'N/A']);
+    autoTable(doc, {
+      startY: yPos + 3,
+      head: [['Asset Code', 'Equipment Name', 'Category', 'Unit', 'Stock Status', 'Condition', 'State']],
+      body: inventoryRows,
+      theme: 'grid',
+      headStyles: { fillColor: [139, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+      styles: { fontSize: 7.5, cellPadding: 2 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      margin: { left: 12, right: 12 },
+    });
   }
-
-  autoTable(doc, {
-    startY: yPos + 3,
-    head: [['Asset Code', 'Equipment Name', 'Category', 'Unit', 'Stock Status', 'Condition', 'State']],
-    body: inventoryRows,
-    theme: 'grid',
-    headStyles: { fillColor: [139, 0, 0], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    styles: { fontSize: 7.5, cellPadding: 2 },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: 12, right: 12 },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 8;
-
-  // --- SECTION 4: UNIT CULTURAL CLASSES & STUDENT PARTICIPANTS ---
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
-  doc.text('4. UNIT CULTURAL CLASSES, TRAINING PROGRAMMES & PARTICIPANTS', 12, yPos);
-
-  const participantRows = targetParticipants.slice(0, 8).map((p) => [
-    p.studentId,
-    p.fullName,
-    p.className,
-    p.unit,
-    p.guardianPhone || 'N/A',
-    formatAED(p.feeAmountAED),
-    p.feeStatus,
-    p.status,
-  ]);
-
-  if (participantRows.length === 0) {
-    participantRows.push(['N/A', 'No students enrolled yet for this unit.', 'N/A', 'N/A', 'N/A', 'AED 0', 'N/A', 'N/A']);
-  }
-
-  autoTable(doc, {
-    startY: yPos + 3,
-    head: [['Student ID', 'Student Name', 'Course / Class', 'Unit', 'Parent Phone', 'Fee (AED)', 'Fee Status', 'State']],
-    body: participantRows,
-    theme: 'grid',
-    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    styles: { fontSize: 7.5, cellPadding: 2 },
-    alternateRowStyles: { fillColor: [248, 250, 252] },
-    margin: { left: 12, right: 12 },
-  });
 
   // Footer & Authorizations
   const finalY = (doc as any).lastAutoTable.finalY + 12;
@@ -363,7 +333,7 @@ export function downloadComprehensiveDashboardPdf({
     doc.setFontSize(7);
     doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
     doc.text(
-      `KCA Fujairah Official Executive Dashboard Report • Page ${i} of ${totalPages} • Portal: ${PUBLISHED_PORTAL_URL}`,
+      `KCA Fujairah Executive Summary • Page ${i} of ${totalPages}`,
       105,
       290,
       { align: 'center' }
@@ -371,5 +341,5 @@ export function downloadComprehensiveDashboardPdf({
   }
 
   const cleanUnit = (unitFilter || 'All_Units').replace(/[^a-zA-Z0-9]/g, '_');
-  doc.save(`KCA_Executive_Report_${cleanUnit}_${new Date().toISOString().split('T')[0]}.pdf`);
+  doc.save(`KCA_Executive_Summary_${cleanUnit}_${new Date().toISOString().split('T')[0]}.pdf`);
 }

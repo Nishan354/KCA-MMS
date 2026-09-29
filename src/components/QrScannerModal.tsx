@@ -16,6 +16,7 @@ import {
   MapPin,
   Calendar,
   ShieldCheck,
+  User,
 } from 'lucide-react';
 
 interface QrScannerModalProps {
@@ -159,12 +160,19 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
 
               <div className="p-5 space-y-4">
                 <div className="flex items-start gap-4">
-                  <div className="w-16 h-20 rounded-md overflow-hidden border border-slate-200 bg-slate-100 shrink-0 shadow-xs">
-                    <img
-                      src={scannedMember.photoUrl}
-                      alt={scannedMember.fullName}
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="w-16 h-20 rounded-md overflow-hidden border border-slate-200 bg-slate-100 shrink-0 shadow-xs flex items-center justify-center">
+                    {scannedMember.photoUrl ? (
+                      <img
+                        src={scannedMember.photoUrl}
+                        alt={scannedMember.fullName}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <User className="w-8 h-8 text-slate-400" />
+                    )}
                   </div>
 
                   <div className="flex-1 min-w-0">

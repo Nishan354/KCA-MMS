@@ -7,6 +7,7 @@ import {
 import { UserSession, hasAdminPrivilege, isUnitOperatorRole } from '../types/member';
 import { exportInventoryCsv } from '../utils/inventoryStorage';
 import { formatAED, formatDate } from '../utils/idGenerator';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import {
   Package,
   Boxes,
@@ -59,6 +60,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [sortField, setSortField] = useState<'itemCode' | 'name' | 'availableQuantity' | 'purchaseDate'>('itemCode');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [itemToDelete, setItemToDelete] = useState<InventoryItem | null>(null);
 
   // Filtered items based on unit scoping & user filters
   const filteredItems = useMemo(() => {
@@ -544,11 +546,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
 
                             {isAdmin && (
                               <button
-                                onClick={() => {
-                                  if (confirm(`Are you sure you want to remove item "${item.name}"?`)) {
-                                    onDeleteItem(item.id);
-                                  }
-                                }}
+                                onClick={() => setItemToDelete(item)}
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                                 title="Delete Asset Record"
                               >
@@ -662,6 +660,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* Delete Inventory Item Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!itemToDelete}
+        title="Delete Inventory Asset"
+        itemName={itemToDelete?.name}
+        message={`Are you sure you want to permanently delete inventory asset "${itemToDelete?.name}" (${itemToDelete?.itemCode})?`}
+        confirmLabel="Delete Asset"
+        onConfirm={() => {
+          if (itemToDelete) {
+            onDeleteItem(itemToDelete.id);
+            setItemToDelete(null);
+          }
+        }}
+        onClose={() => setItemToDelete(null)}
+      />
     </div>
   );
 };

@@ -3,7 +3,7 @@ import autoTable from 'jspdf-autotable';
 import { FinanceTransaction } from '../types/finance';
 import { formatAED, formatDate } from './idGenerator';
 import { PUBLISHED_PORTAL_URL, OFFICIAL_ORG_NAME, OFFICIAL_EMAIL } from '../config/constants';
-import { getActiveLogoDataUrl } from '../components/Logo';
+import { getActiveLogoPngDataUrl } from '../components/Logo';
 
 /**
  * Generates and downloads an authentic, official PDF Financial Receipt / Payment Voucher
@@ -36,7 +36,7 @@ export async function downloadFinanceReceiptPdf(transaction: FinanceTransaction)
 
   // Draw Official KCA Logo in Header
   try {
-    const logoDataUrl = getActiveLogoDataUrl();
+    const logoDataUrl = await getActiveLogoPngDataUrl();
     doc.addImage(logoDataUrl, 'PNG', 12, 5, 26, 26);
   } catch (logoErr) {
     console.warn('Could not draw logo in financial receipt:', logoErr);

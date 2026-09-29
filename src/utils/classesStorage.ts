@@ -3,7 +3,7 @@ import { INITIAL_CLASSES, INITIAL_PARTICIPANTS, INITIAL_ATTENDANCE } from '../da
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatAED, formatDate } from './idGenerator';
-import { getActiveLogoDataUrl } from '../components/Logo';
+import { getActiveLogoPngDataUrl } from '../components/Logo';
 import { PUBLISHED_PORTAL_URL } from '../config/constants';
 
 const CLASSES_KEY = 'kca_cultural_classes_v1';
@@ -13,9 +13,9 @@ const ATTENDANCE_KEY = 'kca_class_attendance_v1';
 export function loadClasses(): CulturalClass[] {
   try {
     const raw = localStorage.getItem(CLASSES_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (err) {
     console.error('Failed to load classes from storage:', err);
@@ -34,9 +34,9 @@ export function saveClasses(classes: CulturalClass[]): void {
 export function loadParticipants(): ClassParticipant[] {
   try {
     const raw = localStorage.getItem(PARTICIPANTS_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (err) {
     console.error('Failed to load participants from storage:', err);
@@ -55,9 +55,9 @@ export function saveParticipants(participants: ClassParticipant[]): void {
 export function loadAttendance(): ClassAttendanceRecord[] {
   try {
     const raw = localStorage.getItem(ATTENDANCE_KEY);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed)) return parsed;
     }
   } catch (err) {
     console.error('Failed to load attendance from storage:', err);
@@ -156,13 +156,81 @@ export function exportParticipantsCsv(
 }
 
 /**
- * Generate Printable PDF Attendance Register Sheet
+ * Export Class Attendance Session Records to CSV
  */
-export function downloadAttendanceSheetPdf(
+export function exportAttendanceRecordsCsv(
+  attendanceRecords: ClassAttendanceRecord[],
+  filename: string = 'KCA_Class_Attendance_Registry.csv'
+): void {
+  const headers = [
+    'Date',
+    'Class / Course',
+    'Unit',
+    'Batch Name',
+    'Topic / Syllabus Covered',
+    'Student Name',
+    'Student ID',
+    'Attendance Status',
+    'Remarks',
+    'Recorded By',
+  ];
+
+  const rows: string[] = [];
+
+  attendanceRecords.forEach((att) => {
+    if (att.records && att.records.length > 0) {
+      att.records.forEach((rec) => {
+        rows.push([
+          `"${att.date}"`,
+          `"${att.className.replace(/"/g, '""')}"`,
+          `"${att.unit}"`,
+          `"${(att.batchName || '').replace(/"/g, '""')}"`,
+          `"${(att.topicCovered || '').replace(/"/g, '""')}"`,
+          `"${rec.studentName.replace(/"/g, '""')}"`,
+          `"${rec.participantId || ''}"`,
+          `"${rec.status}"`,
+          `"${(rec.remarks || '').replace(/"/g, '""')}"`,
+          `"${(att.recordedBy || '').replace(/"/g, '""')}"`,
+        ].join(','));
+      });
+    } else {
+      // Aggregate summary row if individual student records aren't saved
+      rows.push([
+        `"${att.date}"`,
+        `"${att.className.replace(/"/g, '""')}"`,
+        `"${att.unit}"`,
+        `"${(att.batchName || '').replace(/"/g, '""')}"`,
+        `"${(att.topicCovered || '').replace(/"/g, '""')}"`,
+        `"Total: ${att.totalStudents} Students"`,
+        `""`,
+        `"Present: ${att.presentCount}, Absent: ${att.absentCount}"`,
+        `""`,
+        `"${(att.recordedBy || '').replace(/"/g, '""')}"`,
+      ].join(','));
+    }
+  });
+
+  const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.setAttribute('href', url);
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Generate Printable PDF Attendance Register Sheet
+
+ */
+export async function downloadAttendanceSheetPdf(
   targetClass: CulturalClass,
   students: ClassParticipant[],
   attendanceHistory: ClassAttendanceRecord[] = []
-): void {
+): Promise<void> {
   const doc = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
@@ -180,7 +248,7 @@ export function downloadAttendanceSheetPdf(
   doc.rect(0, 24, 297, 2, 'F');
 
   try {
-    const logo = getActiveLogoDataUrl();
+    const logo = await getActiveLogoPngDataUrl();
     doc.addImage(logo, 'PNG', 10, 2, 20, 20);
   } catch {}
 

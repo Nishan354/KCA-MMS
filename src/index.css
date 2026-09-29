@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --color-primary: #881337;
   --color-primary-hover: #700c2b;
@@ -8,6 +10,15 @@
   --color-primary-accent: #f59e0b;
   --color-primary-rgb: 136, 19, 55;
   --color-surface-bg: #f8fafc;
+  --color-surface-card: #ffffff;
+  --color-surface-border: #e2e8f0;
+}
+
+.dark {
+  --color-surface-bg: #090d16;
+  --color-surface-card: #0f172a;
+  --color-surface-border: #1e293b;
+  color-scheme: dark;
 }
 
 @layer base {
@@ -19,6 +30,12 @@
     -moz-osx-font-smoothing: grayscale;
     letter-spacing: -0.015em;
   }
+
+  .dark body {
+    background-color: var(--color-surface-bg, #090d16);
+    color: #f1f5f9;
+  }
+
 
   .font-display {
     font-family: 'Outfit', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -75,6 +92,12 @@
   box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
 }
 
+.dark .sleek-card {
+  background-color: #0f172a;
+  border-color: #1e293b;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+}
+
 .sleek-card-hover {
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -85,10 +108,122 @@
   transform: translateY(-1px);
 }
 
+.dark .sleek-card-hover:hover {
+  border-color: #334155;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+}
+
 .sleek-surface {
   background-color: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
+}
+
+.dark .sleek-surface {
+  background-color: #0f172a;
+  border-color: #1e293b;
+}
+
+/* =========================================================
+   GLOBAL DARK MODE COMPLETE SYSTEM LAYER
+   ========================================================= */
+.dark {
+  color-scheme: dark;
+}
+
+/* Surface backgrounds */
+.dark .bg-slate-50,
+.dark .bg-slate-50\/50,
+.dark .bg-gray-50 {
+  background-color: #090d16 !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+.dark .bg-slate-200 {
+  background-color: #334155 !important;
+}
+
+/* Card & Modal Surfaces (exempting printable ID cards & certificates) */
+.dark .bg-white:not(.id-card-container):not(.id-card-container *):not(.id-card-print-target):not(.id-card-print-target *):not(.cert-paper):not(.cert-paper *):not(.printable-document):not(.printable-document *) {
+  background-color: #0f172a !important;
+}
+
+/* Text Colors */
+.dark .text-slate-900:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .text-gray-900:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .text-slate-800:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .text-gray-800:not(.id-card-container *):not(.cert-paper *):not(.printable-document *) {
+  color: #f8fafc !important;
+}
+
+.dark .text-slate-700:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .text-gray-700:not(.id-card-container *):not(.cert-paper *):not(.printable-document *) {
+  color: #e2e8f0 !important;
+}
+
+.dark .text-slate-600:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .text-gray-600:not(.id-card-container *):not(.cert-paper *):not(.printable-document *) {
+  color: #94a3b8 !important;
+}
+
+.dark .text-slate-500:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .text-gray-500:not(.id-card-container *):not(.cert-paper *):not(.printable-document *) {
+  color: #64748b !important;
+}
+
+/* Borders & Separators */
+.dark .border-slate-200:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .border-slate-100:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .border-slate-300:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .border-gray-200:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .border-gray-100:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
+.dark .border-gray-300:not(.id-card-container *):not(.cert-paper *):not(.printable-document *) {
+  border-color: #1e293b !important;
+}
+
+.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #1e293b !important;
+}
+
+/* Form inputs & dropdowns */
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not(.id-card-container *),
+.dark select:not(.id-card-container *),
+.dark textarea:not(.id-card-container *) {
+  background-color: #0b1120 !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+/* Interactive Hover States */
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-gray-50:hover {
+  background-color: #1e293b !important;
+}
+
+/* Table header styling */
+.dark table thead th {
+  background-color: #0b1120 !important;
+  color: #cbd5e1 !important;
+  border-color: #1e293b !important;
+}
+
+.dark table tbody tr {
+  border-color: #1e293b !important;
+}
+
+.dark table tbody tr:hover {
+  background-color: #1e293b !important;
 }
 
 /* Subtle focus indicators */
@@ -113,6 +248,11 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
 }
 
 @media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   @page {
     size: A4 portrait;
     margin: 8mm 10mm;

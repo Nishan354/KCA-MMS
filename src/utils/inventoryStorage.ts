@@ -15,9 +15,9 @@ export function saveInventoryItems(items: InventoryItem[]): void {
 export function loadInventoryItems(): InventoryItem[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_INVENTORY);
-    if (!raw) return INITIAL_INVENTORY_ITEMS;
+    if (raw === null) return INITIAL_INVENTORY_ITEMS;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_INVENTORY_ITEMS;
+    return Array.isArray(parsed) ? parsed : INITIAL_INVENTORY_ITEMS;
   } catch {
     return INITIAL_INVENTORY_ITEMS;
   }
@@ -34,9 +34,9 @@ export function saveInventoryLogs(logs: InventoryMovementLog[]): void {
 export function loadInventoryLogs(): InventoryMovementLog[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_INVENTORY_LOGS);
-    if (!raw) return INITIAL_INVENTORY_LOGS;
+    if (raw === null) return INITIAL_INVENTORY_LOGS;
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_INVENTORY_LOGS;
+    return Array.isArray(parsed) ? parsed : INITIAL_INVENTORY_LOGS;
   } catch {
     return INITIAL_INVENTORY_LOGS;
   }

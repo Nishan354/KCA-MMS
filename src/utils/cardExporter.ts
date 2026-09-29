@@ -2,7 +2,7 @@ import { toPng } from 'html-to-image';
 import QRCode from 'qrcode';
 import { Member, CustomFieldDefinition } from '../types/member';
 import { formatCardBloodGroup, formatCardDate, getMemberVerifyUrl } from './idGenerator';
-import { getActiveLogoDataUrl } from '../components/Logo';
+import { getActiveLogoDataUrl, getActiveLogoPngDataUrl } from '../components/Logo';
 
 /**
  * Trigger file download for a data URL or blob
@@ -259,7 +259,7 @@ export async function generateDirectCardPng(
 
   // 5. TOP HEADER: Draw Emblem Logo & Header Typography
   try {
-    const logoDataUrl = getActiveLogoDataUrl();
+    const logoDataUrl = await getActiveLogoPngDataUrl();
     const logoImg = new Image();
     logoImg.crossOrigin = 'anonymous';
     await new Promise<void>((resolve) => {
@@ -284,9 +284,9 @@ export async function generateDirectCardPng(
   ctx.font = '900 32px "Arial", sans-serif';
   ctx.fillText('FUJAIRAH', 210, 122);
 
-  ctx.fillStyle = '#475569';
-  ctx.font = '500 24px "Arial", sans-serif';
-  ctx.fillText('kairalicaf@gmail.com', 210, 158);
+  ctx.fillStyle = '#b91c1c';
+  ctx.font = '700 22px "Arial", sans-serif';
+  ctx.fillText('A NORKA Roots Affiliated Association', 210, 158);
 
   // 6. MAIN CARD BODY: Member Photo Frame (Left)
   const photoOuterX = 54;
@@ -311,29 +311,66 @@ export async function generateDirectCardPng(
   ctx.lineWidth = 2;
   drawRoundedRect(ctx, photoInnerX, photoInnerY, photoInnerW, photoInnerH, 16, true, true);
 
-  // Load and draw photo
-  const photoSrc =
-    member.photoUrl ||
-    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80';
-  try {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    await new Promise<void>((resolve) => {
-      img.onload = () => resolve();
-      img.onerror = () => resolve();
-      img.src = photoSrc;
-    });
-    if (img.complete && img.naturalWidth > 0) {
-      ctx.save();
-      // Clip to inner rounded rectangle
-      ctx.beginPath();
-      drawRoundedRect(ctx, photoInnerX, photoInnerY, photoInnerW, photoInnerH, 16, false, false);
-      ctx.clip();
-      ctx.drawImage(img, photoInnerX, photoInnerY, photoInnerW, photoInnerH);
-      ctx.restore();
+  // Load and draw photo if provided
+  let photoDrawn = false;
+  if (member.photoUrl && member.photoUrl.trim()) {
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve) => {
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+        img.src = member.photoUrl;
+      });
+      if (img.complete && img.naturalWidth > 0) {
+        ctx.save();
+        // Clip to inner rounded rectangle
+        ctx.beginPath();
+        drawRoundedRect(ctx, photoInnerX, photoInnerY, photoInnerW, photoInnerH, 16, false, false);
+        ctx.clip();
+        ctx.drawImage(img, photoInnerX, photoInnerY, photoInnerW, photoInnerH);
+        ctx.restore();
+        photoDrawn = true;
+      }
+    } catch (photoErr) {
+      console.warn('Failed to load member photo:', photoErr);
     }
-  } catch (photoErr) {
-    console.warn('Failed to load member photo:', photoErr);
+  }
+
+  // Draw clean placeholder if no photo was drawn
+  if (!photoDrawn) {
+    ctx.save();
+    ctx.beginPath();
+    drawRoundedRect(ctx, photoInnerX, photoInnerY, photoInnerW, photoInnerH, 16, false, false);
+    ctx.clip();
+
+    // Neutral background
+    ctx.fillStyle = '#e2e8f0';
+    ctx.fillRect(photoInnerX, photoInnerY, photoInnerW, photoInnerH);
+
+    // Draw user silhouette icon
+    const centerX = photoInnerX + photoInnerW / 2;
+    const headY = photoInnerY + photoInnerH * 0.38;
+    const headR = 36;
+
+    ctx.fillStyle = '#cbd5e1';
+    // Head circle
+    ctx.beginPath();
+    ctx.arc(centerX, headY, headR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Shoulders arc
+    ctx.beginPath();
+    ctx.ellipse(centerX, photoInnerY + photoInnerH * 0.82, 60, 42, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // "PHOTO" label
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '700 18px "Arial", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('PHOTO', centerX, photoInnerY + photoInnerH - 16);
+
+    ctx.restore();
   }
 
   // 7. RIGHT SIDE: "MEMBERSHIP ID CARD" Solid Red Pill
@@ -545,7 +582,7 @@ export async function generateDirectBackCardPng(
 
   drawNumberedRule('1.', 'This identity card is non-transferable and remains the official property of', 'Kairali Cultural Association Fujairah.', rulesBoxY + 50);
   drawNumberedRule('2.', 'Entitles active member to participate in association events, cultural activities,', 'sports programs, community privileges, and welfare support.', rulesBoxY + 140);
-  drawNumberedRule('3.', 'If found, please return to KCA Fujairah Office or email:', 'kairalicaf@gmail.com', rulesBoxY + 230);
+  drawNumberedRule('3.', 'If found, please return to KCA Fujairah Office or hand over to any', 'authorized Unit Executive Officer / Coordinator.', rulesBoxY + 230);
 
   // 5. Emergency Contacts & Head Office Box
   const contactBoxY = 460;
@@ -576,15 +613,15 @@ export async function generateDirectBackCardPng(
   const rightColX = 750;
   ctx.fillStyle = '#64748b';
   ctx.font = '700 22px "Arial", sans-serif';
-  ctx.fillText('ASSOCIATION HEAD OFFICE:', rightColX, contactBoxY + 45);
+  ctx.fillText('AFFILIATION & HEAD OFFICE:', rightColX, contactBoxY + 45);
 
   ctx.fillStyle = '#0f172a';
   ctx.font = '700 26px "Arial", sans-serif';
   ctx.fillText('Fujairah • Kalba • Khorfakhan • Dibba', rightColX, contactBoxY + 90);
 
-  ctx.fillStyle = '#475569';
-  ctx.font = '500 24px "Arial", sans-serif';
-  ctx.fillText('Email: kairalicaf@gmail.com', rightColX, contactBoxY + 135);
+  ctx.fillStyle = '#b91c1c';
+  ctx.font = '700 24px "Arial", sans-serif';
+  ctx.fillText('NORKA Roots Affiliated Association', rightColX, contactBoxY + 135);
 
   // 6. Signatures & Bottom Bar
   ctx.strokeStyle = '#94a3b8';

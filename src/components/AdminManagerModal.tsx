@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AdminAccount, UserSession, UserRole } from '../types/member';
 import { getUnitIdPrefix, formatDate } from '../utils/idGenerator';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import {
   X,
   UserPlus,
@@ -59,6 +60,7 @@ export const AdminManagerModal: React.FC<AdminManagerModalProps> = ({
   const [createdAtDate, setCreatedAtDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [accountToDelete, setAccountToDelete] = useState<AdminAccount | null>(null);
 
   if (!isOpen) return null;
 
@@ -383,11 +385,7 @@ export const AdminManagerModal: React.FC<AdminManagerModalProps> = ({
 
                               {acc.username !== 'admin' && !isCurrent && (
                                 <button
-                                  onClick={() => {
-                                    if (confirm(`Are you sure you want to delete account "${acc.fullName}" (${acc.username})?`)) {
-                                      onDeleteAccount(acc.id);
-                                    }
-                                  }}
+                                  onClick={() => setAccountToDelete(acc)}
                                   className="p-1.5 rounded bg-white hover:bg-red-50 text-red-600 border border-slate-200 transition-colors cursor-pointer"
                                   title="Delete Account"
                                 >
@@ -635,6 +633,22 @@ export const AdminManagerModal: React.FC<AdminManagerModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Delete Account Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!accountToDelete}
+        title="Delete User Account"
+        itemName={accountToDelete?.fullName}
+        message={`Are you sure you want to permanently delete account "${accountToDelete?.fullName}" (${accountToDelete?.username} - ${accountToDelete?.role})?`}
+        confirmLabel="Delete Account"
+        onConfirm={() => {
+          if (accountToDelete) {
+            onDeleteAccount(accountToDelete.id);
+            setAccountToDelete(null);
+          }
+        }}
+        onClose={() => setAccountToDelete(null)}
+      />
     </div>
   );
 };

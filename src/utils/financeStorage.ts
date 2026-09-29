@@ -1,16 +1,25 @@
-import { FinanceTransaction } from '../types/finance';
+import {
+  FinanceTransaction,
+  FinancialParticular,
+  UnitCashBalance,
+  INITIAL_DEFAULT_PARTICULARS,
+} from '../types/finance';
 import { INITIAL_FINANCE_TRANSACTIONS } from '../data/initialFinanceData';
 import { getUnitCode } from './idGenerator';
 
 export const STORAGE_KEY_FINANCE = 'kca_fujairah_finance_transactions_v1';
+export const STORAGE_KEY_PARTICULARS = 'kca_fujairah_finance_particulars_v1';
+export const STORAGE_KEY_UNIT_BALANCES = 'kca_fujairah_finance_unit_balances_v1';
+
+export const DEFAULT_UNITS = ['Fujairah', 'Kalba', 'Khorfakhan', 'Dibba', 'Central'];
 
 export function loadFinanceTransactions(): FinanceTransaction[] {
   if (typeof window === 'undefined') return INITIAL_FINANCE_TRANSACTIONS;
   try {
     const raw = localStorage.getItem(STORAGE_KEY_FINANCE);
-    if (raw) {
+    if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
@@ -29,6 +38,83 @@ export function saveFinanceTransactions(transactions: FinanceTransaction[]): voi
   }
 }
 
+// ----------------------------------------------------
+// Master Particulars Storage & Hierarchy Management
+// ----------------------------------------------------
+export function loadFinancialParticulars(): FinancialParticular[] {
+  if (typeof window === 'undefined') return INITIAL_DEFAULT_PARTICULARS;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PARTICULARS);
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error loading particulars from storage:', e);
+  }
+  return INITIAL_DEFAULT_PARTICULARS;
+}
+
+export function saveFinancialParticulars(particulars: FinancialParticular[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_PARTICULARS, JSON.stringify(particulars));
+  } catch (e) {
+    console.error('Error saving particulars to storage:', e);
+  }
+}
+
+// ----------------------------------------------------
+// Multi-Unit Cash-in-Balance Management & Audit Logs
+// ----------------------------------------------------
+export function loadUnitCashBalances(): UnitCashBalance[] {
+  const zeroDefaultBalances: UnitCashBalance[] = DEFAULT_UNITS.map((unit) => ({
+    unit,
+    openingBalanceAED: 0,
+    cashInHandAED: 0,
+    bankBalanceAED: 0,
+    lastUpdated: new Date().toISOString().split('T')[0],
+    notes: `Opening balance 0.00 AED for ${unit} unit ledger`,
+    auditHistory: [
+      {
+        id: `audit-${unit}-init`,
+        timestamp: new Date().toISOString(),
+        action: 'Opening Set',
+        amount: 0,
+        previousBalance: 0,
+        newBalance: 0,
+        performedBy: 'System Administrator',
+        notes: `Initial opening balance configured at 0.00 AED for ${unit} unit`,
+      },
+    ],
+  }));
+
+  if (typeof window === 'undefined') return zeroDefaultBalances;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_UNIT_BALANCES);
+    if (raw !== null) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    console.error('Error loading unit cash balances:', e);
+  }
+  return zeroDefaultBalances;
+}
+
+export function saveUnitCashBalances(balances: UnitCashBalance[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_KEY_UNIT_BALANCES, JSON.stringify(balances));
+  } catch (e) {
+    console.error('Error saving unit cash balances:', e);
+  }
+}
+
 /**
  * Checks if a member has a Central Committee designation
  */
@@ -41,11 +127,11 @@ export function isCentralCommitteeMember(member: { membershipType?: string } | n
 }
 
 /**
- * Determines which finance ledger unit receives the payment:
- * - If Central Committee Member: 'Central' (regardless of which local unit they belong to)
- * - Otherwise: their local unit (e.g. 'Fujairah', 'Kalba', 'Khorfakhan', 'Dibba')
+ * Determines which finance ledger unit receives the payment
  */
-export function getFinanceLedgerUnitForMember(member: { membershipType?: string; unit?: string } | null | undefined): string {
+export function getFinanceLedgerUnitForMember(
+  member: { membershipType?: string; unit?: string } | null | undefined
+): string {
   if (isCentralCommitteeMember(member)) {
     return 'Central';
   }
@@ -53,38 +139,23 @@ export function getFinanceLedgerUnitForMember(member: { membershipType?: string;
 }
 
 /**
- * Returns a unit-specific receipt or expense voucher code prefix:
- * Examples:
- * - Income (Receipt):
- *   - Fujairah:   KCA-FU-REC-2026-101
- *   - Kalba:      KCA-KB-REC-2026-101
- *   - Khorfakhan: KCA-KF-REC-2026-101
- *   - Dibba:      KCA-DB-REC-2026-101
- *   - Central Committee: KCA-CC-REC-2026-101
- *
- * - Expense (Payment Voucher):
- *   - Fujairah:   KCA-FU-EXP-2026-101
- *   - Kalba:      KCA-KB-EXP-2026-101
- *   - Khorfakhan: KCA-KF-EXP-2026-101
- *   - Dibba:      KCA-DB-EXP-2026-101
- *   - Central Committee: KCA-CC-EXP-2026-101
+ * Returns a unit-specific receipt, expense voucher, or invoice code prefix
  */
 export function getNextReceiptNumber(
   transactions: FinanceTransaction[],
   type: 'INCOME' | 'EXPENSE',
-  unitName: string = 'Fujairah'
+  unitName: string = 'Fujairah',
+  isInvoice: boolean = false
 ): string {
   const unitCode = getUnitCode(unitName);
-  const typeCode = type === 'INCOME' ? 'REC' : 'EXP';
+  const typeCode = isInvoice ? 'INV' : type === 'INCOME' ? 'REC' : 'EXP';
   const year = new Date().getFullYear();
   const prefix = `KCA-${unitCode}-${typeCode}-${year}-`;
   const startNum = 101;
 
-  // Escape special regex characters in the prefix
   const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`^${escapedPrefix}(\\d+)`, 'i');
 
-  // Also support legacy/unscoped format matching if needed
   const legacyPrefix = type === 'INCOME' ? `KCA-REC-${year}-` : `KCA-EXP-${year}-`;
   const escapedLegacy = legacyPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const legacyRegex = new RegExp(`^${escapedLegacy}(\\d+)`, 'i');
@@ -99,7 +170,6 @@ export function getNextReceiptNumber(
           maxNum = num;
         }
       } else if (t.unit && getUnitCode(t.unit) === unitCode) {
-        // Check legacy regex if same unit
         const legMatch = t.receiptNumber.match(legacyRegex);
         if (legMatch && legMatch[1]) {
           const num = parseInt(legMatch[1], 10);
@@ -116,7 +186,7 @@ export function getNextReceiptNumber(
 
 export function exportFinanceCsv(transactions: FinanceTransaction[], filename = 'KCA_Finance_Ledger.csv'): void {
   const headers = [
-    'Receipt / Voucher No',
+    'Document / Receipt No',
     'Date',
     'Type',
     'Category',
@@ -162,4 +232,5 @@ export function exportFinanceCsv(transactions: FinanceTransaction[], filename = 
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

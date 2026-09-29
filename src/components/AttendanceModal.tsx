@@ -1,29 +1,54 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { CulturalClass, ClassParticipant, ClassAttendanceRecord, AttendanceStatus, ParticipantAttendanceEntry } from '../types/classes';
 import { UserSession } from '../types/member';
 import { formatDate } from '../utils/idGenerator';
-import { X, CheckCircle2, XCircle, Clock, Check, UserCheck, Calendar, BookOpen, Sparkles } from 'lucide-react';
+import { X, CheckCircle2, XCircle, Clock, Check, UserCheck, Calendar, BookOpen, Sparkles, Filter, Layers } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface AttendanceModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaveAttendance: (record: ClassAttendanceRecord) => void;
+  onUpdateParticipantBatch?: (participantId: string, newBatch: string) => void;
   targetClass: CulturalClass;
   students: ClassParticipant[];
   userSession: UserSession | null;
+  initialBatchFilter?: string;
 }
 
 export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   isOpen,
   onClose,
   onSaveAttendance,
+  onUpdateParticipantBatch,
   targetClass,
   students,
   userSession,
+  initialBatchFilter = 'ALL',
 }) => {
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [topicCovered, setTopicCovered] = useState<string>('');
+  const [selectedBatch, setSelectedBatch] = useState<string>(initialBatchFilter);
+  const [customSessionBatchName, setCustomSessionBatchName] = useState<string>(
+    initialBatchFilter !== 'ALL' ? initialBatchFilter : targetClass.batchName || 'General Batch'
+  );
+
+  // Extract all unique batches from students and class
+  const existingBatches = useMemo(() => {
+    const batchSet = new Set<string>();
+    if (targetClass.batchName) batchSet.add(targetClass.batchName);
+    students.forEach((s) => {
+      if (s.batchName) batchSet.add(s.batchName);
+    });
+    return Array.from(batchSet);
+  }, [students, targetClass]);
+
+  // Filter students based on selected batch
+  const filteredStudents = useMemo(() => {
+    if (selectedBatch === 'ALL') return students;
+    return students.filter((s) => (s.batchName || 'General Batch') === selectedBatch);
+  }, [students, selectedBatch]);
+
   const [attendanceEntries, setAttendanceEntries] = useState<Record<string, { status: AttendanceStatus; remarks: string }>>(
     () => {
       const initial: Record<string, { status: AttendanceStatus; remarks: string }> = {};
@@ -53,26 +78,26 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
   const handleMarkAll = (status: AttendanceStatus) => {
     setAttendanceEntries((prev) => {
       const updated = { ...prev };
-      students.forEach((s) => {
+      filteredStudents.forEach((s) => {
         updated[s.id] = { ...updated[s.id], status };
       });
       return updated;
     });
   };
 
-  const presentCount = students.filter((s) => attendanceEntries[s.id]?.status === 'Present').length;
-  const absentCount = students.filter((s) => attendanceEntries[s.id]?.status === 'Absent').length;
-  const lateCount = students.filter((s) => attendanceEntries[s.id]?.status === 'Late').length;
-  const excusedCount = students.filter((s) => attendanceEntries[s.id]?.status === 'Excused').length;
+  const presentCount = filteredStudents.filter((s) => attendanceEntries[s.id]?.status === 'Present').length;
+  const absentCount = filteredStudents.filter((s) => attendanceEntries[s.id]?.status === 'Absent').length;
+  const lateCount = filteredStudents.filter((s) => attendanceEntries[s.id]?.status === 'Late').length;
+  const excusedCount = filteredStudents.filter((s) => attendanceEntries[s.id]?.status === 'Excused').length;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (students.length === 0) {
-      alert('There are no active students in this class to record attendance for.');
+    if (filteredStudents.length === 0) {
+      alert('There are no active students in this class/batch to record attendance for.');
       return;
     }
 
-    const records: ParticipantAttendanceEntry[] = students.map((s) => ({
+    const records: ParticipantAttendanceEntry[] = filteredStudents.map((s) => ({
       participantId: s.id,
       studentName: s.fullName,
       status: attendanceEntries[s.id]?.status || 'Present',
@@ -84,11 +109,12 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
       classId: targetClass.id,
       className: targetClass.name,
       unit: targetClass.unit,
+      batchName: selectedBatch !== 'ALL' ? selectedBatch : customSessionBatchName || targetClass.batchName || 'General Batch',
       date,
       topicCovered: topicCovered.trim(),
       recordedBy: userSession?.fullName || 'Unit Class Coordinator',
       records,
-      totalStudents: students.length,
+      totalStudents: filteredStudents.length,
       presentCount,
       absentCount,
       lateCount,
@@ -103,7 +129,7 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-fade-in">
-      <div className="bg-white rounded-2xl max-w-2xl w-full border border-slate-200 shadow-2xl overflow-hidden my-6">
+      <div className="bg-white rounded-2xl max-w-3xl w-full border border-slate-200 shadow-2xl overflow-hidden my-6">
         {/* Header */}
         <div
           className="p-5 text-white flex items-center justify-between"
@@ -132,8 +158,9 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
 
         {/* Attendance Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
-          {/* Date & Topic */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200">
+          {/* Top Controls: Date, Topic & Batch Selection */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+            {/* Session Date */}
             <div>
               <label className="block font-bold text-slate-700 mb-1">
                 Session Date <span className="text-rose-500">*</span>
@@ -147,15 +174,39 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
               />
             </div>
 
+            {/* Target Batch Filter */}
+            <div>
+              <label className="block font-bold text-slate-700 mb-1 flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-rose-800" />
+                <span>Student Batch Filter</span>
+              </label>
+              <select
+                value={selectedBatch}
+                onChange={(e) => setSelectedBatch(e.target.value)}
+                className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold bg-white text-slate-800 outline-none cursor-pointer"
+              >
+                <option value="ALL">All Batches ({students.length} Students)</option>
+                {existingBatches.map((b) => {
+                  const count = students.filter((s) => (s.batchName || 'General Batch') === b).length;
+                  return (
+                    <option key={b} value={b}>
+                      {b} ({count} Students)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            {/* Topic Covered */}
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Topic / Lessons Covered Today
+                Lessons / Topic Covered
               </label>
               <input
                 type="text"
                 value={topicCovered}
                 onChange={(e) => setTopicCovered(e.target.value)}
-                placeholder="e.g. Uruttu Kol & Thaalam / Adavu 4 practice"
+                placeholder="e.g. Adavu 4 practice / Chenda Rhythm"
                 className="w-full px-3 py-1.5 border border-slate-200 rounded-lg text-xs bg-white outline-none"
               />
             </div>
@@ -164,13 +215,13 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
           {/* Quick Bulk Action Bar & Stats */}
           <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-slate-500 font-bold">Quick Mark:</span>
+              <span className="text-slate-500 font-bold">Quick Mark ({filteredStudents.length}):</span>
               <button
                 type="button"
                 onClick={() => handleMarkAll('Present')}
                 className="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold text-[11px] transition-colors cursor-pointer"
               >
-                ✓ All Present ({students.length})
+                ✓ All Present
               </button>
               <button
                 type="button"
@@ -191,38 +242,57 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
               <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200 font-bold">
                 Late: {lateCount}
               </span>
+              <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 font-bold">
+                Excused: {excusedCount}
+              </span>
             </div>
           </div>
 
           {/* Student Roster Table */}
-          <div className="border border-slate-200 rounded-xl overflow-hidden max-h-72 overflow-y-auto">
+          <div className="border border-slate-200 rounded-xl overflow-hidden max-h-80 overflow-y-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold sticky top-0 z-10">
+              <thead className="bg-slate-900 border-b border-slate-800 text-white font-bold sticky top-0 z-10 uppercase tracking-wider text-[11px]">
                 <tr>
                   <th className="p-3">#</th>
-                  <th className="p-3">Student Name</th>
+                  <th className="p-3">Student Name &amp; Contact</th>
+                  <th className="p-3">Assigned Batch</th>
                   <th className="p-3 text-center">Attendance Status</th>
                   <th className="p-3">Session Remarks</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 bg-white">
-                {students.length === 0 ? (
+                {filteredStudents.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-8 text-center text-slate-500">
-                      No active students enrolled in this class. Please add students first.
+                    <td colSpan={5} className="p-8 text-center text-slate-500">
+                      No active students found in this selected batch.
                     </td>
                   </tr>
                 ) : (
-                  students.map((student, idx) => {
+                  filteredStudents.map((student, idx) => {
                     const current = attendanceEntries[student.id] || { status: 'Present', remarks: '' };
                     return (
-                      <tr key={student.id} className="hover:bg-slate-50/80 transition-colors">
+                      <tr key={student.id} className="hover:bg-amber-50/40 odd:bg-white even:bg-slate-50/60 transition-colors">
                         <td className="p-3 font-mono text-slate-400 font-bold">{idx + 1}</td>
                         <td className="p-3">
                           <div className="font-bold text-slate-900">{student.fullName}</div>
                           <div className="font-mono text-[10px] text-slate-400">
-                            {student.studentId} • {student.guardianPhone}
+                            {student.studentId} • 📞 {student.guardianPhone}
                           </div>
+                        </td>
+                        <td className="p-3">
+                          {onUpdateParticipantBatch ? (
+                            <input
+                              type="text"
+                              value={student.batchName || ''}
+                              onChange={(e) => onUpdateParticipantBatch(student.id, e.target.value)}
+                              placeholder="e.g. Batch A"
+                              className="px-2 py-1 border border-slate-200 rounded font-semibold text-slate-800 bg-white text-[11px] w-28 focus:w-36 transition-all"
+                            />
+                          ) : (
+                            <span className="inline-block px-2 py-0.5 bg-slate-100 border border-slate-200 text-slate-700 rounded text-[10px] font-bold">
+                              {student.batchName || 'General Batch'}
+                            </span>
+                          )}
                         </td>
                         <td className="p-3 text-center">
                           <div className="inline-flex items-center gap-1 p-0.5 rounded-lg bg-slate-100 border border-slate-200">
@@ -279,12 +349,12 @@ export const AttendanceModal: React.FC<AttendanceModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={students.length === 0}
+              disabled={filteredStudents.length === 0}
               className="px-5 py-2 rounded-xl text-white font-bold transition-all shadow-xs cursor-pointer active:scale-95 flex items-center gap-1.5 disabled:opacity-50"
               style={{ backgroundColor: 'var(--color-primary, #881337)' }}
             >
               <Check className="w-4 h-4 text-amber-300" />
-              <span>Save Session Attendance</span>
+              <span>Save Session Attendance ({filteredStudents.length} Students)</span>
             </button>
           </div>
         </form>

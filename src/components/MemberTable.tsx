@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Member, CustomFieldDefinition, UserSession, hasAdminPrivilege, isUnitOperatorRole } from '../types/member';
-import { formatDate, formatAED, getExpiryStatus } from '../utils/idGenerator';
+import { formatDate, formatAED, getExpiryStatus, isMemberEffectivelyActive, getEffectiveMemberStatus } from '../utils/idGenerator';
+import { CommitteeBadge } from './CommitteeBadge';
 import {
   Search,
   Filter,
@@ -20,6 +21,12 @@ import {
   Building2,
   Send,
   X,
+  Award,
+  CheckCircle2,
+  XCircle,
+  ToggleLeft,
+  ToggleRight,
+  User,
 } from 'lucide-react';
 
 interface MemberTableProps {
@@ -27,6 +34,10 @@ interface MemberTableProps {
   units: string[];
   customFields?: CustomFieldDefinition[];
   userSession?: UserSession;
+  initialGenderFilter?: string;
+  isLadiesWingMode?: boolean;
+  title?: string;
+  subtitle?: string;
   onSelectMember?: (member: Member) => void;
   onViewDetails?: (member: Member) => void;
   onViewIdCard?: (member: Member) => void;
@@ -43,15 +54,29 @@ interface MemberTableProps {
   onOpenUnitManager?: () => void;
   onOpenFieldManager?: () => void;
   onUpdateMemberUnit?: (member: Member, newUnit: string) => void;
+  onToggleMemberStatus?: (member: Member) => void;
+  onOpenCertificateGenerator?: (initialData?: {
+    name?: string;
+    unit?: string;
+    course?: string;
+    memberId?: string;
+    designation?: string;
+    citation?: string;
+    selectedMembers?: Member[];
+  }) => void;
 }
 
-type SortField = 'membershipId' | 'fullName' | 'unit' | 'joinDate' | 'expiryDate' | 'registrationDate' | 'feeAmountAED';
+type SortField = 'membershipId' | 'fullName' | 'unit' | 'joinDate' | 'expiryDate' | 'registrationDate' | 'feeAmountAED' | 'status';
 
 export const MemberTable: React.FC<MemberTableProps> = ({
   members,
   units,
   customFields = [],
   userSession,
+  initialGenderFilter = 'ALL',
+  isLadiesWingMode = false,
+  title,
+  subtitle,
   onSelectMember,
   onViewDetails,
   onViewIdCard,
@@ -68,6 +93,8 @@ export const MemberTable: React.FC<MemberTableProps> = ({
   onOpenUnitManager,
   onOpenFieldManager,
   onUpdateMemberUnit,
+  onToggleMemberStatus,
+  onOpenCertificateGenerator,
 }) => {
   const handleSelectMember = onSelectMember || onViewDetails || (() => {});
   const handleNewMember = onOpenNewMember || onAddNewMember || (() => {});
@@ -76,11 +103,13 @@ export const MemberTable: React.FC<MemberTableProps> = ({
   const isUnitOp = !!userSession && isUnitOperatorRole(userSession.role);
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [unitFilter, setUnitFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('ALL');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [bloodFilter, setBloodFilter] = useState('ALL');
   const [paymentFilter, setPaymentFilter] = useState('ALL');
+  const [genderFilter, setGenderFilter] = useState<string>(isLadiesWingMode ? 'Female' : initialGenderFilter);
 
   const [sortField, setSortField] = useState<SortField>('membershipId');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
@@ -126,15 +155,36 @@ export const MemberTable: React.FC<MemberTableProps> = ({
         (m.profession && m.profession.toLowerCase().includes(q)) ||
         matchesCustom;
 
+      // Status filtering based on effective activity and renewal status
+      const isEffActive = isMemberEffectivelyActive(m);
+      let matchesStatus = true;
+      if (statusFilter === 'ACTIVE') {
+        matchesStatus = isEffActive;
+      } else if (statusFilter === 'INACTIVE') {
+        matchesStatus = !isEffActive && m.status !== 'Pending';
+      } else if (statusFilter === 'PENDING') {
+        matchesStatus = m.status === 'Pending';
+      }
+
       const matchesUnit = unitFilter === 'ALL' || m.unit === unitFilter;
       const matchesType = typeFilter === 'ALL' || m.membershipType === typeFilter;
       const matchesCategory = categoryFilter === 'ALL' || m.registrationCategory === categoryFilter;
       const matchesBlood = bloodFilter === 'ALL' || m.bloodGroup === bloodFilter;
       const matchesPayment = paymentFilter === 'ALL' || m.paymentStatus === paymentFilter;
 
-      return matchesSearch && matchesUnit && matchesType && matchesCategory && matchesBlood && matchesPayment;
+      const genLower = (m.gender || '').toLowerCase().trim();
+      let matchesGender = true;
+      if (genderFilter === 'Female') {
+        matchesGender = genLower === 'female' || genLower.startsWith('f') || genLower === 'woman';
+      } else if (genderFilter === 'Male') {
+        matchesGender = genLower === 'male' || genLower.startsWith('m') || genLower === 'man';
+      } else if (genderFilter === 'Other') {
+        matchesGender = genLower === 'other';
+      }
+
+      return matchesSearch && matchesStatus && matchesUnit && matchesType && matchesCategory && matchesBlood && matchesPayment && matchesGender;
     });
-  }, [members, searchQuery, unitFilter, typeFilter, categoryFilter, bloodFilter, paymentFilter]);
+  }, [members, searchQuery, statusFilter, unitFilter, typeFilter, categoryFilter, bloodFilter, paymentFilter, genderFilter]);
 
   const sortedMembers = useMemo(() => {
     return [...filteredMembers].sort((a, b) => {
@@ -149,6 +199,12 @@ export const MemberTable: React.FC<MemberTableProps> = ({
         const numA = parseInt(a.membershipId.replace(/[^0-9]/g, ''), 10) || 0;
         const numB = parseInt(b.membershipId.replace(/[^0-9]/g, ''), 10) || 0;
         return sortOrder === 'asc' ? numA - numB : numB - numA;
+      }
+
+      if (sortField === 'status') {
+        const effA = isMemberEffectivelyActive(a) ? 'Active' : 'Inactive';
+        const effB = isMemberEffectivelyActive(b) ? 'Active' : 'Inactive';
+        return sortOrder === 'asc' ? effA.localeCompare(effB) : effB.localeCompare(effA);
       }
 
       valA = String(valA || '').toLowerCase();
@@ -178,6 +234,35 @@ export const MemberTable: React.FC<MemberTableProps> = ({
 
   return (
     <div className="space-y-4 pb-12 antialiased">
+      {/* Optional Ladies Wing / Custom Header Banner */}
+      {isLadiesWingMode && (
+        <div className="bg-gradient-to-r from-rose-900 to-pink-900 text-white p-5 rounded-2xl shadow-sm border border-rose-800/40 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center text-pink-200 border border-white/15 shrink-0">
+              <Award className="w-6 h-6 text-pink-300" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-black tracking-tight text-white font-display">
+                  {title || 'Ladies Wing Register'}
+                </h1>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-pink-500/20 text-pink-200 border border-pink-400/30">
+                  Dedicated Wing
+                </span>
+              </div>
+              <p className="text-xs text-pink-100/80 mt-0.5">
+                {subtitle || 'All female members are organized under KCA Fujairah Ladies Wing.'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="bg-black/20 px-3 py-1.5 rounded-xl border border-white/10 text-xs font-mono font-bold text-pink-200">
+              Total Enrolled: {members.filter((m) => (m.gender || '').toLowerCase().startsWith('f') || (m.gender || '').toLowerCase() === 'woman').length}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Top Filter and Action Bar */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -205,23 +290,13 @@ export const MemberTable: React.FC<MemberTableProps> = ({
           <div className="flex items-center gap-2 flex-wrap">
             {isAdmin && onOpenFieldManager && (
               <button
+                type="button"
                 onClick={onOpenFieldManager}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
-                title="Modify field attributes or add custom fields"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition-colors border border-slate-300 shadow-2xs cursor-pointer"
+                title="Customize Member Data Fields & Attributes"
               >
                 <Sliders className="w-3.5 h-3.5" style={{ color: 'var(--color-primary, #881337)' }} />
-                <span>Fields ({customFields.length})</span>
-              </button>
-            )}
-
-            {isAdmin && onOpenUnitManager && (
-              <button
-                onClick={onOpenUnitManager}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition-colors border border-slate-200 cursor-pointer"
-                title="Manage Units (Fujairah, Kalba, Khorfakhan, Dibba)"
-              >
-                <MapPin className="w-3.5 h-3.5" style={{ color: 'var(--color-primary, #881337)' }} />
-                <span>Units ({units.length})</span>
+                <span>Customize Data Fields ({customFields.length})</span>
               </button>
             )}
 
@@ -236,6 +311,18 @@ export const MemberTable: React.FC<MemberTableProps> = ({
               </button>
             )}
 
+            {selectedIds.length > 0 && onOpenCertificateGenerator && (
+              <button
+                type="button"
+                onClick={() => onOpenCertificateGenerator({ selectedMembers: selectedMemberList })}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition-colors shadow-xs cursor-pointer animate-fadeIn"
+                title="Generate certificates for all selected members"
+              >
+                <Award className="w-3.5 h-3.5" />
+                <span>Bulk Certificates ({selectedIds.length})</span>
+              </button>
+            )}
+
             <button
               onClick={() => handleBatchPrint(selectedMemberList.length > 0 ? selectedMemberList : sortedMembers)}
               disabled={sortedMembers.length === 0}
@@ -247,7 +334,7 @@ export const MemberTable: React.FC<MemberTableProps> = ({
 
             <button
               onClick={handleNewMember}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
               style={{ backgroundColor: 'var(--color-primary, #881337)' }}
             >
               <UserPlus className="w-3.5 h-3.5" />
@@ -278,6 +365,26 @@ export const MemberTable: React.FC<MemberTableProps> = ({
             Filters:
           </div>
 
+          {/* Member Status Filter with Color Segregation Count */}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className={`px-2.5 py-1.5 border rounded-lg text-xs font-bold focus:bg-white outline-none cursor-pointer ${
+              statusFilter === 'ACTIVE'
+                ? 'bg-emerald-50 text-emerald-900 border-emerald-400 ring-1 ring-emerald-400/30'
+                : statusFilter === 'INACTIVE'
+                ? 'bg-rose-50 text-rose-900 border-rose-400 ring-1 ring-rose-400/30'
+                : statusFilter === 'PENDING'
+                ? 'bg-amber-50 text-amber-900 border-amber-400'
+                : 'bg-slate-50 text-slate-800 border-slate-200 font-semibold'
+            }`}
+          >
+            <option value="ALL">All Statuses ({members.length})</option>
+            <option value="ACTIVE">🟢 Active Members ({members.filter(isMemberEffectivelyActive).length})</option>
+            <option value="INACTIVE">🔴 Inactive / Unrenewed ({members.filter((m) => !isMemberEffectivelyActive(m) && m.status !== 'Pending').length})</option>
+            <option value="PENDING">🟡 Pending ({members.filter((m) => m.status === 'Pending').length})</option>
+          </select>
+
           {/* Unit Filter - Only show for Admins */}
           {isAdmin ? (
             <select
@@ -299,13 +406,43 @@ export const MemberTable: React.FC<MemberTableProps> = ({
             </div>
           )}
 
+          {/* Gender / Wing Filter */}
+          <select
+            value={genderFilter}
+            onChange={(e) => setGenderFilter(e.target.value)}
+            className={`px-2.5 py-1.5 border rounded-lg text-xs font-semibold focus:bg-white outline-none cursor-pointer ${
+              genderFilter === 'Female'
+                ? 'bg-pink-50 text-pink-900 border-pink-300 ring-1 ring-pink-300/40 font-bold'
+                : genderFilter === 'Male'
+                ? 'bg-sky-50 text-sky-900 border-sky-300 font-bold'
+                : 'bg-slate-50 text-slate-800 border-slate-200'
+            }`}
+          >
+            <option value="ALL">All Genders ({members.length})</option>
+            <option value="Male">👨 Male ({members.filter((m) => (m.gender || '').toLowerCase().startsWith('m') || (m.gender || '').toLowerCase() === 'man').length})</option>
+            <option value="Female">👩 Female / Ladies Wing ({members.filter((m) => (m.gender || '').toLowerCase().startsWith('f') || (m.gender || '').toLowerCase() === 'woman').length})</option>
+            <option value="Other">Other</option>
+          </select>
+
+          {/* Member Registration Category Filter (Renewal vs New) */}
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-800 bg-slate-50 font-semibold focus:bg-white outline-none cursor-pointer"
+          >
+            <option value="ALL">All Categories (Renewal / New)</option>
+            <option value="Renewal">Renewal Members</option>
+            <option value="New">New Registrations</option>
+            <option value="Lifetime">Lifetime Members</option>
+          </select>
+
           {/* Membership Type */}
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
             className="px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-800 bg-slate-50 font-medium focus:bg-white outline-none cursor-pointer"
           >
-            <option value="ALL">All Types</option>
+            <option value="ALL">All Member Types</option>
             <option value="General Member">General Member</option>
             <option value="Executive Member">Executive Member</option>
             <option value="Central Committee Member">Central Committee</option>
@@ -372,6 +509,16 @@ export const MemberTable: React.FC<MemberTableProps> = ({
                 >
                   <div className="flex items-center gap-1">
                     <span>Member Details</span>
+                    <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                  </div>
+                </th>
+                {/* Status Column Header */}
+                <th
+                  onClick={() => handleSort('status')}
+                  className="p-3.5 cursor-pointer hover:bg-slate-100 transition-colors text-center"
+                >
+                  <div className="flex items-center justify-center gap-1">
+                    <span>Status</span>
                     <ArrowUpDown className="w-3 h-3 text-slate-400" />
                   </div>
                 </th>
@@ -474,12 +621,21 @@ export const MemberTable: React.FC<MemberTableProps> = ({
                       {/* Member Info */}
                       <td className="p-3.5 min-w-[220px]">
                         <div className="flex items-center gap-3">
-                          <img
-                            src={m.photoUrl}
-                            alt={m.fullName}
-                            className="w-10 h-10 rounded-lg object-cover border border-slate-200 shadow-2xs shrink-0"
-                          />
-                          <div className="min-w-0">
+                          <div className="w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shadow-2xs shrink-0 bg-slate-100 flex items-center justify-center">
+                            {m.photoUrl ? (
+                              <img
+                                src={m.photoUrl}
+                                alt={m.fullName}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <User className="w-5 h-5 text-slate-400" />
+                            )}
+                          </div>
+                          <div className="min-w-0 space-y-0.5">
                             <div
                               onClick={() => handleSelectMember(m)}
                               className="font-bold text-slate-900 hover:underline cursor-pointer truncate"
@@ -487,13 +643,68 @@ export const MemberTable: React.FC<MemberTableProps> = ({
                             >
                               {m.fullName}
                             </div>
-                            <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                            <div className="text-[11px] text-slate-500 font-mono">
                               {m.phoneUAE}
                             </div>
                             <div className="text-[10px] text-slate-400 truncate">
                               {m.membershipType} &bull; {m.registrationCategory}
                             </div>
+                            {/* Committee Badge */}
+                            {(m.subcommittee || m.designation || m.committeeTier) && (
+                              <div className="pt-0.5">
+                                <CommitteeBadge member={m} size="sm" />
+                              </div>
+                            )}
                           </div>
+                        </div>
+                      </td>
+
+                      {/* Status with Color Segregation and Quick One-Click Toggle */}
+                      <td className="p-3.5 whitespace-nowrap text-center">
+                        <div className="flex flex-col items-center gap-1">
+                          {isMemberEffectivelyActive(m) ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs"
+                              title="Active Member (Renewed & Valid)"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-emerald-600"></span>
+                              <span>Active</span>
+                            </span>
+                          ) : m.status === 'Pending' ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-100 text-amber-900 border border-amber-300"
+                              title="Pending Approval"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-amber-600"></span>
+                              <span>Pending</span>
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-bold bg-rose-100 text-rose-800 border border-rose-300 shadow-2xs"
+                              title={expiry.isExpired ? `Inactive: Membership Expired (${formatDate(m.expiryDate)})` : 'Inactive Member'}
+                            >
+                              <span className="w-2 h-2 rounded-full bg-rose-600"></span>
+                              <span>Inactive</span>
+                            </span>
+                          )}
+
+                          {/* Quick One-Click Active/Inactive Switch Button */}
+                          {onToggleMemberStatus && (
+                            <button
+                              type="button"
+                              onClick={() => onToggleMemberStatus(m)}
+                              className={`text-[10px] font-bold underline px-1 py-0.5 rounded hover:bg-slate-100 transition-colors cursor-pointer ${
+                                isMemberEffectivelyActive(m) ? 'text-rose-600 hover:text-rose-800' : 'text-emerald-700 hover:text-emerald-900'
+                              }`}
+                              title={
+                                isMemberEffectivelyActive(m)
+                                  ? 'Click to Mark Inactive'
+                                  : 'Click to Mark Active & Reactivate'
+                              }
+                            >
+                              {isMemberEffectivelyActive(m) ? 'Mark Inactive' : 'Mark Active'}
+                            </button>
+                          )}
                         </div>
                       </td>
 
@@ -582,15 +793,35 @@ export const MemberTable: React.FC<MemberTableProps> = ({
                         </span>
                       </td>
 
-                      {/* Fee in AED */}
+                      {/* Fee in AED with Color Segregation */}
                       <td className="p-3.5 text-right whitespace-nowrap">
                         <div className="font-mono font-bold text-slate-900">
                           {formatAED(m.feeAmountAED)}
                         </div>
-                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                          {m.paymentStatus}
-                        </span>
+                        <div className="flex items-center justify-end gap-1 mt-0.5">
+                          <span
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                              m.paymentStatus === 'Paid'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                : m.paymentStatus === 'Pending'
+                                ? 'bg-amber-100 text-amber-900 border-amber-300 font-extrabold'
+                                : 'bg-slate-100 text-slate-700 border-slate-300'
+                            }`}
+                          >
+                            {m.paymentStatus}
+                          </span>
+                          <span
+                            className={`text-[9px] font-semibold px-1 py-0.5 rounded ${
+                              m.registrationCategory === 'Renewal'
+                                ? 'bg-orange-50 text-orange-800 border border-orange-200'
+                                : 'bg-blue-50 text-blue-800 border border-blue-200'
+                            }`}
+                          >
+                            {m.registrationCategory === 'Renewal' ? 'Renewal' : 'New'}
+                          </span>
+                        </div>
                       </td>
+
 
                       {/* Actions */}
                       <td className="p-3.5 text-center whitespace-nowrap">
@@ -621,6 +852,26 @@ export const MemberTable: React.FC<MemberTableProps> = ({
                               title="Send WhatsApp Card & Message"
                             >
                               <Send className="w-4 h-4" />
+                            </button>
+                          )}
+
+                          {onOpenCertificateGenerator && (
+                            <button
+                              onClick={() =>
+                                onOpenCertificateGenerator({
+                                  name: m.fullName,
+                                  unit: m.unit,
+                                  memberId: m.membershipId,
+                                  designation: m.designation,
+                                  citation: m.designation
+                                    ? `in recognition of exceptional service as ${m.designation} (${m.subcommittee || m.unit})`
+                                    : undefined,
+                                })
+                              }
+                              className="p-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition-colors cursor-pointer"
+                              title="Generate Official KCA Certificate"
+                            >
+                              <Award className="w-4 h-4" />
                             </button>
                           )}
 

@@ -43,9 +43,11 @@ import {
   clearActiveUserSession,
   saveCustomLogo,
 } from './utils/storage';
+import { hydrateMissingPhotosFromDb, optimizeExistingMemberPhotos, loadMembersFromIndexedDb } from './utils/indexedDbStorage';
 import {
   loadFinanceTransactions,
   saveFinanceTransactions,
+  loadFinancialParticulars,
   getFinanceLedgerUnitForMember,
   isCentralCommitteeMember,
 } from './utils/financeStorage';
@@ -64,6 +66,13 @@ import {
   saveAttendance,
 } from './utils/classesStorage';
 import {
+  loadContacts,
+  saveContacts,
+} from './utils/contactStorage';
+import { ContactEntry } from './types/contact';
+import { GeneralDocument } from './types/document';
+import { loadDocuments, saveDocuments } from './utils/documentStorage';
+import {
   startCloudSyncManager,
   pushCloudEntity,
   pushFullRestore,
@@ -73,6 +82,7 @@ import {
 import { Navbar, NavTab } from './components/Navbar';
 import { Dashboard } from './components/Dashboard';
 import { MemberTable } from './components/MemberTable';
+import { ContactBankView } from './components/ContactBankView';
 import { IdCardsView } from './components/IdCardsView';
 import { FinanceView } from './components/FinanceView';
 import { InventoryView } from './components/InventoryView';
@@ -104,10 +114,15 @@ import { InventoryIssueModal } from './components/InventoryIssueModal';
 import { ClassFormModal } from './components/ClassFormModal';
 import { ParticipantFormModal } from './components/ParticipantFormModal';
 import { AttendanceModal } from './components/AttendanceModal';
+import { ContactFormModal } from './components/ContactFormModal';
+import { CertificateGeneratorModal } from './components/CertificateGeneratorModal';
+import { LetterPadView } from './components/LetterPadView';
+import { DocumentsView } from './components/DocumentsView';
+import { DocumentFormModal } from './components/DocumentFormModal';
+import { DocumentPreviewModal } from './components/DocumentPreviewModal';
 
-import { loadSavedTheme, applyThemeToCss } from './utils/theme';
-import { decodeMemberFromPayload, createFullMemberFromPartial, getRenewalExpiryDate } from './utils/idGenerator';
-import confetti from 'canvas-confetti';
+import { loadSavedTheme, applyThemeToCss, getIsDarkMode } from './utils/theme';
+import { decodeMemberFromPayload, createFullMemberFromPartial, getRenewalExpiryDate, isMemberEffectivelyActive } from './utils/idGenerator';
 
 const STORAGE_KEY_UNITS = 'kca_fujairah_units_v1';
 const SYNC_CHANNEL_NAME = 'kca_fujairah_sync_channel';
@@ -299,6 +314,44 @@ export default function App() {
   const [showAttendanceModal, setShowAttendanceModal] = useState(false);
   const [targetAttendanceClass, setTargetAttendanceClass] = useState<CulturalClass | null>(null);
 
+  // ---------------- CONTACT BANK STATE ----------------
+  const [contacts, setContacts] = useState<ContactEntry[]>(() => {
+    return loadContacts();
+  });
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [editingContact, setEditingContact] = useState<ContactEntry | null>(null);
+
+  // ---------------- GENERAL DOCUMENTS STORE STATE ----------------
+  const [documents, setDocuments] = useState<GeneralDocument[]>(() => {
+    return loadDocuments();
+  });
+  const [showDocumentModal, setShowDocumentModal] = useState(false);
+  const [editingDocument, setEditingDocument] = useState<GeneralDocument | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<GeneralDocument | null>(null);
+  const [showDocumentPreviewModal, setShowDocumentPreviewModal] = useState(false);
+
+  const handleSaveDocument = (doc: GeneralDocument) => {
+    setDocuments((prev) => {
+      const idx = prev.findIndex((d) => d.id === doc.id);
+      let updated: GeneralDocument[];
+      if (idx >= 0) {
+        updated = prev.map((d, i) => (i === idx ? doc : d));
+      } else {
+        updated = [doc, ...prev];
+      }
+      saveDocuments(updated);
+      return updated;
+    });
+  };
+
+  const handleDeleteDocument = (id: string) => {
+    setDocuments((prev) => {
+      const updated = prev.filter((d) => d.id !== id);
+      saveDocuments(updated);
+      return updated;
+    });
+  };
+
   // Modals and Active Member State
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -331,6 +384,13 @@ export default function App() {
   const [showMailboxModal, setShowMailboxModal] = useState(false);
   const [showReportGeneratorModal, setShowReportGeneratorModal] = useState(false);
   const [showThemeModal, setShowThemeModal] = useState(false);
+  const [showCertificateModal, setShowCertificateModal] = useState(false);
+  const [certRecipientName, setCertRecipientName] = useState('');
+  const [certMemberId, setCertMemberId] = useState('');
+  const [certCitation, setCertCitation] = useState('');
+  const [certUnit, setCertUnit] = useState('Fujairah');
+  const [certCourse, setCertCourse] = useState('');
+  const [bulkSelectedMembersForCert, setBulkSelectedMembersForCert] = useState<Member[]>([]);
 
   // If embedded member payload was passed in the verification link, save/merge into local state
   useEffect(() => {
@@ -385,9 +445,15 @@ export default function App() {
     };
   }, []);
 
-  // Apply active theme to CSS variables on initial mount
+  // Apply active theme and dark/light mode on initial mount
   useEffect(() => {
     applyThemeToCss(loadSavedTheme());
+    const isDark = getIsDarkMode();
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
   }, []);
 
   // Centralized Live Cloud Sync Manager (Multi-User / Multi-Location / Multi-Device)
@@ -490,6 +556,18 @@ export default function App() {
         const freshFields = loadCustomFields();
         if (freshFields) setCustomFields(freshFields);
       }
+      if (!type || type === 'CONTACTS_SYNC' || type === 'ALL_SYNC') {
+        const freshContacts = loadContacts();
+        if (freshContacts) setContacts(freshContacts);
+      }
+      if (!type || type === 'DOCUMENTS_SYNC' || type === 'ALL_SYNC') {
+        const freshDocs = loadDocuments();
+        if (freshDocs) setDocuments(freshDocs);
+      }
+      if (!type || type === 'AUDIT_SYNC' || type === 'ALL_SYNC') {
+        const freshLogs = loadAuditLogs();
+        if (freshLogs) setAuditLogs(freshLogs);
+      }
     };
 
     let channel: BroadcastChannel | null = null;
@@ -511,13 +589,59 @@ export default function App() {
       handleSyncPayload(customEvt?.detail?.type);
     };
 
+    const handleFullSystemRestored = () => {
+      handleSyncPayload('ALL_SYNC');
+    };
+
     window.addEventListener('storage', handleStorageEvent);
     window.addEventListener('kca_fujairah_sync', handleCustomSync);
+    window.addEventListener('kca-full-system-restored', handleFullSystemRestored);
 
     return () => {
       if (channel) channel.close();
       window.removeEventListener('storage', handleStorageEvent);
       window.removeEventListener('kca_fujairah_sync', handleCustomSync);
+      window.removeEventListener('kca-full-system-restored', handleFullSystemRestored);
+    };
+  }, []);
+
+  // Hydrate missing photos from persistent IndexedDB and optimize heavy historical images
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        let currentList = members;
+
+        // Step 0: If localStorage members was empty, restore full database from IndexedDB
+        if (currentList.length === 0) {
+          const idbMembers = await loadMembersFromIndexedDb();
+          if (idbMembers && idbMembers.length > 0) {
+            currentList = idbMembers;
+          }
+        }
+
+        // Step 1: Hydrate any missing photos from IndexedDB
+        const { hydratedMembers, restoredCount } = await hydrateMissingPhotosFromDb(currentList);
+        currentList = hydratedMembers;
+
+        // Step 2: Auto-optimize any legacy oversized images (>40KB) and mirror to IndexedDB
+        const { members: optimizedMembers, optimizedCount } = await optimizeExistingMemberPhotos(currentList);
+        if (optimizedCount > 0) {
+          currentList = optimizedMembers;
+        }
+
+        if (isMounted && (restoredCount > 0 || optimizedCount > 0 || (members.length === 0 && currentList.length > 0))) {
+          setMembers(currentList);
+          saveMembersToStorage(currentList);
+          console.log(`[Storage] Photo persistence active: ${restoredCount} restored from IndexedDB, ${optimizedCount} compressed.`);
+        }
+      } catch (err) {
+        console.warn('Storage photo hydration notice:', err);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
     };
   }, []);
 
@@ -649,7 +773,6 @@ export default function App() {
 
     setShowFormModal(false);
     setEditingMember(null);
-    confetti({ particleCount: 40, spread: 60 });
   };
 
   // Handler: Update Member in list
@@ -703,6 +826,19 @@ export default function App() {
     broadcastSync('MEMBERS_SYNC');
     pushCloudEntity('members', updated, userSession?.username || 'User');
 
+    // Clean up all transient state pointers and close open editing modals
+    if (selectedMember && selectedMember.id === memberId) {
+      setSelectedMember(null);
+      setShowDetailsModal(false);
+    }
+    if (editingMember && editingMember.id === memberId) {
+      setEditingMember(null);
+      setShowFormModal(false);
+    }
+    if (receiptMember && receiptMember.id === memberId) {
+      setReceiptMember(null);
+    }
+
     if (memberToDelete) {
       const logItem: AuditLogItem = {
         id: `log-${Date.now()}`,
@@ -727,6 +863,18 @@ export default function App() {
     saveMembersToStorage(updated);
     broadcastSync('MEMBERS_SYNC');
     pushCloudEntity('members', updated, userSession?.username || 'User');
+
+    if (selectedMember && memberIds.includes(selectedMember.id)) {
+      setSelectedMember(null);
+      setShowDetailsModal(false);
+    }
+    if (editingMember && memberIds.includes(editingMember.id)) {
+      setEditingMember(null);
+      setShowFormModal(false);
+    }
+    if (receiptMember && memberIds.includes(receiptMember.id)) {
+      setReceiptMember(null);
+    }
 
     const logItem: AuditLogItem = {
       id: `log-${Date.now()}`,
@@ -764,6 +912,7 @@ export default function App() {
 
     const updatedMember: Member = {
       ...memberToRenew,
+      registrationCategory: 'Renewal',
       status: 'Active',
       paymentStatus: 'Paid',
       expiryDate: renewalExpiryDate,
@@ -772,6 +921,7 @@ export default function App() {
       paymentHistory: [newPaymentRecord, ...(memberToRenew.paymentHistory || [])],
       updatedAt: now.toISOString(),
     };
+
 
     handleUpdateMember(updatedMember);
 
@@ -818,7 +968,6 @@ export default function App() {
 
     setReceiptMember(updatedMember);
     setShowReceiptModal(true);
-    confetti({ particleCount: 50, spread: 70 });
   };
 
   // Handler: Update Unit for member
@@ -973,7 +1122,6 @@ export default function App() {
     broadcastSync('ACCOUNTS_SYNC');
     pushCloudEntity('accounts', updated, userSession?.username || 'User');
     setShowChangePasswordModal(false);
-    confetti({ particleCount: 30, spread: 50 });
   };
 
   // Handler: Unit Management
@@ -989,7 +1137,12 @@ export default function App() {
   };
 
   const handleRenameUnit = (oldName: string, newName: string) => {
-    const updatedUnits = units.map((u) => (u === oldName ? newName : u));
+    if (!oldName || !newName || oldName.trim().toLowerCase() === newName.trim().toLowerCase()) return;
+    const cleanOld = oldName.trim();
+    const cleanNew = newName.trim();
+
+    // 1. Units array
+    const updatedUnits = units.map((u) => (u.toLowerCase() === cleanOld.toLowerCase() ? cleanNew : u));
     setUnits(updatedUnits);
     try {
       localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(updatedUnits));
@@ -997,13 +1150,77 @@ export default function App() {
     broadcastSync('UNITS_SYNC');
     pushCloudEntity('units', updatedUnits, userSession?.username || 'User');
 
+    // 2. Members
     const updatedMembers = members.map((m) =>
-      m.unit === oldName ? { ...m, unit: newName, updatedAt: new Date().toISOString() } : m
+      m.unit.toLowerCase() === cleanOld.toLowerCase() ? { ...m, unit: cleanNew, updatedAt: new Date().toISOString() } : m
     );
     setMembers(updatedMembers);
     saveMembersToStorage(updatedMembers);
     broadcastSync('MEMBERS_SYNC');
     pushCloudEntity('members', updatedMembers, userSession?.username || 'User');
+
+    // 3. Finance Transactions
+    const updatedFinance = financeTransactions.map((f) =>
+      f.unit.toLowerCase() === cleanOld.toLowerCase() ? { ...f, unit: cleanNew, updatedAt: new Date().toISOString() } : f
+    );
+    setFinanceTransactions(updatedFinance);
+    saveFinanceTransactions(updatedFinance);
+    broadcastSync('FINANCE_SYNC');
+    pushCloudEntity('finance', updatedFinance, userSession?.username || 'User');
+
+    // 4. Inventory Items & Logs
+    const updatedInventory = inventoryItems.map((i) =>
+      i.unit.toLowerCase() === cleanOld.toLowerCase() ? { ...i, unit: cleanNew, updatedAt: new Date().toISOString() } : i
+    );
+    setInventoryItems(updatedInventory);
+    saveInventoryItems(updatedInventory);
+    broadcastSync('INVENTORY_SYNC');
+    pushCloudEntity('inventory', updatedInventory, userSession?.username || 'User');
+
+    // 5. Classes & Participants & Attendance
+    const updatedClasses = classes.map((c) =>
+      c.unit.toLowerCase() === cleanOld.toLowerCase() ? { ...c, unit: cleanNew, updatedAt: new Date().toISOString() } : c
+    );
+    setClasses(updatedClasses);
+    saveClasses(updatedClasses);
+    broadcastSync('CLASSES_SYNC');
+    pushCloudEntity('classes', updatedClasses, userSession?.username || 'User');
+
+    const updatedParticipants = classParticipants.map((p) =>
+      p.unit.toLowerCase() === cleanOld.toLowerCase() ? { ...p, unit: cleanNew, updatedAt: new Date().toISOString() } : p
+    );
+    setClassParticipants(updatedParticipants);
+    saveParticipants(updatedParticipants);
+    broadcastSync('PARTICIPANTS_SYNC');
+    pushCloudEntity('participants', updatedParticipants, userSession?.username || 'User');
+
+    const updatedAttendance = classAttendance.map((a) =>
+      a.unit.toLowerCase() === cleanOld.toLowerCase() ? { ...a, unit: cleanNew } : a
+    );
+    setClassAttendance(updatedAttendance);
+    saveAttendance(updatedAttendance);
+
+    // 6. Admin Accounts
+    const updatedAccounts = adminAccounts.map((a) =>
+      a.unit && a.unit.toLowerCase() === cleanOld.toLowerCase() ? { ...a, unit: cleanNew } : a
+    );
+    setAdminAccounts(updatedAccounts);
+    saveAdminAccounts(updatedAccounts);
+    broadcastSync('ACCOUNTS_SYNC');
+    pushCloudEntity('accounts', updatedAccounts, userSession?.username || 'User');
+
+    // 7. Audit Log
+    const logItem: AuditLogItem = {
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: 'UPDATE',
+      performedBy: userSession?.fullName || 'System',
+      details: `Renamed Unit "${cleanOld}" to "${cleanNew}" across all membership, finance, asset, and class registers.`,
+    };
+    const updatedLogs = [logItem, ...auditLogs];
+    setAuditLogs(updatedLogs);
+    saveAuditLogs(updatedLogs);
+    pushCloudEntity('audit', updatedLogs, userSession?.username || 'User');
   };
 
   const handleDeleteUnit = (unitName: string) => {
@@ -1044,6 +1261,156 @@ export default function App() {
     saveCustomFields(reorderedFields);
     broadcastSync('FIELDS_SYNC');
     pushCloudEntity('customFields', reorderedFields, userSession?.username || 'User');
+  };
+
+  // Handler: Smart Merge Database from User JSON without corrupting existing Admin data
+  const handleSmartMergeBackup = (importedData: any) => {
+    let addedMembersCount = 0;
+    let updatedMembersCount = 0;
+
+    // 1. Smart Merge Members
+    const importedMembers: Member[] = Array.isArray(importedData)
+      ? importedData
+      : Array.isArray(importedData?.members)
+      ? importedData.members
+      : [];
+
+    let currentMembers = [...members];
+    if (importedMembers.length > 0) {
+      importedMembers.forEach((imp) => {
+        const existingIdx = currentMembers.findIndex(
+          (m) =>
+            m.id === imp.id ||
+            (imp.membershipId && m.membershipId === imp.membershipId) ||
+            (imp.emiratesId && m.emiratesId && m.emiratesId.trim() === imp.emiratesId.trim())
+        );
+        if (existingIdx >= 0) {
+          currentMembers[existingIdx] = {
+            ...currentMembers[existingIdx],
+            ...imp,
+            updatedAt: new Date().toISOString(),
+          };
+          updatedMembersCount++;
+        } else {
+          currentMembers.push(imp);
+          addedMembersCount++;
+        }
+      });
+      setMembers(currentMembers);
+      saveMembersToStorage(currentMembers);
+      broadcastSync('MEMBERS_SYNC');
+      pushCloudEntity('members', currentMembers, userSession?.username || 'Admin');
+    }
+
+    // 2. Smart Merge Finance Transactions
+    const importedFinance: FinanceTransaction[] = Array.isArray(importedData?.financeTransactions)
+      ? importedData.financeTransactions
+      : [];
+    let currentFinance = [...financeTransactions];
+    if (importedFinance.length > 0) {
+      importedFinance.forEach((imp) => {
+        const existingIdx = currentFinance.findIndex(
+          (f) => f.id === imp.id || (imp.receiptNumber && f.receiptNumber === imp.receiptNumber)
+        );
+        if (existingIdx >= 0) {
+          currentFinance[existingIdx] = { ...currentFinance[existingIdx], ...imp, updatedAt: new Date().toISOString() };
+        } else {
+          currentFinance.push(imp);
+        }
+      });
+      setFinanceTransactions(currentFinance);
+      saveFinanceTransactions(currentFinance);
+      broadcastSync('FINANCE_SYNC');
+      pushCloudEntity('finance', currentFinance, userSession?.username || 'Admin');
+    }
+
+    // 3. Smart Merge Inventory Items
+    const importedInventory: InventoryItem[] = Array.isArray(importedData?.inventoryItems)
+      ? importedData.inventoryItems
+      : [];
+    let currentInventory = [...inventoryItems];
+    if (importedInventory.length > 0) {
+      importedInventory.forEach((imp) => {
+        const existingIdx = currentInventory.findIndex(
+          (i) => i.id === imp.id || (imp.itemCode && i.itemCode === imp.itemCode)
+        );
+        if (existingIdx >= 0) {
+          currentInventory[existingIdx] = { ...currentInventory[existingIdx], ...imp, updatedAt: new Date().toISOString() };
+        } else {
+          currentInventory.push(imp);
+        }
+      });
+      setInventoryItems(currentInventory);
+      saveInventoryItems(currentInventory);
+      broadcastSync('INVENTORY_SYNC');
+      pushCloudEntity('inventory', currentInventory, userSession?.username || 'Admin');
+    }
+
+    // 4. Smart Merge Classes & Participants
+    const importedClasses: CulturalClass[] = Array.isArray(importedData?.classes) ? importedData.classes : [];
+    let currentClasses = [...classes];
+    if (importedClasses.length > 0) {
+      importedClasses.forEach((imp) => {
+        const existingIdx = currentClasses.findIndex((c) => c.id === imp.id || (imp.code && c.code === imp.code));
+        if (existingIdx >= 0) {
+          currentClasses[existingIdx] = { ...currentClasses[existingIdx], ...imp, updatedAt: new Date().toISOString() };
+        } else {
+          currentClasses.push(imp);
+        }
+      });
+      setClasses(currentClasses);
+      saveClasses(currentClasses);
+      broadcastSync('CLASSES_SYNC');
+      pushCloudEntity('classes', currentClasses, userSession?.username || 'Admin');
+    }
+
+    const importedParticipants: ClassParticipant[] = Array.isArray(importedData?.classParticipants)
+      ? importedData.classParticipants
+      : Array.isArray(importedData?.participants)
+      ? importedData.participants
+      : [];
+    let currentParticipants = [...classParticipants];
+    if (importedParticipants.length > 0) {
+      importedParticipants.forEach((imp) => {
+        const existingIdx = currentParticipants.findIndex(
+          (p) => p.id === imp.id || (imp.studentId && p.studentId === imp.studentId)
+        );
+        if (existingIdx >= 0) {
+          currentParticipants[existingIdx] = { ...currentParticipants[existingIdx], ...imp, updatedAt: new Date().toISOString() };
+        } else {
+          currentParticipants.push(imp);
+        }
+      });
+      setClassParticipants(currentParticipants);
+      saveParticipants(currentParticipants);
+      broadcastSync('PARTICIPANTS_SYNC');
+      pushCloudEntity('participants', currentParticipants, userSession?.username || 'Admin');
+    }
+
+    // 5. Smart Merge Units
+    const importedUnits: string[] = Array.isArray(importedData?.units) ? importedData.units : [];
+    if (importedUnits.length > 0) {
+      const mergedUnits = Array.from(new Set([...units, ...importedUnits]));
+      setUnits(mergedUnits);
+      localStorage.setItem(STORAGE_KEY_UNITS, JSON.stringify(mergedUnits));
+      broadcastSync('UNITS_SYNC');
+      pushCloudEntity('units', mergedUnits, userSession?.username || 'Admin');
+    }
+
+    // 6. Audit Log
+    const logItem: AuditLogItem = {
+      id: `log-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      action: 'IMPORT',
+      performedBy: userSession?.fullName || 'Admin',
+      details: `Smart Merged JSON data: Added ${addedMembersCount} new members, updated ${updatedMembersCount} existing records without data loss on Admin PC.`,
+    };
+    const updatedLogs = [logItem, ...auditLogs];
+    setAuditLogs(updatedLogs);
+    saveAuditLogs(updatedLogs);
+    pushCloudEntity('audit', updatedLogs, userSession?.username || 'Admin');
+
+    return { addedMembersCount, updatedMembersCount, totalMembers: currentMembers.length };
   };
 
   // Handler: Restore Complete Database from Backup JSON
@@ -1103,7 +1470,6 @@ export default function App() {
 
     setShowFinanceFormModal(false);
     setEditingFinanceTransaction(null);
-    confetti({ particleCount: 35, spread: 60 });
   };
 
   const handleDeleteFinanceTransaction = (id: string) => {
@@ -1113,6 +1479,15 @@ export default function App() {
     saveFinanceTransactions(updated);
     broadcastSync('FINANCE_SYNC');
     pushCloudEntity('finance', updated, userSession?.username || 'User');
+
+    if (editingFinanceTransaction && editingFinanceTransaction.id === id) {
+      setEditingFinanceTransaction(null);
+      setShowFinanceFormModal(false);
+    }
+    if (selectedFinanceReceipt && selectedFinanceReceipt.id === id) {
+      setSelectedFinanceReceipt(null);
+      setShowFinanceReceiptModal(false);
+    }
 
     if (toDelete) {
       const logItem: AuditLogItem = {
@@ -1173,7 +1548,6 @@ export default function App() {
 
     setShowInventoryItemModal(false);
     setEditingInventoryItem(null);
-    confetti({ particleCount: 30, spread: 55 });
   };
 
   const handleDeleteInventoryItem = (itemId: string) => {
@@ -1236,7 +1610,6 @@ export default function App() {
 
     setShowInventoryIssueModal(false);
     setTargetIssueItem(null);
-    confetti({ particleCount: 35, spread: 60 });
   };
 
   // ---------------- CLASSES & ATTENDANCE HANDLERS ----------------
@@ -1278,7 +1651,6 @@ export default function App() {
 
     setShowClassFormModal(false);
     setEditingClass(null);
-    confetti({ particleCount: 35, spread: 60 });
   };
 
   const handleDeleteClass = (classId: string) => {
@@ -1330,12 +1702,55 @@ export default function App() {
     broadcastSync('CLASSES_SYNC');
     pushCloudEntity('classParticipants', updated, userSession?.username || 'User');
 
+    // Link Student Fee to Finance Ledger if marked Paid
+    if (savedParticipant.feeStatus === 'Paid' && (savedParticipant.feeAmountAED || 0) > 0) {
+      const receiptNo = savedParticipant.receiptNumber || `REC-STU-${savedParticipant.studentId}`;
+      const existingTxIndex = financeTransactions.findIndex(
+        (t) =>
+          t.receiptNumber === receiptNo ||
+          (t.studentId === savedParticipant.studentId && t.date === savedParticipant.paymentDate)
+      );
+
+      const txData: FinanceTransaction = {
+        id: existingTxIndex >= 0 ? financeTransactions[existingTxIndex].id : `tx-stu-${Date.now()}`,
+        receiptNumber: receiptNo,
+        date: savedParticipant.paymentDate || new Date().toISOString().split('T')[0],
+        type: 'INCOME',
+        category: 'Class / Tuition Fee',
+        particulars: `Cultural Class Tuition Fee: ${savedParticipant.className} (${savedParticipant.studentId}) - Student: ${savedParticipant.fullName}`,
+        amountAED: Number(savedParticipant.feeAmountAED) || 0,
+        unit: savedParticipant.unit || 'Fujairah',
+        paymentMethod: (savedParticipant.paymentMethod as any) || 'Cash',
+        partyName: savedParticipant.fullName,
+        contactNumber: savedParticipant.guardianPhone || savedParticipant.whatsapp,
+        referenceNumber: savedParticipant.studentId,
+        notes: `Class: ${savedParticipant.className}, Enrolled on: ${savedParticipant.joiningDate}`,
+        status: 'Completed',
+        recordedBy: userSession?.fullName || 'System',
+        studentId: savedParticipant.studentId,
+        classId: savedParticipant.classId,
+        createdAt: existingTxIndex >= 0 ? financeTransactions[existingTxIndex].createdAt : new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      let updatedFinance: FinanceTransaction[];
+      if (existingTxIndex >= 0) {
+        updatedFinance = financeTransactions.map((t, idx) => (idx === existingTxIndex ? txData : t));
+      } else {
+        updatedFinance = [txData, ...financeTransactions];
+      }
+      setFinanceTransactions(updatedFinance);
+      saveFinanceTransactions(updatedFinance);
+      broadcastSync('FINANCE_SYNC');
+      pushCloudEntity('finance', updatedFinance, userSession?.username || 'User');
+    }
+
     const logItem: AuditLogItem = {
       id: `log-${Date.now()}`,
       timestamp: new Date().toISOString(),
       action: isEditing ? 'UPDATE' : 'CREATE',
       performedBy: userSession?.fullName || 'System',
-      details: `${isEditing ? 'Updated' : 'Enrolled'} student: ${savedParticipant.fullName} (${savedParticipant.studentId}) in ${savedParticipant.className} - Unit: ${savedParticipant.unit}`,
+      details: `${isEditing ? 'Updated' : 'Enrolled'} student: ${savedParticipant.fullName} (${savedParticipant.studentId}) in ${savedParticipant.className} - Unit: ${savedParticipant.unit} (Fee: AED ${savedParticipant.feeAmountAED} ${savedParticipant.feeStatus === 'Paid' ? 'Paid & Linked to Finance' : 'Pending'})`,
     };
     const updatedLogs = [logItem, ...auditLogs];
     setAuditLogs(updatedLogs);
@@ -1344,7 +1759,6 @@ export default function App() {
 
     setShowParticipantFormModal(false);
     setEditingParticipant(null);
-    confetti({ particleCount: 35, spread: 60 });
   };
 
   const handleDeleteParticipant = (participantId: string) => {
@@ -1375,6 +1789,16 @@ export default function App() {
     setShowAttendanceModal(true);
   };
 
+  const handleUpdateParticipantBatch = (participantId: string, newBatch: string) => {
+    const updated = classParticipants.map((p) =>
+      p.id === participantId ? { ...p, batchName: newBatch, updatedAt: new Date().toISOString() } : p
+    );
+    setClassParticipants(updated);
+    saveParticipants(updated);
+    broadcastSync('PARTICIPANTS_SYNC');
+    pushCloudEntity('participants', updated, userSession?.username || 'User');
+  };
+
   const handleSaveAttendance = (record: ClassAttendanceRecord) => {
     const updated = [record, ...classAttendance];
     setClassAttendance(updated);
@@ -1396,7 +1820,6 @@ export default function App() {
 
     setShowAttendanceModal(false);
     setTargetAttendanceClass(null);
-    confetti({ particleCount: 40, spread: 65 });
   };
 
   // If public verification URL was opened, render standalone Public Verification Screen
@@ -1453,8 +1876,8 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased selection:bg-[#8b0000] selection:text-white">
-      {/* Top Main Navigation */}
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col lg:flex-row font-sans antialiased selection:bg-[#8b0000] selection:text-white transition-colors duration-150">
+      {/* Left-side Vertical Navigation Sidebar on Desktop / Mobile Header & Drawer */}
       {userSession && userSession.isLoggedIn && (
         <Navbar
           activeTab={activeTab}
@@ -1472,8 +1895,17 @@ export default function App() {
             setShowFormModal(true);
           }}
           onOpenAdminManager={() => setShowAdminManagerModal(true)}
+          onOpenUnitManager={() => setShowUnitManagerModal(true)}
           onOpenLogoManager={() => setShowLogoModal(true)}
+          onOpenCertificateGenerator={() => {
+            setCertRecipientName('');
+            setCertUnit(units[0] || 'Fujairah');
+            setCertCourse('Kerala Kalolsavam & Cultural Excellence');
+            setShowCertificateModal(true);
+          }}
+          onOpenBackupSettings={() => setShowBackupModal(true)}
           onOpenThemeSelector={() => setShowThemeModal(true)}
+
           onOpenMailbox={() => setShowMailboxModal(true)}
           onOpenWhatsApp={() => {
             setWhatsAppTargetMember(undefined);
@@ -1491,7 +1923,8 @@ export default function App() {
       )}
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden min-h-screen">
+        <main className="flex-1 max-w-[1850px] w-full mx-auto p-4 sm:p-6 lg:p-8">
         {activeTab === 'dashboard' && (
           <Dashboard
             members={visibleMembers}
@@ -1579,9 +2012,156 @@ export default function App() {
               setWhatsAppTargetMember(m);
               setShowWhatsAppModal(true);
             }}
+            onOpenCertificateGenerator={(certInfo) => {
+              if (certInfo) {
+                setCertRecipientName(certInfo.name || '');
+                setCertMemberId(certInfo.memberId || '');
+                setCertCitation(certInfo.citation || '');
+                setCertUnit(certInfo.unit || units[0] || 'Fujairah');
+                setCertCourse(certInfo.course || 'Annual Kerala Kalolsavam & Cultural Excellence');
+                setBulkSelectedMembersForCert(certInfo.selectedMembers || []);
+              } else {
+                setCertRecipientName('');
+                setCertMemberId('');
+                setCertCitation('');
+                setBulkSelectedMembersForCert([]);
+              }
+              setShowCertificateModal(true);
+            }}
+            onToggleMemberStatus={(m) => {
+              const newStatus = isMemberEffectivelyActive(m) ? 'Inactive' : 'Active';
+              handleUpdateMember({
+                ...m,
+                status: newStatus,
+              });
+            }}
             onUpdateMemberUnit={handleUpdateMemberUnit}
             onOpenUnitManager={() => setShowUnitManagerModal(true)}
             onOpenFieldManager={() => setShowFieldManagerModal(true)}
+          />
+        )}
+
+        {activeTab === 'ladies_wing' && (
+          <MemberTable
+            members={visibleMembers}
+            units={units}
+            customFields={customFields}
+            userSession={userSession}
+            initialGenderFilter="Female"
+            isLadiesWingMode={true}
+            title="Ladies Wing Register"
+            subtitle="Dedicated register for all female members of KCA Fujairah."
+            onSelectMember={(m) => {
+              setSelectedMember(m);
+              setShowDetailsModal(true);
+            }}
+            onViewDetails={(m) => {
+              setSelectedMember(m);
+              setShowDetailsModal(true);
+            }}
+            onViewReceipt={(m) => {
+              setReceiptMember(m);
+              setShowReceiptModal(true);
+            }}
+            onEditMember={(m) => {
+              setEditingMember(m);
+              setShowFormModal(true);
+            }}
+            onViewIdCard={(m) => {
+              setIdCardMember(m);
+              setShowIdCardModal(true);
+            }}
+            onRenewMember={handleRenewMember}
+            onDeleteMember={handleDeleteMember}
+            onBulkDeleteMembers={handleBulkDeleteMembers}
+            onAddNewMember={() => {
+              setEditingMember(null);
+              setShowFormModal(true);
+            }}
+            onOpenNewMember={() => {
+              setEditingMember(null);
+              setShowFormModal(true);
+            }}
+            onBatchPrint={(selected) => {
+              setBatchPrintMembers(selected);
+              setShowBatchPrintModal(true);
+            }}
+            onOpenBatchPrint={(selected) => {
+              setBatchPrintMembers(selected);
+              setShowBatchPrintModal(true);
+            }}
+            onOpenWhatsApp={(m) => {
+              setWhatsAppTargetMember(m);
+              setShowWhatsAppModal(true);
+            }}
+            onOpenCertificateGenerator={(certInfo) => {
+              if (certInfo) {
+                setCertRecipientName(certInfo.name || '');
+                setCertMemberId(certInfo.memberId || '');
+                setCertCitation(certInfo.citation || '');
+                setCertUnit(certInfo.unit || units[0] || 'Fujairah');
+                setCertCourse(certInfo.course || 'Annual Kerala Kalolsavam & Cultural Excellence');
+                setBulkSelectedMembersForCert(certInfo.selectedMembers || []);
+              } else {
+                setCertRecipientName('');
+                setCertMemberId('');
+                setCertCitation('');
+                setBulkSelectedMembersForCert([]);
+              }
+              setShowCertificateModal(true);
+            }}
+            onToggleMemberStatus={(m) => {
+              const newStatus = isMemberEffectivelyActive(m) ? 'Inactive' : 'Active';
+              handleUpdateMember({
+                ...m,
+                status: newStatus,
+              });
+            }}
+            onUpdateMemberUnit={handleUpdateMemberUnit}
+            onOpenUnitManager={() => setShowUnitManagerModal(true)}
+            onOpenFieldManager={() => setShowFieldManagerModal(true)}
+          />
+        )}
+
+        {activeTab === 'contacts' && (
+          <ContactBankView
+            contacts={contacts}
+            units={units}
+            userSession={userSession}
+            onOpenAddContact={() => {
+              setEditingContact(null);
+              setShowContactModal(true);
+            }}
+            onEditContact={(contact) => {
+              setEditingContact(contact);
+              setShowContactModal(true);
+            }}
+            onDeleteContact={(id) => {
+              const updated = contacts.filter((c) => c.id !== id);
+              setContacts(updated);
+              saveContacts(updated);
+            }}
+          />
+        )}
+
+        {activeTab === 'documents' && (
+          <DocumentsView
+            documents={documents}
+            units={units}
+            userSession={userSession}
+            onOpenUploadModal={() => {
+              setEditingDocument(null);
+              setShowDocumentModal(true);
+            }}
+            onOpenEditModal={(doc) => {
+              setEditingDocument(doc);
+              setShowDocumentModal(true);
+            }}
+            onDeleteDocument={handleDeleteDocument}
+            onPreviewDocument={(doc) => {
+              setPreviewDocument(doc);
+              setShowDocumentPreviewModal(true);
+            }}
           />
         )}
 
@@ -1624,6 +2204,10 @@ export default function App() {
             onEditTransaction={handleEditFinanceTransaction}
             onDeleteTransaction={handleDeleteFinanceTransaction}
             onViewReceipt={handleViewFinanceReceipt}
+            onSaveTransactions={(txs) => {
+              setFinanceTransactions(txs);
+              saveFinanceTransactions(txs);
+            }}
           />
         )}
 
@@ -1669,7 +2253,15 @@ export default function App() {
             }}
           />
         )}
+
+        {(activeTab === 'letters' || (activeTab as string) === 'letter_pad') && (
+          <LetterPadView
+            units={units}
+            userSession={userSession}
+          />
+        )}
       </main>
+      </div>
 
       {/* MODALS */}
       {/* 1. Member Add/Edit Modal */}
@@ -1680,6 +2272,7 @@ export default function App() {
         units={units}
         customFields={customFields}
         lockedUnit={isUnitOp ? assignedUnit : undefined}
+        initialGender={activeTab === 'ladies_wing' ? 'Female' : undefined}
         userSession={userSession}
         onClose={() => {
           setShowFormModal(false);
@@ -1723,6 +2316,12 @@ export default function App() {
         onOpenWhatsApp={(m) => {
           setWhatsAppTargetMember(m);
           setShowWhatsAppModal(true);
+        }}
+        onGenerateCertificate={(m) => {
+          setCertRecipientName(m.fullName);
+          setCertUnit(m.unit || units[0] || 'Fujairah');
+          setCertCourse('Kerala Kalolsavam & Cultural Excellence');
+          setShowCertificateModal(true);
         }}
         onUpdateMemberDocuments={handleUpdateMemberDocuments}
         onDeleteMember={handleDeleteMember}
@@ -1818,6 +2417,7 @@ export default function App() {
         userSession={userSession}
         onClose={() => setShowBackupModal(false)}
         onRestoreBackup={handleRestoreBackup}
+        onSmartMergeBackup={handleSmartMergeBackup}
         fullDataPayload={{
           members,
           financeTransactions,
@@ -1830,6 +2430,8 @@ export default function App() {
           auditLogs,
           units,
           customFields,
+          contacts,
+          documents,
         }}
         onCloudStateReloaded={(cloudState) => {
           if (cloudState) {
@@ -1874,6 +2476,20 @@ export default function App() {
             if (Array.isArray(cloudState.customFields)) {
               setCustomFields(cloudState.customFields);
               saveCustomFields(cloudState.customFields);
+            }
+            if (Array.isArray(cloudState.contacts) || Array.isArray(cloudState.contactBank)) {
+              const loadedContacts = cloudState.contacts || cloudState.contactBank;
+              setContacts(loadedContacts);
+              saveContacts(loadedContacts);
+            }
+            if (Array.isArray(cloudState.documents) || Array.isArray(cloudState.generalDocuments)) {
+              const loadedDocs = cloudState.documents || cloudState.generalDocuments;
+              setDocuments(loadedDocs);
+              saveDocuments(loadedDocs);
+            }
+            if (Array.isArray(cloudState.auditLogs)) {
+              setAuditLogs(cloudState.auditLogs);
+              saveAuditLogs(cloudState.auditLogs);
             }
           }
         }}
@@ -1975,6 +2591,7 @@ export default function App() {
         transactionToEdit={editingFinanceTransaction}
         initialType={newFinanceInitialType}
         existingTransactions={financeTransactions}
+        particularsList={loadFinancialParticulars()}
         units={units}
         userSession={userSession}
         lockedUnit={isUnitOp ? assignedUnit : undefined}
@@ -2066,8 +2683,78 @@ export default function App() {
             setTargetAttendanceClass(null);
           }}
           onSaveAttendance={handleSaveAttendance}
+          onUpdateParticipantBatch={handleUpdateParticipantBatch}
         />
       )}
+      {/* 26. Official KCA Certificate Generator Modal */}
+      <CertificateGeneratorModal
+        isOpen={showCertificateModal}
+        onClose={() => setShowCertificateModal(false)}
+        units={units}
+        initialRecipientName={certRecipientName}
+        initialMemberId={certMemberId}
+        initialCitation={certCitation}
+        initialUnit={certUnit}
+        initialCourse={certCourse}
+        selectedMembersForBulk={bulkSelectedMembersForCert}
+        userSession={userSession}
+      />
+
+      {/* 27. Contact Bank Form Modal */}
+      <ContactFormModal
+        isOpen={showContactModal}
+        onClose={() => {
+          setShowContactModal(false);
+          setEditingContact(null);
+        }}
+        initialContact={editingContact}
+        units={units}
+        userSession={userSession}
+        onSave={(savedContact) => {
+          let updated: ContactEntry[];
+          const idx = contacts.findIndex((c) => c.id === savedContact.id);
+          if (idx >= 0) {
+            updated = [...contacts];
+            updated[idx] = savedContact;
+          } else {
+            updated = [savedContact, ...contacts];
+          }
+          setContacts(updated);
+          saveContacts(updated);
+          setShowContactModal(false);
+          setEditingContact(null);
+        }}
+      />
+
+      {/* 28. General Document Upload/Edit Modal */}
+      <DocumentFormModal
+        isOpen={showDocumentModal}
+        onClose={() => {
+          setShowDocumentModal(false);
+          setEditingDocument(null);
+        }}
+        onSave={handleSaveDocument}
+        editingDocument={editingDocument}
+        existingDocuments={documents}
+        units={units}
+        userSession={userSession}
+      />
+
+      {/* 29. General Document Preview Modal */}
+      <DocumentPreviewModal
+        isOpen={showDocumentPreviewModal}
+        onClose={() => {
+          setShowDocumentPreviewModal(false);
+          setPreviewDocument(null);
+        }}
+        document={previewDocument}
+        onEdit={(doc) => {
+          setEditingDocument(doc);
+          setShowDocumentModal(true);
+        }}
+        onDelete={handleDeleteDocument}
+        canEdit={hasAdminPrivilege(userSession.role)}
+      />
     </div>
   );
 }

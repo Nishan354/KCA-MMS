@@ -40,13 +40,13 @@ export const ClassFormModal: React.FC<ClassFormModalProps> = ({
   const [scheduleTime, setScheduleTime] = useState<string>('04:30 PM - 06:30 PM');
   const [location, setLocation] = useState<string>('');
   const [monthlyFeeAED, setMonthlyFeeAED] = useState<number>(100);
-  const [status, setStatus] = useState<'Active' | 'On Hold' | 'Completed'>('Active');
+  const [status, setStatus] = useState<'Active' | 'Inactive' | 'Upcoming' | 'Completed' | 'On Hold'>('Active');
   const [notes, setNotes] = useState<string>('');
 
   useEffect(() => {
     if (editingClass) {
       setUnit(editingClass.unit);
-      if (CLASS_PRESET_NAMES.includes(editingClass.name)) {
+      if ((CLASS_PRESET_NAMES as readonly string[]).includes(editingClass.name)) {
         setName(editingClass.name);
         setIsCustomName(false);
         setCustomName('');

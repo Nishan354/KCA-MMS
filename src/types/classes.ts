@@ -1,64 +1,70 @@
-export type ClassCategory =
-  | 'Dance'
-  | 'Instrumental'
-  | 'Music'
-  | 'Language'
-  | 'Martial Arts'
-  | 'Art & Craft'
-  | 'Fitness'
-  | 'Theatre & Drama'
-  | 'Other';
+// Classes & Workshop Management Types for KCA-MMS
 
-export const CLASS_CATEGORY_OPTIONS: ClassCategory[] = [
-  'Dance',
+export const CLASS_CATEGORY_OPTIONS = [
   'Instrumental',
+  'Dance',
   'Music',
   'Language',
-  'Martial Arts',
   'Art & Craft',
-  'Fitness',
+  'Martial Arts & Yoga',
   'Theatre & Drama',
   'Other',
-];
+] as const;
+
+export type ClassCategory = (typeof CLASS_CATEGORY_OPTIONS)[number] | string;
 
 export const CLASS_PRESET_NAMES = [
   'Chenda Melam (Beginners / Intermediate / Advanced)',
   'Classical Dance / Bharatanatyam',
-  'Mohiniyattam',
-  'Kuchipudi',
+  'Mohiniyattam & Kerala Natanam',
   'Carnatic Classical Vocal Music',
-  'Light Music & Keyboard',
-  'Violin & Instrumental',
-  'Yoga & Wellness',
-  'Malayalam Bhasha Padanam (Language Class)',
-  'Karate & Martial Arts',
-  'Drawing, Painting & Fine Arts',
-  'Folk Dance & Semi-Classical',
-  'Mridangam / Thavil',
-  'Drama & Theatre Acting Workshop',
-  'Custom Class / Workshop',
-];
+  'Keyboard & Western Classical Piano',
+  'Guitar & Acoustic Strings',
+  'Violin (Carnatic / Western)',
+  'Drawing, Oil Painting & Fine Arts',
+  'Malayalam Bhasha Padanam (Language & Literacy Academy)',
+  'Yoga & Mindful Wellbeing',
+  'Karate & Self Defence Academy',
+  'Maddalam & Panchavadyam Workshop',
+  'Drama & Theatre Arts',
+  'Chess & Cognitive Sports',
+] as const;
+
+export type ParticipantFeeStatus = 'Paid' | 'Pending' | 'Partial' | 'Exempt' | 'Not Paid';
+export type ParticipantStatus = 'Active' | 'Inactive' | 'Completed' | 'Dropped';
 
 export interface CulturalClass {
   id: string;
   code: string; // e.g. CLS-FUJ-001
-  name: string; // e.g. Chenda Melam
+  name: string;
   category: ClassCategory;
-  unit: string; // e.g. Fujairah, Kalba, Khorfakhan, Dibba, Central
+  unit: string;
+  batchName?: string; // e.g. "Batch A - Morning", "Weekend Batch 1"
   instructorName: string;
   instructorContact?: string;
   scheduleDays: string[]; // e.g. ['Friday', 'Saturday']
-  scheduleTime: string; // e.g. '05:00 PM - 07:00 PM'
-  location: string; // e.g. 'KCA Fujairah Unit Hall'
+  scheduleTime: string; // e.g. '04:30 PM - 06:30 PM'
+  location: string;
   monthlyFeeAED: number;
-  status: 'Active' | 'On Hold' | 'Completed';
+  status: 'Active' | 'Inactive' | 'Upcoming' | 'Completed' | 'On Hold';
   notes?: string;
   createdAt: string;
   updatedAt?: string;
 }
 
-export type ParticipantFeeStatus = 'Paid' | 'Pending' | 'Not Paid' | 'Exempt';
-export type ParticipantStatus = 'Active' | 'Inactive' | 'Graduated';
+export interface StudentSplitPayment {
+  id: string;
+  receiptNumber: string;
+  amountAED: number;
+  date: string;
+  paymentMonth?: string;
+  method: string; // 'Cash', 'Card / POS', 'Bank Transfer', 'Online', etc.
+  notes?: string;
+  recordedBy?: string;
+  financeTransactionId?: string;
+}
+
+export type StudentPaymentRecord = StudentSplitPayment;
 
 export interface ClassParticipant {
   id: string;
@@ -66,9 +72,10 @@ export interface ClassParticipant {
   classId: string;
   className: string;
   unit: string;
+  batchName?: string; // e.g. "Weekend Morning Batch"
   fullName: string;
   age?: number;
-  gender: 'Male' | 'Female' | 'Other';
+  gender?: 'Male' | 'Female' | 'Other';
   guardianName: string;
   guardianPhone: string;
   whatsapp?: string;
@@ -76,12 +83,17 @@ export interface ClassParticipant {
   address?: string;
   joiningDate: string;
   feeStatus: ParticipantFeeStatus;
-  feeAmountAED: number;
+  feeAmountAED: number; // Total fee required for course / month
+  totalPaidAED?: number; // Sum of all payments / installments made
+  balanceDueAED?: number; // feeAmountAED - totalPaidAED
   paymentMethod?: string;
   receiptNumber?: string;
   paymentDate?: string;
+  lastPaidMonth?: string;
+  paymentHistory?: StudentSplitPayment[];
+  splitPayments?: StudentSplitPayment[];
   status: ParticipantStatus;
-  customOptions?: Record<string, string>; // e.g. { "Batch": "Morning A", "Experience": "1 Year", "Uniform Size": "M" }
+  customOptions?: Record<string, string>;
   notes?: string;
   createdAt: string;
   updatedAt?: string;
@@ -89,26 +101,30 @@ export interface ClassParticipant {
 
 export type AttendanceStatus = 'Present' | 'Absent' | 'Late' | 'Excused';
 
-export interface ParticipantAttendanceEntry {
+export interface AttendanceStudentEntry {
   participantId: string;
   studentName: string;
   status: AttendanceStatus;
   remarks?: string;
 }
 
+export type ParticipantAttendanceEntry = AttendanceStudentEntry;
+
 export interface ClassAttendanceRecord {
   id: string;
   classId: string;
   className: string;
   unit: string;
-  date: string; // YYYY-MM-DD
+  batchName?: string;
+  date: string;
   topicCovered?: string;
   recordedBy: string;
-  records: ParticipantAttendanceEntry[];
+  records: AttendanceStudentEntry[];
   totalStudents: number;
   presentCount: number;
   absentCount: number;
   lateCount: number;
   excusedCount: number;
+  notes?: string;
   createdAt: string;
 }

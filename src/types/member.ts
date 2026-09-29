@@ -2,12 +2,15 @@ export type MembershipType = 'General Member' | 'Executive Member' | 'Central Co
 
 export type RegistrationCategory = 'New' | 'Renewal';
 
+export type MemberStatus = 'Active' | 'Inactive' | 'Expired' | 'Pending' | 'Suspended';
+
 export type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'O+' | 'O-' | 'AB+' | 'AB-';
 
 export type UnitName = 'Fujairah' | 'Kalba' | 'Khorfakhan' | 'Dibba' | string;
 
 export type PaymentStatus = 'Paid' | 'Pending' | 'Waived';
-export type PaymentMethod = 'Cash' | 'Bank Transfer' | 'Credit/Debit Card' | 'UAE Pass / Online';
+export type PaymentMethod = 'Cash' | 'Bank Transfer';
+
 
 export type DocumentCategory =
   | 'emirates_id'
@@ -86,7 +89,12 @@ export interface Member {
   registrationCategory: RegistrationCategory;
   registrationDate: string; // YYYY-MM-DD
   lastRenewalDate?: string;
-  status: 'Active' | 'Expired' | 'Pending' | 'Suspended';
+  status: MemberStatus;
+
+  // Committee & Subcommittee Framework
+  committeeTier?: 'Central' | 'Unit' | 'General';
+  subcommittee?: string; // e.g. 'Ladies Wing', 'Bala Kairali', 'Sports Wing', etc.
+  designation?: string; // e.g. 'President', 'General Secretary', 'Convener', etc.
 
   // Contact details
   phoneUAE: string; // e.g. +971 50 123 4567
@@ -94,7 +102,11 @@ export interface Member {
   email: string;
   emiratesId?: string; // 784-XXXX-XXXXXXX-X
   passportNumber?: string;
-  norkaId?: string; // Optional NORKA Pravasi ID
+  norkaId?: string; // NORKA Pravasi ID / Reg Number
+  norkaCardNumber?: string; // Physical NORKA Smart Card Serial
+  norkaRegDate?: string; // NORKA Registration Date
+  norkaRenewalStatus?: 'Active' | 'Pending Renewal' | 'Expired' | 'Not Applied';
+  norkaCategory?: 'Pravasi Raksha' | 'Pravasi Bhadratha' | 'NRK Identity Card' | 'General Member' | string;
   profession?: string;
   companyName?: string;
   
@@ -118,6 +130,14 @@ export interface Member {
   // Supporting Documents
   documents?: MemberDocument[];
 
+  // Proposer / Introduced By (Reference Member)
+  introducedBy?: {
+    memberId?: string; // e.g. internal ID
+    membershipId?: string; // e.g. KCA-FU-1001
+    name?: string;
+    phone?: string;
+  } | string;
+
   // Dynamic Custom Fields Store (key: customFieldId -> value)
   customFields?: Record<string, any>;
 
@@ -131,7 +151,8 @@ export type UserRole =
   | 'Executive Officer'
   | 'Unit Data Operator'
   | 'Unit Coordinator'
-  | 'Desk Auditor';
+  | 'Desk Auditor'
+  | (string & {});
 
 export interface AdminAccountPermissions {
   canManageUsers?: boolean;
@@ -176,13 +197,14 @@ export interface BackupMetadata {
 export interface AuditLogItem {
   id: string;
   timestamp: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RENEW' | 'RENEWAL' | 'PAYMENT' | 'EXPORT' | 'CARD_PRINT' | 'FIELD_CONFIG' | 'RESTORE';
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RENEW' | 'RENEWAL' | 'PAYMENT' | 'EXPORT' | 'CARD_PRINT' | 'FIELD_CONFIG' | 'RESTORE' | 'IMPORT';
   performedBy: string;
   details: string;
   memberId?: string;
   targetMemberId?: string;
   targetMembershipId?: string;
 }
+
 
 // Access Control & Permission Helper Functions
 
@@ -227,4 +249,20 @@ export function canManageUserAccounts(session?: UserSession | null): boolean {
     return session.permissions.canManageUsers;
   }
   return isSuperAdminOrAdmin(session.role);
+}
+
+/**
+ * Checks if a session is a central administrator with global access across all association units.
+ * Non-admin users and unit-assigned operators are strictly scoped to their assigned unit only.
+ */
+export function isCentralAdminSession(session?: UserSession | null): boolean {
+  if (!session || !session.isLoggedIn) return false;
+  if (session.role === 'Super Admin') return true;
+  if (
+    session.role === 'Admin' &&
+    (!session.unit || session.unit.toLowerCase() === 'all' || session.unit.toLowerCase() === 'central')
+  ) {
+    return true;
+  }
+  return false;
 }

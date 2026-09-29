@@ -120,7 +120,125 @@ export const OFFICIAL_KCA_EMBLEM_SVG = `<svg xmlns="http://www.w3.org/2000/svg" 
  * Returns a base64 Data URL for the official KCA emblem SVG
  */
 export function getOfficialKcaEmblemDataUrl(): string {
+  if (typeof window !== 'undefined' && window.btoa) {
+    try {
+      return `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(OFFICIAL_KCA_EMBLEM_SVG)))}`;
+    } catch {
+      // fallback
+    }
+  }
   return `data:image/svg+xml;utf8,${encodeURIComponent(OFFICIAL_KCA_EMBLEM_SVG)}`;
+}
+
+let cachedRasterOfficialLogoPng: string | null = null;
+let cachedCustomLogoSource: string | null = null;
+let cachedRasterCustomLogoPng: string | null = null;
+
+/**
+ * Explicitly invalidates the cached raster logos so any new manual upload is immediately reflected.
+ */
+export function invalidateLogoCache(): void {
+  cachedCustomLogoSource = null;
+  cachedRasterCustomLogoPng = null;
+  if (typeof window !== 'undefined') {
+    setTimeout(() => {
+      getActiveLogoPngDataUrl().catch(() => {});
+    }, 20);
+  }
+}
+
+// Listen to custom logo change events across the whole application
+if (typeof window !== 'undefined') {
+  window.addEventListener('kca-custom-logo-changed', () => {
+    invalidateLogoCache();
+  });
+  window.addEventListener('kca-portal-config-changed', () => {
+    invalidateLogoCache();
+  });
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'kca_fujairah_custom_logo_v1' || e.key === 'kca_fujairah_portal_config_v1') {
+      invalidateLogoCache();
+    }
+  });
+}
+
+/**
+ * Converts any image source or SVG Data URL to a pure PNG Base64 Data URL
+ * which jsPDF and HTML Canvas can directly embed without format errors.
+ */
+export async function getActiveLogoPngDataUrl(): Promise<string> {
+  const custom = loadCustomLogo();
+
+  // If custom logo is already a PNG or JPEG data URL
+  if (custom) {
+    if (
+      custom.startsWith('data:image/png') ||
+      custom.startsWith('data:image/jpeg') ||
+      custom.startsWith('data:image/webp')
+    ) {
+      return custom;
+    }
+    if (custom === cachedCustomLogoSource && cachedRasterCustomLogoPng) {
+      return cachedRasterCustomLogoPng;
+    }
+  } else if (cachedRasterOfficialLogoPng) {
+    return cachedRasterOfficialLogoPng;
+  }
+
+  const src = custom || getOfficialKcaEmblemDataUrl();
+
+  // If running in browser environment, rasterize to PNG via canvas
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    try {
+      const pngUrl = await new Promise<string>((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 512;
+            canvas.height = 512;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.imageSmoothingEnabled = true;
+              ctx.imageSmoothingQuality = 'high';
+              ctx.drawImage(img, 0, 0, 512, 512);
+              const data = canvas.toDataURL('image/png');
+              resolve(data);
+              return;
+            }
+          } catch (e) {
+            console.warn('Canvas raster error for logo:', e);
+          }
+          resolve(src);
+        };
+        img.onerror = (err) => {
+          console.warn('Image load error for logo PNG rasterization:', err);
+          resolve(src);
+        };
+        img.src = src;
+      });
+
+      if (custom) {
+        cachedCustomLogoSource = custom;
+        cachedRasterCustomLogoPng = pngUrl;
+      } else {
+        cachedRasterOfficialLogoPng = pngUrl;
+      }
+      return pngUrl;
+    } catch {
+      return src;
+    }
+  }
+
+  return src;
+}
+
+// Background pre-warm the official raster logo on application boot
+if (typeof window !== 'undefined') {
+  setTimeout(() => {
+    getActiveLogoPngDataUrl().catch(() => {});
+  }, 100);
 }
 
 /**
@@ -129,6 +247,7 @@ export function getOfficialKcaEmblemDataUrl(): string {
 export function getActiveLogoDataUrl(): string {
   const custom = loadCustomLogo();
   if (custom) return custom;
+  if (cachedRasterOfficialLogoPng) return cachedRasterOfficialLogoPng;
   return getOfficialKcaEmblemDataUrl();
 }
 

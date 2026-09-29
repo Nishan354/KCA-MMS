@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Member, CustomFieldDefinition } from '../types/member';
 import { KcaLogo } from './Logo';
 import { generateMemberQrCode, formatCardBloodGroup, formatCardDate } from '../utils/idGenerator';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, User } from 'lucide-react';
 
 interface IdCardProps {
   member: Member;
@@ -112,8 +112,8 @@ export const IdCard: React.FC<IdCardProps> = ({
                   <div className="font-display font-black text-[10px] tracking-wide uppercase text-slate-900 leading-[1.2]">
                     FUJAIRAH
                   </div>
-                  <div className="text-[9px] font-medium text-slate-600 leading-[1.2] mt-0.5">
-                    kairalicaf@gmail.com
+                  <div className="text-[8.5px] font-bold text-[#b91c1c] tracking-wider leading-[1.2] mt-0.5">
+                    A Norka affiliated Organisation
                   </div>
                 </div>
               </div>
@@ -127,18 +127,24 @@ export const IdCard: React.FC<IdCardProps> = ({
               <div className="shrink-0 pl-1">
                 <div className="relative p-1 rounded-lg bg-white shadow-md border-2 border-[#b91c1c]">
                   <div className="w-[100px] h-[118px] rounded-md overflow-hidden border border-slate-200 bg-slate-100 flex items-center justify-center">
-                    <img
-                      src={
-                        member.photoUrl ||
-                        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80'
-                      }
-                      alt={member.fullName}
-                      crossOrigin="anonymous"
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                      }}
-                    />
+                    {member.photoUrl ? (
+                      <img
+                        src={member.photoUrl}
+                        alt={member.fullName}
+                        crossOrigin="anonymous"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400 p-2 text-center">
+                        <User className="w-10 h-10 text-slate-300 stroke-[1.5]" />
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mt-1">
+                          Photo
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -289,8 +295,7 @@ export const IdCard: React.FC<IdCardProps> = ({
               <p className="flex items-start gap-1.5 m-0">
                 <span className="text-[#b91c1c] font-bold">3.</span>
                 <span>
-                  If found, please return to KCA Fujairah Office or email{' '}
-                  <strong className="text-slate-900 font-mono">kairalicaf@gmail.com</strong>.
+                  If found, please return to KCA Fujairah Office or hand over to any authorized Unit Coordinator.
                 </span>
               </p>
             </div>
@@ -309,10 +314,10 @@ export const IdCard: React.FC<IdCardProps> = ({
               </div>
               <div>
                 <div className="font-bold text-slate-800 uppercase tracking-wider text-[8.5px]">
-                  Association Head Office:
+                  Affiliation &amp; Head Office:
                 </div>
                 <div className="font-semibold text-slate-900">Fujairah &bull; Kalba &bull; Khorfakhan &bull; Dibba</div>
-                <div className="font-mono text-slate-600">kairalicaf@gmail.com</div>
+                <div className="font-bold text-[#b91c1c] text-[8.5px]">A Norka affiliated Organisation</div>
               </div>
             </div>
 

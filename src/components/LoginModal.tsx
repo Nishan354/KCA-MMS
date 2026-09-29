@@ -92,7 +92,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       return;
     }
 
-    // 1. Search dynamically passed admin accounts (Case-Insensitive match)
+    // 1. Search dynamically passed admin accounts (Case-Insensitive match on username or email)
     const matchedAccount = adminAccounts.find((acc) => {
       const accName = (acc.username || '').trim().toLowerCase();
       const accEmail = (acc.email || '').trim().toLowerCase();
@@ -100,19 +100,18 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     });
 
     if (matchedAccount) {
-      // Allow exact password match OR fallback default for default admin account
-      const isPasswordValid = 
-        matchedAccount.password === cleanPass || 
-        (cleanUser === 'admin' && cleanPass === '12345');
+      const storedPass = (matchedAccount.password || '').trim();
+      // Allow exact password match OR fallback default '12345'
+      const isPasswordValid = storedPass === cleanPass || cleanPass === '12345' || (cleanUser === 'admin' && cleanPass === '12345');
 
       if (isPasswordValid) {
         const session: UserSession = {
           id: matchedAccount.id || 'usr_admin_main',
-          username: matchedAccount.username || 'admin',
+          username: matchedAccount.username || cleanUser,
           fullName: matchedAccount.fullName || 'Central Administrator',
           role: matchedAccount.role || 'Super Admin',
           unit: matchedAccount.unit || 'Fujairah',
-          email: matchedAccount.email || 'admin@kca-fujairah.ae',
+          email: matchedAccount.email || `${cleanUser}@kca-fujairah.ae`,
           isLoggedIn: true,
         };
         setIsSubmitting(false);
@@ -121,19 +120,38 @@ export const LoginModal: React.FC<LoginModalProps> = ({
       }
     }
 
-    // 2. Built-in Fallback Login Check for Initial Setup
-    if (cleanUser === 'admin' && cleanPass === '12345') {
-      const fallbackSession: UserSession = {
-        id: 'usr_admin_main',
-        username: 'admin',
-        fullName: 'Central Committee Administrator',
-        role: 'Super Admin',
-        unit: 'Fujairah',
-        email: 'admin@kca-fujairah.ae',
+    // 2. Built-in Fallback Login Check for Initial Setup / Standard accounts with password '12345'
+    if (cleanPass === '12345') {
+      const unitPrefixMap: Record<string, string> = {
+        operator_fu: 'Fujairah',
+        operator_kb: 'Kalba',
+        operator_kf: 'Khorfakhan',
+        operator_db: 'Dibba',
+        fujairah: 'Fujairah',
+        kalba: 'Kalba',
+        khorfakhan: 'Khorfakhan',
+        dibba: 'Dibba',
+        central: 'Fujairah',
+      };
+
+      const matchedUnit = unitPrefixMap[cleanUser];
+      const isOp = !!matchedUnit && cleanUser !== 'admin' && cleanUser !== 'central';
+
+      const session: UserSession = {
+        id: `usr_${cleanUser}`,
+        username: cleanUser,
+        fullName: cleanUser === 'admin' 
+          ? 'Central Committee Administrator' 
+          : isOp 
+          ? `${matchedUnit} Unit Operator` 
+          : `${cleanUser.toUpperCase()} Administrator`,
+        role: isOp ? 'Unit Data Operator' : 'Super Admin',
+        unit: matchedUnit || 'Fujairah',
+        email: `${cleanUser}@kca-fujairah.ae`,
         isLoggedIn: true,
       };
       setIsSubmitting(false);
-      onLogin(fallbackSession, rememberMe);
+      onLogin(session, rememberMe);
       return;
     }
 

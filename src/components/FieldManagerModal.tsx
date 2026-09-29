@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CustomFieldDefinition, FieldType, Member } from '../types/member';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import {
   X,
   Sliders,
@@ -66,6 +67,7 @@ export const FieldManagerModal: React.FC<FieldManagerModalProps> = ({
   const [description, setDescription] = useState('');
   const [optionsInput, setOptionsInput] = useState('Option 1, Option 2, Option 3');
   const [errorMessage, setErrorMessage] = useState('');
+  const [fieldToDelete, setFieldToDelete] = useState<CustomFieldDefinition | null>(null);
 
   if (!isOpen) return null;
 
@@ -161,12 +163,6 @@ export const FieldManagerModal: React.FC<FieldManagerModalProps> = ({
 
     setIsAddingNew(false);
     setEditingFieldId(null);
-  };
-
-  const handleDeleteField = (fieldId: string) => {
-    if (confirm('Are you sure you want to delete this custom field? Existing data in member profiles will be preserved.')) {
-      onSaveCustomFields(customFields.filter((f) => f.id !== fieldId));
-    }
   };
 
   const getTypeIcon = (fType: FieldType) => {
@@ -466,7 +462,7 @@ export const FieldManagerModal: React.FC<FieldManagerModalProps> = ({
                       </button>
 
                       <button
-                        onClick={() => handleDeleteField(f.id)}
+                        onClick={() => setFieldToDelete(f)}
                         className="p-1.5 rounded-md text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
                         title="Delete Field"
                       >
@@ -493,6 +489,22 @@ export const FieldManagerModal: React.FC<FieldManagerModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Delete Custom Field Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!fieldToDelete}
+        title="Delete Custom Field"
+        itemName={fieldToDelete?.label}
+        message={`Are you sure you want to delete custom field "${fieldToDelete?.label}"? Existing field values stored in member records will be preserved.`}
+        confirmLabel="Delete Field"
+        onConfirm={() => {
+          if (fieldToDelete) {
+            onSaveCustomFields(customFields.filter((f) => f.id !== fieldToDelete.id));
+            setFieldToDelete(null);
+          }
+        }}
+        onClose={() => setFieldToDelete(null)}
+      />
     </div>
   );
 };

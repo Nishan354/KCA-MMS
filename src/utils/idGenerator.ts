@@ -74,6 +74,10 @@ export function encodeMemberToPayload(member: Partial<Member>): string {
       em: member.email,
       adU: member.uaeAddress,
       adK: member.keralaAddress,
+      dist: member.keralaDistrict,
+      prof: member.profession,
+      comp: member.companyName,
+      pNo: member.passportNumber,
       unit: member.unit,
       cat: member.registrationCategory,
       typ: member.membershipType,
@@ -129,6 +133,10 @@ export function decodeMemberFromPayload(payload: string): Partial<Member> | null
       email: compact.em,
       uaeAddress: compact.adU,
       keralaAddress: compact.adK,
+      keralaDistrict: compact.dist,
+      profession: compact.prof,
+      companyName: compact.comp,
+      passportNumber: compact.pNo,
       unit: compact.unit,
       registrationCategory: compact.cat,
       membershipType: compact.typ,
@@ -157,11 +165,6 @@ export function createFullMemberFromPartial(emb: Partial<Member>, fallbackId: st
       ? emb.malayalamName.trim()
       : transliterateEnglishToMalayalam(resolvedFullName);
 
-  const defaultPhoto =
-    emb.gender === 'Female'
-      ? 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=400&auto=format&fit=crop&q=80'
-      : 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&auto=format&fit=crop&q=80';
-
   return {
     id: emb.id || `m-${Date.now()}`,
     membershipId: mId,
@@ -172,7 +175,7 @@ export function createFullMemberFromPartial(emb: Partial<Member>, fallbackId: st
     joinDate: emb.joinDate || '2024-01-01',
     bloodGroup: emb.bloodGroup || 'O+',
     unit: emb.unit || 'Fujairah',
-    photoUrl: emb.photoUrl || defaultPhoto,
+    photoUrl: emb.photoUrl || '',
     expiryDate: emb.expiryDate || '2026-12-31',
     membershipType: emb.membershipType || 'General Member',
     registrationCategory: emb.registrationCategory || 'New',
@@ -185,14 +188,14 @@ export function createFullMemberFromPartial(emb: Partial<Member>, fallbackId: st
     emiratesId: emb.emiratesId,
     passportNumber: emb.passportNumber,
     norkaId: emb.norkaId,
-    profession: emb.profession || 'Executive',
-    companyName: emb.companyName || 'Fujairah Enterprise',
-    uaeAddress: emb.uaeAddress || 'Fujairah, UAE',
-    keralaAddress: emb.keralaAddress || 'Kerala, India',
-    keralaDistrict: emb.keralaDistrict || 'Kozhikode',
-    emergencyContactName: emb.emergencyContactName || 'KCA Helpline',
-    emergencyContactRelation: emb.emergencyContactRelation || 'Relation',
-    emergencyContactPhone: emb.emergencyContactPhone || '+971 50 000 0000',
+    profession: emb.profession || '',
+    companyName: emb.companyName || '',
+    uaeAddress: emb.uaeAddress || '',
+    keralaAddress: emb.keralaAddress || '',
+    keralaDistrict: emb.keralaDistrict || '',
+    emergencyContactName: emb.emergencyContactName || '',
+    emergencyContactRelation: emb.emergencyContactRelation || '',
+    emergencyContactPhone: emb.emergencyContactPhone || '',
     feeAmountAED: typeof emb.feeAmountAED === 'number' ? emb.feeAmountAED : 50,
     paymentStatus: emb.paymentStatus || 'Paid',
     paymentMethod: emb.paymentMethod || 'Cash',
@@ -377,13 +380,40 @@ export function getNextMembershipId(existingMembers: Member[], unitName: string 
 }
 
 /**
- * Generates a DataURL QR code for a member pointing directly to the published verification URL
+ * Generates a DataURL QR code for a member containing complete offline member information:
+ * Name, ID, Blood Group, Unit, Category, Expiry, Emirates ID, Emergency Phone, Phone UAE.
+ * When scanned with any mobile camera, it immediately presents the member's profile info offline.
  */
 export async function generateMemberQrCode(member: Member): Promise<string> {
-  const verifyUrl = getMemberVerifyUrl(member, false, true);
+  const introText = member.introducedBy
+    ? typeof member.introducedBy === 'object'
+      ? `${member.introducedBy.name || ''} (${member.introducedBy.membershipId || ''})`
+      : member.introducedBy
+    : '';
+
+  const infoText = [
+    `=== KCA-MMS MEMBER PROFILE ===`,
+    `Name: ${member.fullName}`,
+    member.malayalamName ? `Name (ML): ${member.malayalamName}` : '',
+    `Member ID: ${member.membershipId}`,
+    `Unit: ${member.unit} Unit`,
+    `Membership Type: ${member.membershipType}`,
+    `Blood Group: ${formatCardBloodGroup(member.bloodGroup)}`,
+    `DOB: ${member.dateOfBirth}`,
+    `Valid Thru: ${formatCardDate(member.expiryDate)}`,
+    member.emiratesId ? `Emirates ID: ${member.emiratesId}` : '',
+    `UAE Mobile: ${member.phoneUAE}`,
+    member.emergencyContactPhone
+      ? `Emergency Contact: ${member.emergencyContactName} (${member.emergencyContactRelation}): ${member.emergencyContactPhone}`
+      : '',
+    introText ? `Introduced By: ${introText}` : '',
+    `Status: ${member.status} | Kairali Cultural Association Fujairah`,
+  ]
+    .filter(Boolean)
+    .join('\n');
 
   try {
-    const dataUrl = await QRCode.toDataURL(verifyUrl, {
+    const dataUrl = await QRCode.toDataURL(infoText, {
       errorCorrectionLevel: 'M',
       margin: 1,
       width: 260,
@@ -577,3 +607,38 @@ export function getExpiryStatus(expiryDate: string): {
     };
   }
 }
+
+/**
+ * Determines whether a member is effectively Active based on their explicit status
+ * and their renewal/expiry date. By association rules, if a membership is unrenewed / expired,
+ * the member status automatically evaluates as Inactive.
+ */
+export function isMemberEffectivelyActive(member: Member): boolean {
+  if (!member) return false;
+  if (member.status === 'Inactive' || member.status === 'Suspended' || member.status === 'Expired') {
+    return false;
+  }
+  if (member.status === 'Pending') {
+    return false;
+  }
+  if (member.expiryDate) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const exp = new Date(member.expiryDate);
+    exp.setHours(0, 0, 0, 0);
+    if (exp.getTime() < today.getTime()) {
+      return false; // Unrenewed / expired membership is Inactive
+    }
+  }
+  return member.status === 'Active';
+}
+
+/**
+ * Returns normalized effective status for filtering and display: 'Active' | 'Inactive' | 'Pending'
+ */
+export function getEffectiveMemberStatus(member: Member): 'Active' | 'Inactive' | 'Pending' {
+  if (!member) return 'Inactive';
+  if (member.status === 'Pending') return 'Pending';
+  return isMemberEffectivelyActive(member) ? 'Active' : 'Inactive';
+}
+

@@ -7,8 +7,14 @@ import {
 } from '../types/classes';
 import { UserSession, hasAdminPrivilege, isUnitOperatorRole } from '../types/member';
 import { formatAED, formatDate } from '../utils/idGenerator';
-import { exportParticipantsCsv, downloadAttendanceSheetPdf } from '../utils/classesStorage';
 import {
+  exportParticipantsCsv,
+  downloadAttendanceSheetPdf,
+  exportAttendanceRecordsCsv,
+} from '../utils/classesStorage';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import {
+
   GraduationCap,
   Users,
   Calendar,
@@ -78,6 +84,10 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
   const [selectedClassId, setSelectedClassId] = useState<string>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedFeeStatus, setSelectedFeeStatus] = useState<string>('ALL');
+  const [expandedAttendanceId, setExpandedAttendanceId] = useState<string | null>(null);
+  const [classToDelete, setClassToDelete] = useState<CulturalClass | null>(null);
+  const [studentToDelete, setStudentToDelete] = useState<ClassParticipant | null>(null);
+
 
   // Scoped Classes
   const scopedClasses = useMemo(() => {
@@ -174,10 +184,19 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
     confetti({ particleCount: 35, spread: 60 });
   };
 
-  const handlePrintAttendanceSheet = (c: CulturalClass) => {
+  const handleExportAttendance = () => {
+    exportAttendanceRecordsCsv(
+      scopedAttendance,
+      `KCA_Class_Attendance_${selectedUnit}_${new Date().toISOString().split('T')[0]}.csv`
+    );
+    confetti({ particleCount: 35, spread: 60 });
+  };
+
+
+  const handlePrintAttendanceSheet = async (c: CulturalClass) => {
     const classStudents = participants.filter((p) => p.classId === c.id && p.status === 'Active');
     const classHistory = attendanceRecords.filter((a) => a.classId === c.id);
-    downloadAttendanceSheetPdf(c, classStudents, classHistory);
+    await downloadAttendanceSheetPdf(c, classStudents, classHistory);
     confetti({ particleCount: 35, spread: 60 });
   };
 
@@ -343,7 +362,18 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
               <span>Export Students CSV</span>
             </button>
           )}
+
+          {activeSubTab === 'attendance' && (
+            <button
+              onClick={handleExportAttendance}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 shadow-2xs transition-colors cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-600" />
+              <span>Export Attendance CSV</span>
+            </button>
+          )}
         </div>
+
       </div>
 
       {/* Filter & Search Bar */}
@@ -573,11 +603,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
                       {isAdmin && (
                         <button
-                          onClick={() => {
-                            if (confirm(`Are you sure you want to delete class "${cls.name}"?`)) {
-                              onDeleteClass(cls.id);
-                            }
-                          }}
+                          onClick={() => setClassToDelete(cls)}
                           className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                           title="Delete Class"
                         >
@@ -765,11 +791,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
                             {isAdmin && (
                               <button
-                                onClick={() => {
-                                  if (confirm(`Are you sure you want to remove student "${p.fullName}"?`)) {
-                                    onDeleteParticipant(p.id);
-                                  }
-                                }}
+                                onClick={() => setStudentToDelete(p)}
                                 className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
                                 title="Delete Student Record"
                               >
@@ -795,65 +817,196 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
             <table className="w-full text-left text-xs border-collapse">
               <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
                 <tr>
+                  <th className="p-3.5 w-8 text-center"></th>
                   <th className="p-3.5">Date</th>
                   <th className="p-3.5">Class / Batch &amp; Unit</th>
                   <th className="p-3.5">Topic / Syllabus Covered</th>
                   <th className="p-3.5 text-center">Attendance Breakdown</th>
                   <th className="p-3.5">Recorded By</th>
+                  <th className="p-3.5 text-center">Student Roster Status</th>
                 </tr>
               </thead>
 
               <tbody className="divide-y divide-slate-100 bg-white">
                 {scopedAttendance.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="p-12 text-center text-slate-500">
+                    <td colSpan={7} className="p-12 text-center text-slate-500">
                       No attendance registers recorded yet. Click "Take Attendance" on any class to start tracking sessions.
                     </td>
                   </tr>
                 ) : (
                   scopedAttendance.map((rec) => {
                     const presentRate = rec.totalStudents > 0 ? Math.round((rec.presentCount / rec.totalStudents) * 100) : 0;
+                    const isExpanded = expandedAttendanceId === rec.id;
+
                     return (
-                      <tr key={rec.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3.5 whitespace-nowrap font-mono font-bold text-slate-900">
-                          {formatDate(rec.date)}
-                        </td>
+                      <React.Fragment key={rec.id}>
+                        <tr className={`hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-rose-50/20' : ''}`}>
+                          {/* Expand Toggle */}
+                          <td className="p-3.5 text-center">
+                            <button
+                              onClick={() => setExpandedAttendanceId(isExpanded ? null : rec.id)}
+                              className="p-1 rounded hover:bg-slate-200 text-slate-500 transition-transform cursor-pointer"
+                              title={isExpanded ? 'Collapse Student Details' : 'Expand Student Roster'}
+                            >
+                              <span className="inline-block text-xs font-bold font-mono">
+                                {isExpanded ? '▼' : '▶'}
+                              </span>
+                            </button>
+                          </td>
 
-                        <td className="p-3.5">
-                          <div className="font-bold text-slate-900">{rec.className}</div>
-                          <div className="text-[11px] text-slate-500 font-semibold">{rec.unit} Unit</div>
-                        </td>
+                          <td className="p-3.5 whitespace-nowrap font-mono font-bold text-slate-900">
+                            {formatDate(rec.date)}
+                          </td>
 
-                        <td className="p-3.5">
-                          <div className="font-semibold text-slate-800">
-                            {rec.topicCovered || 'Regular Practice Session'}
-                          </div>
-                        </td>
+                          <td className="p-3.5">
+                            <div className="font-bold text-slate-900">{rec.className}</div>
+                            <div className="text-[11px] text-slate-500 font-semibold">
+                              {rec.unit} Unit {rec.batchName ? `• Batch: ${rec.batchName}` : ''}
+                            </div>
+                          </td>
 
-                        <td className="p-3.5 text-center whitespace-nowrap">
-                          <div className="inline-flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                              {rec.presentCount} Present
-                            </span>
-                            <span className="font-mono text-slate-400">/ {rec.totalStudents}</span>
-                            <span className="font-mono font-bold text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                              {presentRate}%
-                            </span>
-                          </div>
-                        </td>
+                          <td className="p-3.5">
+                            <div className="font-semibold text-slate-800">
+                              {rec.topicCovered || 'Regular Practice Session'}
+                            </div>
+                          </td>
 
-                        <td className="p-3.5 whitespace-nowrap text-slate-600 font-medium">
-                          {rec.recordedBy}
-                        </td>
-                      </tr>
+                          <td className="p-3.5 text-center whitespace-nowrap">
+                            <div className="inline-flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                                {rec.presentCount} Present
+                              </span>
+                              {rec.absentCount > 0 && (
+                                <span className="font-mono font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200 text-[10px]">
+                                  {rec.absentCount} Absent
+                                </span>
+                              )}
+                              {rec.lateCount > 0 && (
+                                <span className="font-mono font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 text-[10px]">
+                                  {rec.lateCount} Late
+                                </span>
+                              )}
+                              <span className="font-mono text-slate-400">/ {rec.totalStudents}</span>
+                              <span className="font-mono font-bold text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                                {presentRate}%
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="p-3.5 whitespace-nowrap text-slate-600 font-medium">
+                            {rec.recordedBy}
+                          </td>
+
+                          <td className="p-3.5 text-center whitespace-nowrap">
+                            <button
+                              onClick={() => setExpandedAttendanceId(isExpanded ? null : rec.id)}
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 transition-colors cursor-pointer"
+                            >
+                              {isExpanded ? 'Hide Roster ▲' : `View Status (${rec.records?.length || rec.totalStudents}) ▼`}
+                            </button>
+                          </td>
+                        </tr>
+
+                        {/* Expanded Student Attendance Details */}
+                        {isExpanded && (
+                          <tr className="bg-slate-50/70 border-b border-slate-200">
+                            <td colSpan={7} className="p-4">
+                              <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs space-y-2.5">
+                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                  <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                                    <Users className="w-3.5 h-3.5 text-rose-800" />
+                                    <span>Individual Student Attendance Status for this Session</span>
+                                  </span>
+                                  <span className="text-[11px] text-slate-500 font-mono">
+                                    Session Date: {formatDate(rec.date)} • Topic: {rec.topicCovered || 'Practice'}
+                                  </span>
+                                </div>
+
+                                {rec.records && rec.records.length > 0 ? (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 pt-1">
+                                    {rec.records.map((st, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs"
+                                      >
+                                        <div className="min-w-0 pr-2">
+                                          <div className="font-bold text-slate-900 truncate">
+                                            {st.studentName}
+                                          </div>
+                                          {st.remarks && (
+                                            <div className="text-[10px] text-slate-500 italic truncate">
+                                              {st.remarks}
+                                            </div>
+                                          )}
+                                        </div>
+                                        <span
+                                          className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded border ${
+                                            st.status === 'Present'
+                                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                              : st.status === 'Absent'
+                                              ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                              : st.status === 'Late'
+                                              ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                              : 'bg-blue-100 text-blue-800 border-blue-300'
+                                          }`}
+                                        >
+                                          {st.status}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="text-slate-500 text-xs italic py-2">
+                                    Summary record: {rec.presentCount} Present out of {rec.totalStudents} enrolled students.
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })
                 )}
               </tbody>
+
             </table>
           </div>
         </div>
       )}
+
+      {/* Delete Class Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!classToDelete}
+        title="Delete Cultural Class"
+        itemName={classToDelete?.name}
+        message={`Are you sure you want to permanently delete class "${classToDelete?.name}" (${classToDelete?.unit})?`}
+        confirmLabel="Delete Class"
+        onConfirm={() => {
+          if (classToDelete) {
+            onDeleteClass(classToDelete.id);
+            setClassToDelete(null);
+          }
+        }}
+        onClose={() => setClassToDelete(null)}
+      />
+
+      {/* Delete Student Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!studentToDelete}
+        title="Delete Student Record"
+        itemName={studentToDelete?.fullName}
+        message={`Are you sure you want to permanently remove student "${studentToDelete?.fullName}" (${studentToDelete?.studentId})?`}
+        confirmLabel="Delete Student"
+        onConfirm={() => {
+          if (studentToDelete) {
+            onDeleteParticipant(studentToDelete.id);
+            setStudentToDelete(null);
+          }
+        }}
+        onClose={() => setStudentToDelete(null)}
+      />
     </div>
   );
 };

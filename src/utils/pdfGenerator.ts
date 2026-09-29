@@ -3,194 +3,18 @@ import autoTable from 'jspdf-autotable';
 import { Member, CustomFieldDefinition } from '../types/member';
 import { formatAED, formatDate, formatCardBloodGroup, getMemberReceiptVerifyUrl } from './idGenerator';
 import { PUBLISHED_PORTAL_URL, OFFICIAL_ORG_NAME, OFFICIAL_EMAIL } from '../config/constants';
-import { getActiveLogoDataUrl } from '../components/Logo';
+import { getActiveLogoPngDataUrl } from '../components/Logo';
 import { generateDirectCardPng, generateDirectBackCardPng } from './cardExporter';
+import { downloadFinanceVoucherPdf, memberToFinanceTransaction } from './financeVoucherGenerator';
 import QRCode from 'qrcode';
 
 /**
  * Generates and downloads an authentic, official PDF Payment Receipt for a member
+ * Unified to match the Finance Ledger Receipt / Voucher format 100%
  */
 export async function downloadReceiptPdf(member: Member): Promise<void> {
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4',
-  });
-
-  const primaryRed = [139, 0, 0]; // #8b0000
-  const darkRed = [115, 0, 0];
-  const slateDark = [30, 41, 59];
-  const slateMuted = [100, 116, 139];
-
-  // Header Banner
-  doc.setFillColor(primaryRed[0], primaryRed[1], primaryRed[2]);
-  doc.rect(0, 0, 210, 36, 'F');
-
-  // Gold accent bar
-  doc.setFillColor(217, 119, 6);
-  doc.rect(0, 36, 210, 2.5, 'F');
-
-  // Draw Official KCA Logo in Header
-  try {
-    const logoDataUrl = getActiveLogoDataUrl();
-    doc.addImage(logoDataUrl, 'PNG', 12, 5, 26, 26);
-  } catch (logoErr) {
-    console.warn('Could not draw logo in PDF receipt:', logoErr);
-  }
-
-  // Header Text
-  doc.setTextColor(255, 255, 255);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
-  doc.text('KAIRALI CULTURAL ASSOCIATION FUJAIRAH', 114, 15, { align: 'center' });
-
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('FUJAIRAH', 114, 22, { align: 'center' });
-
-  doc.setFontSize(8.5);
-  doc.text(`Email: ${OFFICIAL_EMAIL}`, 114, 28, { align: 'center' });
-
-  // Official Receipt Title Ribbon
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(15, 45, 180, 20, 2, 2, 'FD');
-  doc.setDrawColor(226, 232, 240);
-
-  doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text('OFFICIAL PAYMENT RECEIPT (AED)', 22, 53);
-
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`RECEIPT NO: ${member.receiptNumber || 'REC-' + member.membershipId}`, 22, 60);
-
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Date of Issue: ${formatDate(member.registrationDate)}`, 140, 53);
-  doc.text(`Status: ${member.paymentStatus.toUpperCase()}`, 140, 60);
-
-  // Member Information Section
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
-  doc.text('MEMBER DETAILS', 15, 74);
-
-  const isRenewal =
-    member.registrationCategory === 'Renewal' ||
-    (member.paymentHistory && member.paymentHistory.some((p) => p.purpose === 'Renewal Fee')) ||
-    (!!member.lastRenewalDate && member.lastRenewalDate !== member.registrationDate);
-  const paymentDescription = isRenewal ? 'Renewal Membership Fee' : 'New Membership Fee';
-
-  const memberDetails = [
-    [
-      { content: 'Received From:', styles: { fontStyle: 'bold', textColor: slateMuted } },
-      { content: member.fullName, styles: { fontStyle: 'bold', textColor: slateDark } },
-      { content: 'Membership ID:', styles: { fontStyle: 'bold', textColor: slateMuted } },
-      { content: member.membershipId, styles: { fontStyle: 'bold', textColor: primaryRed } },
-    ],
-    [
-      { content: 'Assigned Unit:', styles: { fontStyle: 'bold', textColor: slateMuted } },
-      { content: `${member.unit} Unit`, styles: { textColor: slateDark } },
-      { content: 'Validity Period:', styles: { fontStyle: 'bold', textColor: slateMuted } },
-      { content: `Up to ${formatDate(member.expiryDate)}`, styles: { fontStyle: 'bold', textColor: slateDark } },
-    ],
-    [
-      { content: 'UAE Mobile / WhatsApp:', styles: { fontStyle: 'bold', textColor: slateMuted } },
-      { content: member.phoneUAE || member.whatsapp || 'N/A', styles: { textColor: slateDark } },
-      { content: 'Payment Status:', styles: { fontStyle: 'bold', textColor: slateMuted } },
-      { content: member.paymentStatus.toUpperCase(), styles: { fontStyle: 'bold', textColor: [16, 185, 129] } },
-    ],
-  ];
-
-  autoTable(doc, {
-    startY: 77,
-    body: memberDetails as any,
-    theme: 'plain',
-    styles: { fontSize: 8.5, cellPadding: 2 },
-    columnStyles: {
-      0: { cellWidth: 40 },
-      1: { cellWidth: 50 },
-      2: { cellWidth: 45 },
-      3: { cellWidth: 45 },
-    },
-  });
-
-  // Financial Table
-  const tableStartY = (doc as any).lastAutoTable.finalY + 6;
-
-  autoTable(doc, {
-    startY: tableStartY,
-    head: [['Item / Description', 'Validity', 'Payment Method', 'Amount (AED)']],
-    body: [
-      [
-        paymentDescription,
-        `Valid Thru: ${formatDate(member.expiryDate)}`,
-        `${member.paymentMethod || 'Cash'}`,
-        formatAED(member.feeAmountAED),
-      ],
-    ],
-    foot: [['TOTAL AMOUNT RECEIVED', '', '', formatAED(member.feeAmountAED)]],
-    headStyles: {
-      fillColor: [139, 0, 0],
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      fontSize: 9,
-    },
-    footStyles: {
-      fillColor: [248, 250, 252],
-      textColor: [139, 0, 0],
-      fontStyle: 'bold',
-      fontSize: 10,
-    },
-    styles: { fontSize: 8.5, cellPadding: 4 },
-    theme: 'grid',
-  });
-
-  const postTableY = (doc as any).lastAutoTable.finalY + 12;
-
-  // Generate Verification QR Code in PDF
-  try {
-    const verifyUrl = getMemberReceiptVerifyUrl(member);
-    const qrDataUrl = await QRCode.toDataURL(verifyUrl, {
-      margin: 1,
-      width: 140,
-      color: { dark: '#1e293b', light: '#ffffff' },
-    });
-    doc.addImage(qrDataUrl, 'PNG', 15, postTableY, 26, 26);
-    doc.setFontSize(7.5);
-    doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
-    doc.text('Scan with phone camera to', 44, postTableY + 10);
-    doc.text('verify payment & digital ID', 44, postTableY + 15);
-  } catch (err) {
-    console.error('Failed to append QR to PDF:', err);
-  }
-
-  // Only two signatures: Secretary and Treasurer
-  const sigY = postTableY + 28;
-  doc.setDrawColor(180, 180, 180);
-  doc.line(20, sigY + 12, 70, sigY + 12);
-  doc.line(140, sigY + 12, 190, sigY + 12);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8.5);
-  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
-  doc.text('Secretary', 45, sigY + 17, { align: 'center' });
-  doc.text('Treasurer', 165, sigY + 17, { align: 'center' });
-
-  // Bottom Notice
-  doc.setFontSize(7);
-  doc.setFont('helvetica', 'italic');
-  doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
-  doc.text(
-    'This is an official receipt issued by Kairali Cultural Association Fujairah.',
-    105,
-    280,
-    { align: 'center' }
-  );
-
-  const cleanName = member.fullName.replace(/[^a-zA-Z0-9]/g, '_');
-  doc.save(`KCA_Receipt_${member.receiptNumber || member.membershipId}_${cleanName}.pdf`);
+  const transaction = memberToFinanceTransaction(member);
+  await downloadFinanceVoucherPdf(transaction);
 }
 
 /**
@@ -202,17 +26,42 @@ export interface ReportFilterOptions {
   registrationCategory?: string;
   paymentStatus?: string;
   bloodGroup?: string;
+  profession?: string;
   status?: string;
   dateRange?: 'all' | '30days' | 'this_year' | 'last_year';
   title?: string;
+  reportMode?: 'detailed' | 'profession' | 'standard';
+  searchQuery?: string;
 }
+
+// Clean & normalize profession string so generic role fallbacks don't mask actual occupations
+export const formatCleanProfession = (prof?: string | null): string => {
+  if (!prof || !prof.trim()) return '';
+  const trimmed = prof.trim();
+  const lower = trimmed.toLowerCase();
+  if (
+    lower === 'member' ||
+    lower === 'general member' ||
+    lower === 'active member' ||
+    lower === 'registered member' ||
+    lower === 'n/a' ||
+    lower === 'na' ||
+    lower === 'none' ||
+    lower === 'null' ||
+    lower === 'undefined'
+  ) {
+    return '';
+  }
+  return trimmed;
+};
 
 /**
  * Generates and downloads an official, formatted Membership Audit / Statistical PDF Report
+ * Supports Comprehensive Detailed Mode, Professional & Occupational Register Mode, and Standard Mode.
  */
 export function downloadMembershipReportPdf(
   members: Member[],
-  filters: ReportFilterOptions
+  filters: ReportFilterOptions = {}
 ): void {
   const doc = new jsPDF({
     orientation: 'landscape',
@@ -223,6 +72,7 @@ export function downloadMembershipReportPdf(
   const primaryRed = [139, 0, 0];
   const slateDark = [30, 41, 59];
   const slateMuted = [100, 116, 139];
+  const reportMode = filters.reportMode || 'detailed';
 
   // Header Banner
   doc.setFillColor(primaryRed[0], primaryRed[1], primaryRed[2]);
@@ -233,63 +83,167 @@ export function downloadMembershipReportPdf(
 
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('KAIRALI CULTURAL ASSOCIATION FUJAIRAH - MEMBERSHIP REPORT', 148.5, 11, { align: 'center' });
+  doc.setFontSize(13);
+
+  let bannerTitle = 'KAIRALI CULTURAL ASSOCIATION FUJAIRAH — COMPREHENSIVE MEMBERSHIP & PROFESSIONAL REPORT';
+  if (reportMode === 'profession') {
+    bannerTitle = 'KAIRALI CULTURAL ASSOCIATION FUJAIRAH — OCCUPATIONAL & PROFESSIONAL DIRECTORY';
+  } else if (reportMode === 'standard') {
+    bannerTitle = 'KAIRALI CULTURAL ASSOCIATION FUJAIRAH — OFFICIAL MEMBERSHIP REGISTER';
+  }
+  if (filters.title) bannerTitle = filters.title;
+
+  doc.text(bannerTitle, 148.5, 11, { align: 'center' });
 
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
   doc.text(
-    `Official Management Report • Date: ${new Date().toLocaleDateString('en-GB')}`,
+    `Official Executive Management Register • Generated: ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })} • Scope: ${filters.unit || 'All Fujairah Units'}`,
     148.5,
     18,
     { align: 'center' }
   );
 
-  // Filter Summary Box
+  // Filter Summary & Metrics Box
   const totalCollections = members.reduce((sum, m) => sum + (m.feeAmountAED || 0), 0);
   const paidCount = members.filter((m) => m.paymentStatus === 'Paid').length;
   const activeCount = members.filter((m) => m.status === 'Active').length;
 
+  // Calculate Profession breakdown
+  const professionCounts: Record<string, number> = {};
+  members.forEach((m) => {
+    const prof = formatCleanProfession(m.profession) || 'Not Specified';
+    professionCounts[prof] = (professionCounts[prof] || 0) + 1;
+  });
+
+  const sortedProfessions = Object.entries(professionCounts)
+    .filter(([p]) => p !== 'Not Specified')
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([p, count]) => `${p} (${count})`)
+    .join(', ');
+
+  const totalUniqueProfessions = Object.keys(professionCounts).filter((p) => p !== 'Not Specified').length;
+
   doc.setFillColor(248, 250, 252);
-  doc.rect(14, 32, 269, 14, 'F');
+  doc.rect(14, 31, 269, 18, 'F');
   doc.setDrawColor(226, 232, 240);
-  doc.rect(14, 32, 269, 14, 'D');
+  doc.rect(14, 31, 269, 18, 'D');
 
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
-  doc.text(`Scope: ${filters.unit || 'All Fujairah Units'}`, 18, 38);
-  doc.text(`Total Records: ${members.length} Members`, 80, 38);
-  doc.text(`Active Members: ${activeCount}`, 145, 38);
-  doc.text(`Total Collections: ${formatAED(totalCollections)} (${paidCount} Paid)`, 205, 38);
+  doc.text(`Scope: ${filters.unit || 'All Fujairah Units'}`, 18, 37);
+  doc.text(`Total Records: ${members.length} Members`, 78, 37);
+  doc.text(`Active: ${activeCount}`, 135, 37);
+  doc.text(`Collections: ${formatAED(totalCollections)} (${paidCount} Paid)`, 175, 37);
+  doc.text(`Professions: ${totalUniqueProfessions} Roles`, 245, 37);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
   doc.text(
-    `Filters: Category: ${filters.membershipType || 'All'} | Type: ${filters.registrationCategory || 'All'} | Status: ${filters.status || 'All'}`,
+    `Filters: Role: ${filters.membershipType || 'All'} | Reg Type: ${filters.registrationCategory || 'All'} | Profession: ${filters.profession || 'All'} | Blood: ${filters.bloodGroup || 'All'} | Status: ${filters.status || 'All'}`,
     18,
-    43
+    42
   );
 
-  // Table Data Columns
-  const tableData = members.map((m, index) => [
-    index + 1,
-    m.membershipId,
-    m.fullName,
-    m.unit,
-    m.phoneUAE || m.whatsapp || 'N/A',
-    m.profession || 'Member',
-    m.membershipType.replace(' Member', ''),
-    m.registrationCategory,
-    formatDate(m.expiryDate),
-    formatAED(m.feeAmountAED),
-    m.paymentStatus,
-  ]);
+  doc.setFont('helvetica', 'italic');
+  doc.setFontSize(7);
+  doc.setTextColor(30, 41, 59);
+  doc.text(
+    `Top Professions in Set: ${sortedProfessions || 'None Recorded (Unspecified)'}`,
+    18,
+    46
+  );
 
-  autoTable(doc, {
-    startY: 49,
-    head: [
+  let headers: string[][] = [];
+  let tableData: any[][] = [];
+
+  if (reportMode === 'profession') {
+    // Professional & Occupational Directory
+    headers = [
+      [
+        '#',
+        'Member ID',
+        'Full Name',
+        'Profession / Job Title',
+        'Company / Workplace',
+        'Unit',
+        'Phone (UAE)',
+        'WhatsApp',
+        'Email Address',
+        'Emirates ID',
+        'Kerala District',
+        'NORKA ID',
+        'Blood',
+      ],
+    ];
+
+    tableData = members.map((m, index) => [
+      index + 1,
+      m.membershipId,
+      m.fullName,
+      formatCleanProfession(m.profession) || 'Not Specified',
+      m.companyName && m.companyName.trim() ? m.companyName.trim() : 'Not Specified',
+      m.unit,
+      m.phoneUAE || 'N/A',
+      m.whatsapp || m.phoneUAE || 'N/A',
+      m.email || 'N/A',
+      m.emiratesId || 'N/A',
+      m.keralaDistrict || 'N/A',
+      m.norkaId || 'N/A',
+      formatCardBloodGroup(m.bloodGroup),
+    ]);
+  } else if (reportMode === 'detailed') {
+    // Comprehensive Detailed Report
+    headers = [
+      [
+        '#',
+        'Member ID',
+        'Full Name & Malayalam',
+        'Profession & Workplace',
+        'Unit',
+        'Contact / WhatsApp',
+        'Emirates ID / NORKA',
+        'District (Kerala)',
+        'Blood',
+        'Role / Category',
+        'Fee & Payment',
+        'Status & Expiry',
+      ],
+    ];
+
+    tableData = members.map((m, index) => {
+      const nameMalayalam = m.malayalamName ? `${m.fullName}\n(${m.malayalamName})` : m.fullName;
+      const cleanProf = formatCleanProfession(m.profession) || 'Not Specified';
+      const profCompany = m.companyName && m.companyName.trim()
+        ? `${cleanProf}\n@ ${m.companyName.trim()}`
+        : cleanProf;
+      const contactInfo = `${m.phoneUAE || 'N/A'}${m.whatsapp && m.whatsapp !== m.phoneUAE ? '\nWA: ' + m.whatsapp : ''}`;
+      const eidNorka = `${m.emiratesId || 'EID: N/A'}${m.norkaId ? '\nNRK: ' + m.norkaId : ''}`;
+      const roleCat = `${m.membershipType.replace(' Member', '')}\n(${m.registrationCategory})`;
+      const feePay = `${formatAED(m.feeAmountAED)}\n${m.paymentStatus}${m.receiptNumber ? ' (#' + m.receiptNumber + ')' : ''}`;
+      const statusExp = `${m.status}\nExp: ${formatDate(m.expiryDate)}`;
+
+      return [
+        index + 1,
+        m.membershipId,
+        nameMalayalam,
+        profCompany,
+        m.unit,
+        contactInfo,
+        eidNorka,
+        m.keralaDistrict || 'N/A',
+        formatCardBloodGroup(m.bloodGroup),
+        roleCat,
+        feePay,
+        statusExp,
+      ];
+    });
+  } else {
+    // Standard Register
+    headers = [
       [
         '#',
         'Member ID',
@@ -297,56 +251,112 @@ export function downloadMembershipReportPdf(
         'Unit',
         'Contact / WhatsApp',
         'Profession',
+        'Role',
         'Category',
-        'Reg Type',
         'Expiry Date',
         'Fee (AED)',
         'Payment',
       ],
-    ],
+    ];
+
+    tableData = members.map((m, index) => [
+      index + 1,
+      m.membershipId,
+      m.fullName,
+      m.unit,
+      m.phoneUAE || m.whatsapp || 'N/A',
+      formatCleanProfession(m.profession) || 'Not Specified',
+      m.membershipType.replace(' Member', ''),
+      m.registrationCategory,
+      formatDate(m.expiryDate),
+      formatAED(m.feeAmountAED),
+      m.paymentStatus,
+    ]);
+  }
+
+  autoTable(doc, {
+    startY: 52,
+    head: headers,
     body: tableData,
     headStyles: {
       fillColor: [139, 0, 0],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
-      fontSize: 8,
+      fontSize: 7.5,
     },
     styles: {
-      fontSize: 7.5,
-      cellPadding: 2,
+      fontSize: 7,
+      cellPadding: 1.8,
+      overflow: 'linebreak',
     },
     alternateRowStyles: {
       fillColor: [248, 250, 252],
     },
+    columnStyles:
+      reportMode === 'detailed'
+        ? {
+            0: { cellWidth: 8, halign: 'center' },
+            1: { cellWidth: 22, fontStyle: 'bold' },
+            2: { cellWidth: 32 },
+            3: { cellWidth: 32 },
+            4: { cellWidth: 16 },
+            5: { cellWidth: 26 },
+            6: { cellWidth: 30 },
+            7: { cellWidth: 20 },
+            8: { cellWidth: 12, halign: 'center' },
+            9: { cellWidth: 20 },
+            10: { cellWidth: 24, halign: 'right' },
+            11: { cellWidth: 24 },
+          }
+        : reportMode === 'profession'
+        ? {
+            0: { cellWidth: 8, halign: 'center' },
+            1: { cellWidth: 22, fontStyle: 'bold' },
+            2: { cellWidth: 32 },
+            3: { cellWidth: 30 },
+            4: { cellWidth: 30 },
+            5: { cellWidth: 16 },
+            6: { cellWidth: 22 },
+            7: { cellWidth: 22 },
+            8: { cellWidth: 30 },
+            9: { cellWidth: 26 },
+            10: { cellWidth: 18 },
+            11: { cellWidth: 18 },
+            12: { cellWidth: 12, halign: 'center' },
+          }
+        : undefined,
     theme: 'grid',
   });
 
-  // Footer note on last page
+  // Footer on each page
   const pageCount = (doc as any).internal.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(7);
     doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
     doc.text(
-      `KCA Fujairah Official Membership Register • Page ${i} of ${pageCount}`,
+      `KAIRALI CULTURAL ASSOCIATION FUJAIRAH • Official Membership & Professional Audit Register • Page ${i} of ${pageCount}`,
       148.5,
-      202,
+      203,
       { align: 'center' }
     );
   }
 
   const cleanUnit = (filters.unit || 'All_Units').replace(/[^a-zA-Z0-9]/g, '_');
-  doc.save(`KCA_Membership_Report_${cleanUnit}_${new Date().toISOString().split('T')[0]}.pdf`);
+  const cleanMode = reportMode.toUpperCase();
+  doc.save(`KCA_${cleanMode}_Report_${cleanUnit}_${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
 /**
- * Exports current member records to CSV
+ * Exports current member records to CSV with full professional and contact fields
  */
 export function exportMembersToCsv(members: Member[], filename: string = 'KCA_Fujairah_Members.csv'): void {
   const headers = [
     'Membership ID',
     'Full Name',
     'Malayalam Name',
+    'Gender',
+    'Date of Birth',
     'Unit',
     'Member Joined Date',
     'Role / Type',
@@ -359,8 +369,16 @@ export function exportMembersToCsv(members: Member[], filename: string = 'KCA_Fu
     'Passport Number',
     'NORKA ID',
     'Profession',
+    'Company / Employer',
+    'UAE Address',
+    'Kerala Address',
+    'Kerala District',
+    'Emergency Contact Name',
+    'Emergency Contact Relation',
+    'Emergency Contact Phone',
     'Fee (AED)',
     'Payment Status',
+    'Payment Method',
     'Receipt Number',
     'Registration Date',
     'Expiry Date',
@@ -371,6 +389,8 @@ export function exportMembersToCsv(members: Member[], filename: string = 'KCA_Fu
     `"${m.membershipId}"`,
     `"${m.fullName.replace(/"/g, '""')}"`,
     `"${(m.malayalamName || '').replace(/"/g, '""')}"`,
+    `"${m.gender || ''}"`,
+    `"${m.dateOfBirth || ''}"`,
     `"${m.unit}"`,
     `"${m.joinDate || m.registrationDate}"`,
     `"${m.membershipType}"`,
@@ -382,9 +402,17 @@ export function exportMembersToCsv(members: Member[], filename: string = 'KCA_Fu
     `"${m.emiratesId || ''}"`,
     `"${m.passportNumber || ''}"`,
     `"${m.norkaId || ''}"`,
-    `"${(m.profession || '').replace(/"/g, '""')}"`,
+    `"${(formatCleanProfession(m.profession)).replace(/"/g, '""')}"`,
+    `"${(m.companyName || '').replace(/"/g, '""')}"`,
+    `"${(m.uaeAddress || '').replace(/"/g, '""')}"`,
+    `"${(m.keralaAddress || '').replace(/"/g, '""')}"`,
+    `"${(m.keralaDistrict || '').replace(/"/g, '""')}"`,
+    `"${(m.emergencyContactName || '').replace(/"/g, '""')}"`,
+    `"${(m.emergencyContactRelation || '').replace(/"/g, '""')}"`,
+    `"${(m.emergencyContactPhone || '').replace(/"/g, '""')}"`,
     `"${m.feeAmountAED || 0}"`,
     `"${m.paymentStatus}"`,
+    `"${m.paymentMethod || ''}"`,
     `"${m.receiptNumber || ''}"`,
     `"${m.registrationDate}"`,
     `"${m.expiryDate}"`,

@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { OFFICIAL_EMAIL, OFFICIAL_ORG_NAME } from '../config/constants';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 
 interface MailItem {
   id: string;
@@ -127,6 +128,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
   const [selectedMail, setSelectedMail] = useState<MailItem | null>(null);
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [copiedMessage, setCopiedMessage] = useState(false);
+  const [mailToDelete, setMailToDelete] = useState<{ id: string; subject: string; isInbox: boolean } | null>(null);
 
   // Mails State with LocalStorage Persistence
   const [inboxMails, setInboxMails] = useState<MailItem[]>(() => {
@@ -271,14 +273,12 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
   };
 
   const handleDeleteMail = (mailId: string, isInbox: boolean) => {
-    if (confirm('Are you sure you want to remove this message?')) {
-      if (isInbox) {
-        setInboxMails((prev) => prev.filter((m) => m.id !== mailId));
-      } else {
-        setSentMails((prev) => prev.filter((m) => m.id !== mailId));
-      }
-      setSelectedMail(null);
-    }
+    const target = isInbox ? inboxMails.find((m) => m.id === mailId) : sentMails.find((m) => m.id === mailId);
+    setMailToDelete({
+      id: mailId,
+      subject: target?.subject || 'this communication',
+      isInbox,
+    });
   };
 
   // Get active list depending on folder
@@ -841,6 +841,29 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Delete Mail Confirmation Modal */}
+      <ConfirmDeleteModal
+        isOpen={!!mailToDelete}
+        title="Delete Mail Message"
+        itemName={mailToDelete?.subject}
+        message={`Are you sure you want to permanently remove "${mailToDelete?.subject}" from your mailbox records?`}
+        confirmLabel="Delete Message"
+        onConfirm={() => {
+          if (mailToDelete) {
+            if (mailToDelete.isInbox) {
+              setInboxMails((prev) => prev.filter((m) => m.id !== mailToDelete.id));
+            } else {
+              setSentMails((prev) => prev.filter((m) => m.id !== mailToDelete.id));
+            }
+            if (selectedMail && selectedMail.id === mailToDelete.id) {
+              setSelectedMail(null);
+            }
+            setMailToDelete(null);
+          }
+        }}
+        onClose={() => setMailToDelete(null)}
+      />
     </div>
   );
 };

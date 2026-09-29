@@ -1,73 +1,89 @@
-export type InventoryItemCategory =
-  | 'Audio & Sound Equipment'
-  | 'Stage, Lighting & Electrical'
-  | 'Furniture, Chairs & Tables'
-  | 'Banners, Backdrops & Flags'
-  | 'Printing, ID Card Cards & Badges'
-  | 'Sports & Athletic Equipment'
-  | 'Kitchen, Catering & Dining'
-  | 'Office, Stationery & IT Assets'
-  | 'Cultural Costumes & Props'
-  | 'Miscellaneous Equipment';
+// Inventory & Asset Management Types for KCA-MMS
 
-export type InventoryItemCondition = 'Excellent' | 'Good' | 'Fair' | 'Needs Repair' | 'Damaged / Discarded';
+export type ItemCondition = 'New' | 'Excellent' | 'Good' | 'Fair' | 'Needs Repair' | 'Damaged' | 'Retired';
+export type InventoryItemCondition = ItemCondition;
+export type InventoryItemCategory = string;
+export type InventoryItemStatus = 'In Stock' | 'Partially Issued' | 'Fully Issued' | 'Under Maintenance' | 'Decommissioned';
+export type InventoryMovementType = 'ISSUE' | 'RETURN' | 'RESTOCK' | 'AUDIT' | 'DAMAGED' | 'DISPOSAL' | 'IN' | 'OUT' | string;
 
-export type InventoryItemStatus = 'In Stock' | 'Issued / In Use' | 'Under Maintenance' | 'Written Off';
+export const INVENTORY_CATEGORIES = [
+  'Audio & Visual Equipment',
+  'Musical Instruments',
+  'Costumes & Stage Props',
+  'Office Furniture & Fixtures',
+  'IT & Computing Devices',
+  'Sports & Fitness Gear',
+  'Kitchen & Catering Supplies',
+  'Books & Library Archive',
+  'Banners, Mementos & Awards',
+  'General Supplies',
+] as const;
 
 export interface InventoryItem {
   id: string;
-  itemCode: string; // e.g. KCA-INV-FUJ-001
-  name: string; // Item Name
-  category: InventoryItemCategory;
-  unit: string; // e.g. Fujairah, Kalba, Khorfakhan, Dibba, Central
-  location: string; // Specific storage room / cupboard / stage / office location
-  totalQuantity: number;
+  itemCode: string;
+  name: string;
+  category: string;
+  quantity?: number;
+  totalQuantity?: number;
   availableQuantity: number;
-  issuedQuantity: number;
-  unitOfMeasure: string; // Pieces, Sets, Boxes, Meters, etc.
-  condition: InventoryItemCondition;
-  status: InventoryItemStatus;
-  purchaseDate?: string; // YYYY-MM-DD
+  issuedQuantity?: number;
+  unitOfMeasure?: string;
+  unit: string;
+  location: string;
+  condition: ItemCondition;
+  status?: InventoryItemStatus | string;
+  purchaseDate?: string;
+  purchaseCostAED?: number;
   purchasePriceAED?: number;
-  custodianName?: string; // Person currently responsible (e.g. Stage Convener)
+  lastAuditedDate?: string;
+  custodianName?: string;
   custodianPhone?: string;
   notes?: string;
-  qrCodeValue?: string;
-  lastAuditedDate?: string;
+  imageUrl?: string;
   createdAt: string;
   updatedAt?: string;
 }
 
-export type InventoryMovementType = 'ISSUE' | 'RETURN' | 'MAINTENANCE_OUT' | 'MAINTENANCE_IN' | 'RESTOCK' | 'WRITE_OFF';
+export interface InventoryIssueLog {
+  id: string;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  issuedToName: string;
+  issuedToPhone: string;
+  issuedToMemberId?: string;
+  quantityIssued: number;
+  issueDate: string;
+  expectedReturnDate?: string;
+  actualReturnDate?: string;
+  status: 'Issued' | 'Returned' | 'Overdue' | 'Lost';
+  issuedBy: string;
+  receivedBy?: string;
+  purpose?: string;
+  notes?: string;
+  createdAt: string;
+}
 
 export interface InventoryMovementLog {
   id: string;
   itemId: string;
-  itemCode: string;
   itemName: string;
-  date: string; // YYYY-MM-DD
+  itemCode: string;
   type: InventoryMovementType;
   quantity: number;
-  unit: string;
-  issuedToName?: string; // Member or Event coordinator
+  date: string;
+  unit?: string;
+  issuedToName?: string;
+  issuedToPhone?: string;
   issuedToContact?: string;
-  purposeOrEvent?: string; // e.g. Onam Celebration Stage Program, Football Tournament
+  purposeOrEvent?: string;
   expectedReturnDate?: string;
   actualReturnDate?: string;
-  recordedBy: string; // User who recorded the transaction
+  status?: string;
+  recordedBy?: string;
+  performedBy?: string;
   remarks?: string;
+  notes?: string;
   createdAt: string;
 }
-
-export const INVENTORY_CATEGORIES: InventoryItemCategory[] = [
-  'Audio & Sound Equipment',
-  'Stage, Lighting & Electrical',
-  'Furniture, Chairs & Tables',
-  'Banners, Backdrops & Flags',
-  'Printing, ID Card Cards & Badges',
-  'Sports & Athletic Equipment',
-  'Kitchen, Catering & Dining',
-  'Office, Stationery & IT Assets',
-  'Cultural Costumes & Props',
-  'Miscellaneous Equipment',
-];

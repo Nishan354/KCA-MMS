@@ -475,10 +475,9 @@ export async function fetchCloudVersion(): Promise<{ version: number; lastUpdate
 export async function pushCloudEntity(
   entity: string,
   data: any,
-  user: string = 'KCA User'
+  user: string = 'KCA User',
+  forcePush: boolean = false
 ): Promise<boolean> {
-  updateStatus({ isSyncing: true, error: null });
-
   if (entity === 'members') cachedCloudState.members = data;
   else if (entity === 'finance') cachedCloudState.financeTransactions = data;
   else if (entity === 'inventory') cachedCloudState.inventoryItems = data;
@@ -495,6 +494,14 @@ export async function pushCloudEntity(
   else if (entity === 'all' && typeof data === 'object') {
     cachedCloudState = { ...cachedCloudState, ...data };
   }
+
+  // If local-first offline mode and not forced push, stay purely local
+  if (!isAutoCloudSyncEnabled() && !forcePush) {
+    return true;
+  }
+
+  updateStatus({ isSyncing: true, error: null });
+
 
   const savedLogo = localStorage.getItem('kca_custom_logo') || localStorage.getItem('customLogo') || cachedCloudState.customLogoUrl;
   const savedTheme = localStorage.getItem('kca_portal_theme') || localStorage.getItem('theme') || cachedCloudState.portalTheme;
@@ -786,12 +793,42 @@ SELECT * FROM public.app_state;
 `;
 }
 
+export const STORAGE_KEY_AUTO_SYNC = 'kca_auto_cloud_sync_enabled';
+
+export function isAutoCloudSyncEnabled(): boolean {
+  try {
+    return localStorage.getItem(STORAGE_KEY_AUTO_SYNC) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setAutoCloudSyncEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_AUTO_SYNC, enabled ? 'true' : 'false');
+  } catch {}
+}
+
 export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState) => void): () => void {
   let isRunning = true;
   let lastKnownVersion = currentSyncStatus.version;
   let pollInterval: any = null;
   let channel: any = null;
   let eventSource: EventSource | null = null;
+
+  // Local-first: only listen if user explicitly enabled auto cloud sync
+  if (!isAutoCloudSyncEnabled()) {
+    updateStatus({
+      isConnected: true,
+      isSyncing: false,
+      lastSyncTime: new Date(),
+      error: null,
+      tableExists: true,
+    });
+    return () => {
+      isRunning = false;
+    };
+  }
 
   async function handleCloudStatePayload(state: KcaCloudState) {
     if (!isRunning || !state) return;
@@ -801,6 +838,7 @@ export function startCloudSyncManager(onRemoteUpdate: (cloudState: KcaCloudState
       onRemoteUpdate(state);
     }
   }
+
 
   syncCredentialsFromServer().finally(() => {
     fetchCloudState().then((state) => {
