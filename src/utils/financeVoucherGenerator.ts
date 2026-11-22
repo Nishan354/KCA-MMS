@@ -5,6 +5,7 @@ import { Member } from '../types/member';
 import { formatDate, formatAED } from './idGenerator';
 import { getActiveLogoPngDataUrl } from '../components/Logo';
 import { OFFICIAL_AFFILIATION } from '../config/constants';
+import { loadPortalConfig } from './storage';
 
 /**
  * Converts a numerical AED amount to standard English words
@@ -140,16 +141,18 @@ export async function downloadFinanceVoucherPdf(transaction: FinanceTransaction)
     console.warn('Voucher PDF Logo error:', e);
   }
 
+  const portalConfig = loadPortalConfig();
+
   // Header Title
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(14);
-  doc.text('KAIRALI CULTURAL ASSOCIATION FUJAIRAH', margin + 35, margin + 11);
+  doc.setFontSize(13);
+  doc.text((portalConfig.portalName || 'OFFICIAL ORGANIZATION').toUpperCase(), margin + 35, margin + 11);
 
   doc.setFontSize(8.5);
   doc.setFont('helvetica', 'normal');
-  doc.text(`FUJAIRAH • UAE  |  Email: kairalicaf@gmail.com`, margin + 35, margin + 17);
-  doc.text(OFFICIAL_AFFILIATION, margin + 35, margin + 23);
+  doc.text(`${portalConfig.jurisdiction}  |  Email: ${portalConfig.contactEmail}`, margin + 35, margin + 17);
+  doc.text(portalConfig.affiliationText || portalConfig.subtitle, margin + 35, margin + 23);
 
   // Voucher Title Bar
   const titleY = margin + 38;

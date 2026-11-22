@@ -1,9 +1,12 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Member, CustomFieldDefinition } from '../types/member';
+import { IdCardDesignId } from '../types/cardDesign';
+import { HeaderTitleStyle } from '../types/portal';
 import { formatAED, formatDate, formatCardBloodGroup, getMemberReceiptVerifyUrl } from './idGenerator';
 import { PUBLISHED_PORTAL_URL, OFFICIAL_ORG_NAME, OFFICIAL_EMAIL } from '../config/constants';
 import { getActiveLogoPngDataUrl } from '../components/Logo';
+import { loadPortalConfig } from './storage';
 import { generateDirectCardPng, generateDirectBackCardPng } from './cardExporter';
 import { downloadFinanceVoucherPdf, memberToFinanceTransaction } from './financeVoucherGenerator';
 import QRCode from 'qrcode';
@@ -85,11 +88,14 @@ export function downloadMembershipReportPdf(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
 
-  let bannerTitle = 'KAIRALI CULTURAL ASSOCIATION FUJAIRAH — COMPREHENSIVE MEMBERSHIP & PROFESSIONAL REPORT';
+  const portalConfig = loadPortalConfig();
+  const orgNameUpper = (portalConfig.portalName || 'OFFICIAL ORGANIZATION').toUpperCase();
+
+  let bannerTitle = `${orgNameUpper} — COMPREHENSIVE MEMBERSHIP & PROFESSIONAL REPORT`;
   if (reportMode === 'profession') {
-    bannerTitle = 'KAIRALI CULTURAL ASSOCIATION FUJAIRAH — OCCUPATIONAL & PROFESSIONAL DIRECTORY';
+    bannerTitle = `${orgNameUpper} — OCCUPATIONAL & PROFESSIONAL DIRECTORY`;
   } else if (reportMode === 'standard') {
-    bannerTitle = 'KAIRALI CULTURAL ASSOCIATION FUJAIRAH — OFFICIAL MEMBERSHIP REGISTER';
+    bannerTitle = `${orgNameUpper} — OFFICIAL MEMBERSHIP REGISTER`;
   }
   if (filters.title) bannerTitle = filters.title;
 
@@ -335,7 +341,7 @@ export function downloadMembershipReportPdf(
     doc.setFontSize(7);
     doc.setTextColor(slateMuted[0], slateMuted[1], slateMuted[2]);
     doc.text(
-      `KAIRALI CULTURAL ASSOCIATION FUJAIRAH • Official Membership & Professional Audit Register • Page ${i} of ${pageCount}`,
+      `${orgNameUpper} • Official Membership & Professional Audit Register • Page ${i} of ${pageCount}`,
       148.5,
       203,
       { align: 'center' }
@@ -437,6 +443,8 @@ export interface BatchPdfOptions {
   showCropMarks?: boolean;
   bothSideMode?: 'side_by_side' | 'duplex_pages';
   customFields?: CustomFieldDefinition[];
+  cardDesign?: IdCardDesignId;
+  titleStyle?: HeaderTitleStyle;
   onProgress?: (current: number, total: number) => void;
 }
 
@@ -454,10 +462,15 @@ export async function generateBatchIdCardsPdf(
     showCropMarks = true,
     bothSideMode = 'side_by_side',
     customFields = [],
+    cardDesign,
+    titleStyle,
     onProgress,
   } = options;
 
   if (!members || members.length === 0) return;
+  const portalConfig = loadPortalConfig();
+  const orgUpper = (portalConfig.portalName || 'OFFICIAL ORGANIZATION').toUpperCase();
+  const orgShortOrFull = portalConfig.shortName || portalConfig.portalName || 'Central Register';
 
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -486,7 +499,7 @@ export async function generateBatchIdCardsPdf(
     doc.setFontSize(8);
     doc.setTextColor(139, 0, 0);
     doc.text(
-      'KAIRALI CULTURAL ASSOCIATION FUJAIRAH • OFFICIAL DIGITAL MEMBERSHIP CARDS',
+      `${orgUpper} • OFFICIAL DIGITAL MEMBERSHIP CARDS`,
       105,
       is8PerPage ? 14 : 9,
       { align: 'center' }
@@ -506,7 +519,7 @@ export async function generateBatchIdCardsPdf(
     doc.setFontSize(7);
     doc.setTextColor(148, 163, 184);
     doc.text(
-      `Sheet ${pageNum} of ${totalPages} • Kairali Cultural Association Central Register`,
+      `Sheet ${pageNum} of ${totalPages} • ${orgShortOrFull} Central Register`,
       105,
       is8PerPage ? 275 : 291,
       { align: 'center' }
@@ -573,7 +586,7 @@ export async function generateBatchIdCardsPdf(
           doc.setLineDashPattern([], 0);
         }
 
-        const frontDataUrl = await generateDirectCardPng(member, customFields);
+        const frontDataUrl = await generateDirectCardPng(member, customFields, { cardDesign, titleStyle });
         doc.addImage(frontDataUrl, 'PNG', x, y, cardWidth, cardHeight);
 
         processedCount++;
@@ -602,7 +615,7 @@ export async function generateBatchIdCardsPdf(
           doc.setLineDashPattern([], 0);
         }
 
-        const backDataUrl = await generateDirectBackCardPng(member, customFields);
+        const backDataUrl = await generateDirectBackCardPng(member, customFields, { cardDesign, titleStyle });
         doc.addImage(backDataUrl, 'PNG', x, y, cardWidth, cardHeight);
 
         processedCount++;
@@ -636,8 +649,8 @@ export async function generateBatchIdCardsPdf(
 
         const cardDataUrl =
           item.sideType === 'front'
-            ? await generateDirectCardPng(item.member, customFields)
-            : await generateDirectBackCardPng(item.member, customFields);
+            ? await generateDirectCardPng(item.member, customFields, { cardDesign, titleStyle })
+            : await generateDirectBackCardPng(item.member, customFields, { cardDesign, titleStyle });
 
         doc.addImage(cardDataUrl, 'PNG', x, y, cardWidth, cardHeight);
 

@@ -26,6 +26,7 @@ interface CommitteeBadgeProps {
 export function isPresidentSecretaryOrTreasurer(designation?: string): boolean {
   if (!designation) return false;
   const d = designation.toLowerCase().trim();
+  if (d.includes('liaison') || d.includes('central liaison')) return false;
   return (
     d.includes('president') ||
     d.includes('secretary') ||
@@ -42,6 +43,9 @@ export const CommitteeBadge: React.FC<CommitteeBadgeProps> = ({
   className = '',
 }) => {
   const designation = member.designation?.trim();
+  if (designation && /central\s+liaison(\s+officer)?/i.test(designation)) {
+    return null;
+  }
   const isOfficer = isPresidentSecretaryOrTreasurer(designation);
   const isCentral =
     member.membershipType === 'Central Committee Member' ||

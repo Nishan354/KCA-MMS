@@ -3,39 +3,26 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  --color-primary: #881337;
-  --color-primary-hover: #700c2b;
+  --color-primary: #8b0000;
+  --color-primary-hover: #700000;
   --color-primary-light: #fff1f2;
-  --color-primary-border: #9f1239;
+  --color-primary-border: #fda4af;
   --color-primary-accent: #f59e0b;
-  --color-primary-rgb: 136, 19, 55;
+  --color-primary-rgb: 139, 0, 0;
   --color-surface-bg: #f8fafc;
   --color-surface-card: #ffffff;
   --color-surface-border: #e2e8f0;
 }
 
-.dark {
-  --color-surface-bg: #090d16;
-  --color-surface-card: #0f172a;
-  --color-surface-border: #1e293b;
-  color-scheme: dark;
-}
-
 @layer base {
   body {
-    background-color: var(--color-surface-bg, #f8fafc);
+    background-color: #f8fafc;
     color: #0f172a;
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     letter-spacing: -0.015em;
   }
-
-  .dark body {
-    background-color: var(--color-surface-bg, #090d16);
-    color: #f1f5f9;
-  }
-
 
   .font-display {
     font-family: 'Outfit', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -48,14 +35,14 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Custom subtle scrollbar */
+  /* Clean subtle scrollbar */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
 
   ::-webkit-scrollbar-track {
-    background: transparent;
+    background: #f1f5f9;
   }
 
   ::-webkit-scrollbar-thumb {
@@ -69,168 +56,125 @@
 }
 
 .theme-bg-primary {
-  background-color: var(--color-primary, #881337) !important;
+  background-color: var(--color-primary, #8b0000) !important;
 }
 
 .theme-bg-hover:hover {
-  background-color: var(--color-primary-hover, #700c2b) !important;
+  background-color: var(--color-primary-hover, #700000) !important;
 }
 
 .theme-border-primary {
-  border-color: var(--color-primary, #881337) !important;
+  border-color: var(--color-primary, #8b0000) !important;
 }
 
 .theme-text-primary {
-  color: var(--color-primary, #881337) !important;
+  color: var(--color-primary, #8b0000) !important;
 }
 
-/* Modern, elegant card surfaces */
-.sleek-card {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 1px 2px -1px rgba(15, 23, 42, 0.04);
-}
-
-.dark .sleek-card {
-  background-color: #0f172a;
-  border-color: #1e293b;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
-}
-
-.sleek-card-hover {
+.theme-btn-primary {
+  background: linear-gradient(135deg, var(--color-primary, #8b0000) 0%, var(--color-primary-hover, #700000) 100%) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(var(--color-primary-rgb, 139, 0, 0), 0.25);
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.sleek-card-hover:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 10px 15px -3px rgba(15, 23, 42, 0.06), 0 4px 6px -4px rgba(15, 23, 42, 0.04);
+.theme-btn-primary:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 4px 14px rgba(var(--color-primary-rgb, 139, 0, 0), 0.35);
   transform: translateY(-1px);
 }
 
-.dark .sleek-card-hover:hover {
-  border-color: #334155;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+.theme-gradient-banner {
+  background: linear-gradient(135deg, var(--color-primary, #8b0000) 0%, var(--color-primary-hover, #700000) 50%, var(--color-primary-dark, #520000) 100%) !important;
 }
 
-.sleek-surface {
-  background-color: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-}
-
-.dark .sleek-surface {
-  background-color: #0f172a;
-  border-color: #1e293b;
+.theme-card-accent {
+  border-top: 3px solid var(--color-primary, #8b0000) !important;
 }
 
 /* =========================================================
-   GLOBAL DARK MODE COMPLETE SYSTEM LAYER
+   BLACK & LIGHT BLUE GLASSY DESIGN SYSTEM & SMOOTH MOTION
    ========================================================= */
-.dark {
-  color-scheme: dark;
+.glass-card,
+.sleek-card {
+  background: rgba(8, 14, 29, 0.75) !important;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(56, 189, 248, 0.2) !important;
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45), inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Surface backgrounds */
-.dark .bg-slate-50,
-.dark .bg-slate-50\/50,
-.dark .bg-gray-50 {
-  background-color: #090d16 !important;
+.glass-card-hover:hover,
+.sleek-card-hover:hover {
+  border-color: rgba(56, 189, 248, 0.45) !important;
+  box-shadow: 0 12px 36px -4px rgba(14, 165, 233, 0.22), inset 0 1px 0 0 rgba(56, 189, 248, 0.2);
+  transform: translateY(-1.5px);
 }
 
-.dark .bg-slate-100 {
-  background-color: #1e293b !important;
+.glass-panel,
+.sleek-surface {
+  background: rgba(4, 9, 20, 0.82) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(56, 189, 248, 0.18) !important;
+  border-radius: 14px;
 }
 
-.dark .bg-slate-200 {
-  background-color: #334155 !important;
-}
-
-/* Card & Modal Surfaces (exempting printable ID cards & certificates) */
-.dark .bg-white:not(.id-card-container):not(.id-card-container *):not(.id-card-print-target):not(.id-card-print-target *):not(.cert-paper):not(.cert-paper *):not(.printable-document):not(.printable-document *) {
-  background-color: #0f172a !important;
-}
-
-/* Text Colors */
-.dark .text-slate-900:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .text-gray-900:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .text-slate-800:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .text-gray-800:not(.id-card-container *):not(.cert-paper *):not(.printable-document *) {
+.glass-input {
+  background: rgba(6, 11, 24, 0.7) !important;
+  border: 1px solid rgba(56, 189, 248, 0.22) !important;
   color: #f8fafc !important;
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.dark .text-slate-700:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .text-gray-700:not(.id-card-container *):not(.cert-paper *):not(.printable-document *) {
-  color: #e2e8f0 !important;
+.glass-input:focus {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 18px rgba(56, 189, 248, 0.3) !important;
+  background: rgba(8, 15, 32, 0.85) !important;
 }
 
-.dark .text-slate-600:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .text-gray-600:not(.id-card-container *):not(.cert-paper *):not(.printable-document *) {
-  color: #94a3b8 !important;
+.glass-badge {
+  background: rgba(14, 165, 233, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  backdrop-filter: blur(8px);
 }
 
-.dark .text-slate-500:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .text-gray-500:not(.id-card-container *):not(.cert-paper *):not(.printable-document *) {
-  color: #64748b !important;
+/* Radiant ice-cyan accent bar */
+.cyan-accent-line,
+.gold-accent-line {
+  background: linear-gradient(90deg, #0284c7 0%, #38bdf8 50%, #22d3ee 100%) !important;
 }
 
-/* Borders & Separators */
-.dark .border-slate-200:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .border-slate-100:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .border-slate-300:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .border-gray-200:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .border-gray-100:not(.id-card-container *):not(.cert-paper *):not(.printable-document *),
-.dark .border-gray-300:not(.id-card-container *):not(.cert-paper *):not(.printable-document *) {
-  border-color: #1e293b !important;
+/* Fast hardware-accelerated smooth navigation transition */
+.tab-view-container {
+  animation: tabFadeIn 0.16s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
 }
 
-.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
-.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
-.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
-  border-color: #1e293b !important;
-}
-
-/* Form inputs & dropdowns */
-.dark input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="file"]):not(.id-card-container *),
-.dark select:not(.id-card-container *),
-.dark textarea:not(.id-card-container *) {
-  background-color: #0b1120 !important;
-  color: #f8fafc !important;
-  border-color: #334155 !important;
-}
-
-.dark input::placeholder,
-.dark textarea::placeholder {
-  color: #64748b !important;
-}
-
-/* Interactive Hover States */
-.dark .hover\:bg-slate-50:hover,
-.dark .hover\:bg-slate-100:hover,
-.dark .hover\:bg-gray-50:hover {
-  background-color: #1e293b !important;
-}
-
-/* Table header styling */
-.dark table thead th {
-  background-color: #0b1120 !important;
-  color: #cbd5e1 !important;
-  border-color: #1e293b !important;
-}
-
-.dark table tbody tr {
-  border-color: #1e293b !important;
-}
-
-.dark table tbody tr:hover {
-  background-color: #1e293b !important;
+@keyframes tabFadeIn {
+  0% {
+    opacity: 0.88;
+    transform: translateY(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Subtle focus indicators */
 input:focus-visible, select:focus-visible, textarea:focus-visible {
-  outline: 2px solid var(--color-primary, #881337);
+  outline: 2px solid var(--color-primary, #8b0000);
   outline-offset: 1px;
 }
+
+
 
 @keyframes fadeIn {
   from {
@@ -298,6 +242,27 @@ input:focus-visible, select:focus-visible, textarea:focus-visible {
     margin: 0 !important;
     padding: 0 !important;
     background: transparent !important;
+  }
+
+  /* Official Letter Pad Print Rules */
+  #kca-letterpad-print-area {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-height: 270mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    padding: 10mm 12mm !important;
+    background: #ffffff !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .printing-letterpad nav,
+  .printing-letterpad header,
+  .printing-letterpad aside,
+  .printing-letterpad .letterpad-no-print {
+    display: none !important;
   }
 
   .print-card-sheet {

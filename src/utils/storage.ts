@@ -2,6 +2,8 @@ import { Member, AuditLogItem, BackupMetadata, CustomFieldDefinition, AdminAccou
 import { PortalBrandingConfig, DEFAULT_PORTAL_CONFIG, STORAGE_KEY_PORTAL_CONFIG } from '../types/portal';
 import { INITIAL_CUSTOM_FIELDS, INITIAL_ADMIN_ACCOUNTS } from '../data/initialData';
 import { saveMembersToIndexedDb } from './indexedDbStorage';
+import { loadStudentsWing, saveStudentsWing } from './studentsWingStorage';
+import { loadSavedTheme, saveAndApplyTheme } from './theme';
 
 const STORAGE_KEY_MEMBERS = 'kca_fujairah_members_v2';
 const STORAGE_KEY_EMERGENCY_BACKUP = 'kca_emergency_members_backup';
@@ -38,85 +40,176 @@ export function pruneStorageSnapshots(): void {
   }
 }
 
+let inMemoryCustomLogo: string | null | undefined = undefined;
+let inMemoryPortalConfig: PortalBrandingConfig | null = null;
+
 /**
  * Save & Load Portal Branding Configuration
  */
 export function loadPortalConfig(): PortalBrandingConfig {
   try {
+    if (inMemoryPortalConfig) {
+      const resolvedLogo =
+        inMemoryCustomLogo !== undefined
+          ? inMemoryCustomLogo
+          : inMemoryPortalConfig.customLogoUrl;
+      return {
+        ...inMemoryPortalConfig,
+        customLogoUrl: resolvedLogo ?? null,
+      };
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY_PORTAL_CONFIG);
     const customLogo = localStorage.getItem(STORAGE_KEY_CUSTOM_LOGO);
     if (raw) {
       const parsed = JSON.parse(raw);
+      const effectiveLogo =
+        inMemoryCustomLogo !== undefined
+          ? inMemoryCustomLogo
+          : customLogo !== null
+          ? customLogo
+          : parsed.customLogoUrl ?? null;
       return {
         ...DEFAULT_PORTAL_CONFIG,
         ...parsed,
-        customLogoUrl: parsed.customLogoUrl !== undefined ? parsed.customLogoUrl : customLogo || null,
+        customLogoUrl: effectiveLogo,
       };
     }
-    if (customLogo) {
-      return { ...DEFAULT_PORTAL_CONFIG, customLogoUrl: customLogo };
+    if (inMemoryCustomLogo !== undefined || customLogo) {
+      return {
+        ...DEFAULT_PORTAL_CONFIG,
+        customLogoUrl: inMemoryCustomLogo !== undefined ? inMemoryCustomLogo : customLogo,
+      };
     }
   } catch (e) {
     console.warn('Failed to parse portal config:', e);
   }
-  return DEFAULT_PORTAL_CONFIG;
+  return {
+    ...DEFAULT_PORTAL_CONFIG,
+    customLogoUrl: inMemoryCustomLogo !== undefined ? inMemoryCustomLogo : DEFAULT_PORTAL_CONFIG.customLogoUrl,
+  };
 }
 
 export function savePortalConfig(config: Partial<PortalBrandingConfig>): PortalBrandingConfig {
-  try {
-    const current = loadPortalConfig();
-    const updated: PortalBrandingConfig = {
-      ...current,
-      ...config,
-      updatedAt: new Date().toISOString(),
-    };
-    localStorage.setItem(STORAGE_KEY_PORTAL_CONFIG, JSON.stringify(updated));
+  const current = loadPortalConfig();
+  const updated: PortalBrandingConfig = {
+    ...current,
+    ...config,
+    updatedAt: new Date().toISOString(),
+  };
 
-    if (updated.customLogoUrl !== undefined) {
+  inMemoryPortalConfig = updated;
+  if (config.customLogoUrl !== undefined) {
+    inMemoryCustomLogo = config.customLogoUrl ?? null;
+  }
+
+  // Persist custom logo first cleanly (avoid writing oversized strings twice if quota is tight)
+  if (config.customLogoUrl !== undefined) {
+    try {
       if (updated.customLogoUrl) {
         localStorage.setItem(STORAGE_KEY_CUSTOM_LOGO, updated.customLogoUrl);
       } else {
         localStorage.removeItem(STORAGE_KEY_CUSTOM_LOGO);
       }
-      window.dispatchEvent(new CustomEvent('kca-custom-logo-changed', { detail: updated.customLogoUrl }));
+    } catch (logoErr) {
+      console.warn('Could not persist custom logo in primary key, retrying after pruning snapshots:', logoErr);
+      pruneStorageSnapshots();
+      try {
+        if (updated.customLogoUrl) {
+          localStorage.setItem(STORAGE_KEY_CUSTOM_LOGO, updated.customLogoUrl);
+        }
+      } catch {}
     }
-
-    window.dispatchEvent(new CustomEvent('kca-portal-config-changed', { detail: updated }));
-    return updated;
-  } catch (error) {
-    console.error('Failed to save portal config:', error);
-    return DEFAULT_PORTAL_CONFIG;
   }
+
+  try {
+    localStorage.setItem(STORAGE_KEY_PORTAL_CONFIG, JSON.stringify(updated));
+  } catch (error) {
+    console.warn('Portal config full save hit quota; saving config without duplicate logo copy:', error);
+    try {
+      const leanConfig = { ...updated, customLogoUrl: updated.customLogoUrl ? undefined : null };
+      localStorage.setItem(STORAGE_KEY_PORTAL_CONFIG, JSON.stringify(leanConfig));
+    } catch (innerErr) {
+      console.error('Failed to save portal config:', innerErr);
+    }
+  }
+
+  // Always notify active views (Navbar, ID Cards, Batch Print, Certificates)
+  if (typeof window !== 'undefined') {
+    if (config.customLogoUrl !== undefined) {
+      window.dispatchEvent(new CustomEvent('kca-custom-logo-changed', { detail: updated.customLogoUrl ?? null }));
+    }
+    window.dispatchEvent(new CustomEvent('kca-portal-config-changed', { detail: updated }));
+  }
+
+  return updated;
 }
 
 /**
  * Save & Load Custom Logo Image (data URL or image URL)
  */
 export function saveCustomLogo(logoDataUrl: string | null): void {
+  const normalizedLogo = logoDataUrl || null;
+  inMemoryCustomLogo = normalizedLogo;
+
+  const currentConfig = loadPortalConfig();
+  const updatedConfig: PortalBrandingConfig = {
+    ...currentConfig,
+    customLogoUrl: normalizedLogo,
+    updatedAt: new Date().toISOString(),
+  };
+  inMemoryPortalConfig = updatedConfig;
+
   try {
-    if (logoDataUrl) {
-      localStorage.setItem(STORAGE_KEY_CUSTOM_LOGO, logoDataUrl);
+    if (normalizedLogo) {
+      localStorage.setItem(STORAGE_KEY_CUSTOM_LOGO, normalizedLogo);
     } else {
       localStorage.removeItem(STORAGE_KEY_CUSTOM_LOGO);
     }
-    const currentConfig = loadPortalConfig();
-    currentConfig.customLogoUrl = logoDataUrl;
-    localStorage.setItem(STORAGE_KEY_PORTAL_CONFIG, JSON.stringify(currentConfig));
-
-    window.dispatchEvent(new CustomEvent('kca-custom-logo-changed', { detail: logoDataUrl }));
-    window.dispatchEvent(new CustomEvent('kca-portal-config-changed', { detail: currentConfig }));
   } catch (error) {
-    console.error('Failed to save custom logo:', error);
+    console.warn('Primary custom logo storage quota issue, pruning snapshots and retrying:', error);
+    pruneStorageSnapshots();
+    try {
+      if (normalizedLogo) {
+        localStorage.setItem(STORAGE_KEY_CUSTOM_LOGO, normalizedLogo);
+      }
+    } catch (retryErr) {
+      console.error('Failed to persist custom logo to localStorage (active in memory):', retryErr);
+    }
+  }
+
+  try {
+    localStorage.setItem(STORAGE_KEY_PORTAL_CONFIG, JSON.stringify(updatedConfig));
+  } catch {
+    try {
+      // Store lean portal config without duplicate base64 logo payload if quota is constrained
+      const leanConfig = { ...updatedConfig, customLogoUrl: normalizedLogo ? undefined : null };
+      localStorage.setItem(STORAGE_KEY_PORTAL_CONFIG, JSON.stringify(leanConfig));
+    } catch (cfgErr) {
+      console.warn('Failed to update portal config logo reference:', cfgErr);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('kca-custom-logo-changed', { detail: normalizedLogo }));
+    window.dispatchEvent(new CustomEvent('kca-portal-config-changed', { detail: updatedConfig }));
   }
 }
 
 export function loadCustomLogo(): string | null {
+  if (inMemoryCustomLogo !== undefined) {
+    return inMemoryCustomLogo;
+  }
   try {
+    const directLogo = localStorage.getItem(STORAGE_KEY_CUSTOM_LOGO);
+    if (directLogo) {
+      return directLogo;
+    }
     const portalConfig = loadPortalConfig();
-    if (portalConfig.customLogoUrl !== undefined) {
+    if (portalConfig.customLogoUrl) {
       return portalConfig.customLogoUrl;
     }
-    return localStorage.getItem(STORAGE_KEY_CUSTOM_LOGO);
+    return null;
   } catch {
     return null;
   }
@@ -209,20 +302,43 @@ export function clearActiveUserSession(): void {
   }
 }
 
+export function sanitizeMemberRecord(m: Member): Member {
+  if (!m) return m;
+  let updated = false;
+  let des = m.designation;
+  let coordDes = m.coordinationDesignation;
+
+  if (des && /central\s+liaison(\s+officer)?/i.test(des)) {
+    des = des.replace(/central\s+liaison(\s+officer)?/gi, '').trim();
+    updated = true;
+  }
+  if (coordDes && /central\s+liaison(\s+officer)?/i.test(coordDes)) {
+    coordDes = coordDes.replace(/central\s+liaison(\s+officer)?/gi, '').trim();
+    updated = true;
+  }
+  if (!updated) return m;
+  return {
+    ...m,
+    designation: des || undefined,
+    coordinationDesignation: coordDes || undefined,
+  };
+}
+
 /**
  * Save members to persistent storage with dual-layer safety (IndexedDB + localStorage)
  * Unlimited capacity in IndexedDB + quota-safe fallback in localStorage.
  */
 export function saveMembersToStorage(members: Member[]): void {
+  const sanitizedMembers = (members || []).map(sanitizeMemberRecord);
   // 1. Persist full dataset to IndexedDB (unlimited quota, supports 10,000+ members with photos)
-  saveMembersToIndexedDb(members).catch((err) => {
+  saveMembersToIndexedDb(sanitizedMembers).catch((err) => {
     console.warn('Background IndexedDB save notification:', err);
   });
 
   // 2. Persist to localStorage with active quota management
   try {
     pruneStorageSnapshots();
-    const serialized = JSON.stringify(members);
+    const serialized = JSON.stringify(sanitizedMembers);
     localStorage.setItem(STORAGE_KEY_MEMBERS, serialized);
   } catch (error) {
     console.warn('LocalStorage quota limit detected, executing auto-recovery cleanup...', error);
@@ -289,7 +405,7 @@ export function loadMembersFromStorage(): Member[] | null {
       try {
         const parsed = JSON.parse(mainRaw);
         if (Array.isArray(parsed)) {
-          return parsed;
+          return parsed.map(sanitizeMemberRecord);
         }
       } catch {}
     }
@@ -439,19 +555,9 @@ export async function saveToLocalPcFolder(
   customFields?: CustomFieldDefinition[]
 ): Promise<{ success: boolean; message: string; folderName?: string }> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupData = {
-    organization: 'Kairali Cultural Association Fujairah (Norka Affiliated)',
-    exportDate: new Date().toISOString(),
-    version: '2.0',
-    totalMembers: members.length,
-    customLogo: loadCustomLogo(),
-    customFields: customFields || loadCustomFieldsFromStorage(),
-    members,
-    auditLogs,
-  };
-
-  const jsonString = JSON.stringify(backupData, null, 2);
-  const filename = `KCA_Fujairah_Backup_${timestamp}.json`;
+  // Export the complete, pristine system database snapshot containing all 18+ system tables
+  const jsonString = exportFullDatabaseSnapshot();
+  const filename = `KCA_Fujairah_Full_System_Backup_${timestamp}.json`;
 
   if ('showDirectoryPicker' in window) {
     try {
@@ -460,13 +566,15 @@ export async function saveToLocalPcFolder(
         startIn: 'documents',
       });
 
+      // Save full system database snapshot JSON
       const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
       const writable = await fileHandle.createWritable();
       await writable.write(jsonString);
       await writable.close();
 
+      // Also save members spreadsheet CSV
       const csvString = exportMembersToCsvString(members, customFields);
-      const csvHandle = await dirHandle.getFileHandle(`KCA_Members_${timestamp}.csv`, { create: true });
+      const csvHandle = await dirHandle.getFileHandle(`KCA_Members_Spreadsheet_${timestamp}.csv`, { create: true });
       const csvWritable = await csvHandle.createWritable();
       await csvWritable.write(csvString);
       await csvWritable.close();
@@ -479,7 +587,7 @@ export async function saveToLocalPcFolder(
 
       return {
         success: true,
-        message: `Successfully saved backup files to PC folder: "${dirHandle.name}"`,
+        message: `Successfully saved complete system database backup and member spreadsheet to PC folder: "${dirHandle.name}"`,
         folderName: dirHandle.name,
       };
     } catch (err: any) {
@@ -499,7 +607,7 @@ export async function saveToLocalPcFolder(
 
   return {
     success: true,
-    message: `Saved backup file "${filename}" to your PC Downloads folder.`,
+    message: `Saved complete system backup file "${filename}" to your PC Downloads folder.`,
     folderName: 'Downloads',
   };
 }
@@ -606,7 +714,7 @@ export function downloadFullJsonBackup(
 }
 
 /**
- * System Database Dump & Restore Utilities - Full System Backup across all modules
+ * System Database Dump & Restore Utilities - Full System Backup across every part of the system
  */
 export function exportFullDatabaseSnapshot(): string {
   // Safe loader helpers for all modules
@@ -619,6 +727,7 @@ export function exportFullDatabaseSnapshot(): string {
   };
 
   const membersData = loadMembersFromStorage() || [];
+  const studentsWingData = loadStudentsWing() || [];
   const adminAccountsData = loadAdminAccounts() || [];
   const customFieldsData = loadCustomFieldsFromStorage() || [];
   const portalConfigData = loadPortalConfig();
@@ -637,19 +746,26 @@ export function exportFullDatabaseSnapshot(): string {
   const contactsData = getStorageJson('kca_fujairah_contact_bank_v1', []);
   const unitsData = getStorageJson('kca_fujairah_units_v1', []);
   const signaturesData = getStorageJson('kca_fujairah_signatures_v1', []);
-  const customLogoUrl = localStorage.getItem('kca_portal_custom_logo') || localStorage.getItem('kca_custom_logo_data_url') || '';
-  const portalTheme = localStorage.getItem('kca_portal_theme') || localStorage.getItem('theme') || '';
+  const customLogoUrl = loadCustomLogo() || localStorage.getItem('kca_fujairah_custom_logo_v1') || localStorage.getItem('kca_portal_custom_logo') || localStorage.getItem('kca_custom_logo_data_url') || '';
+  const portalTheme = loadSavedTheme();
   const themeMode = localStorage.getItem('kca_theme_mode') || 'light';
+  const backupMeta = getBackupMetadata();
 
   const totalRecordCount =
     membersData.length +
+    studentsWingData.length +
     financeTransactionsData.length +
+    particularsData.length +
     inventoryItemsData.length +
+    inventoryLogsData.length +
     classesData.length +
     participantsData.length +
+    attendanceData.length +
     documentsData.length +
     lettersData.length +
     contactsData.length +
+    signaturesData.length +
+    adminAccountsData.length +
     auditLogsData.length;
 
   const backupPayload = {
@@ -659,18 +775,27 @@ export function exportFullDatabaseSnapshot(): string {
     schemaVersion: '3.0',
     stats: {
       totalMembers: membersData.length,
+      totalStudentsWing: studentsWingData.length,
       totalFinanceTransactions: financeTransactionsData.length,
+      totalFinancialParticulars: particularsData.length,
       totalInventoryItems: inventoryItemsData.length,
+      totalInventoryLogs: inventoryLogsData.length,
       totalClasses: classesData.length,
       totalClassParticipants: participantsData.length,
+      totalClassAttendance: attendanceData.length,
       totalDocuments: documentsData.length,
       totalLetters: lettersData.length,
       totalContacts: contactsData.length,
+      totalSignatures: signaturesData.length,
+      totalAdminAccounts: adminAccountsData.length,
       totalAuditLogs: auditLogsData.length,
+      totalUnits: unitsData.length,
+      totalCustomFields: customFieldsData.length,
       totalRecords: totalRecordCount,
     },
     tables: {
       members: membersData,
+      studentsWing: studentsWingData,
       adminAccounts: adminAccountsData,
       customFields: customFieldsData,
       portalConfig: portalConfigData,
@@ -691,7 +816,9 @@ export function exportFullDatabaseSnapshot(): string {
       storedSignatures: signaturesData,
       customLogoUrl: customLogoUrl,
       portalTheme: portalTheme,
+      themeConfig: portalTheme,
       themeMode: themeMode,
+      backupMetadata: backupMeta,
     },
   };
 
@@ -740,6 +867,7 @@ export function importFullDatabaseSnapshot(jsonString: string): RestoreResult {
       }
     };
 
+    // 1. Members
     if (Array.isArray(sourceTables.members)) {
       saveMembersToStorage(sourceTables.members);
       details['members'] = sourceTables.members.length;
@@ -747,23 +875,35 @@ export function importFullDatabaseSnapshot(jsonString: string): RestoreResult {
       recordsCount += sourceTables.members.length;
     }
 
+    // 2. Children's Wing
+    if (Array.isArray(sourceTables.studentsWing)) {
+      saveStudentsWing(sourceTables.studentsWing);
+      details['studentsWing'] = sourceTables.studentsWing.length;
+      tablesCount++;
+      recordsCount += sourceTables.studentsWing.length;
+    }
+
+    // 3. Admin Accounts
     if (Array.isArray(sourceTables.adminAccounts)) {
       saveAdminAccounts(sourceTables.adminAccounts);
       details['adminAccounts'] = sourceTables.adminAccounts.length;
       tablesCount++;
     }
 
+    // 4. Custom Form Fields
     if (Array.isArray(sourceTables.customFields)) {
       saveCustomFieldsToStorage(sourceTables.customFields);
       details['customFields'] = sourceTables.customFields.length;
       tablesCount++;
     }
 
+    // 5. Portal Branding Config
     if (sourceTables.portalConfig) {
       savePortalConfig(sourceTables.portalConfig);
       tablesCount++;
     }
 
+    // 6. Security Audit Logs
     if (Array.isArray(sourceTables.auditLogs)) {
       saveAuditLogs(sourceTables.auditLogs);
       details['auditLogs'] = sourceTables.auditLogs.length;
@@ -771,46 +911,69 @@ export function importFullDatabaseSnapshot(jsonString: string): RestoreResult {
       recordsCount += sourceTables.auditLogs.length;
     }
 
+    // 7. Finance Transactions, Particulars & Unit Balances
     restoreTable(['kca_fujairah_finance_transactions_v1'], sourceTables.financeTransactions);
     restoreTable(['kca_fujairah_finance_particulars_v1'], sourceTables.financialParticulars);
     restoreTable(['kca_fujairah_finance_unit_balances_v1'], sourceTables.unitCashBalances);
+
+    // 8. Asset Inventory & Movement Logs
     restoreTable(['kca_fujairah_inventory_items_v1'], sourceTables.inventoryItems);
     restoreTable(['kca_fujairah_inventory_logs_v1'], sourceTables.inventoryLogs);
+
+    // 9. Cultural Classes, Participants & Attendance
     restoreTable(['kca_cultural_classes_v1', 'kca_fujairah_classes_v1'], sourceTables.classes);
     restoreTable(['kca_class_participants_v1', 'kca_fujairah_participants_v1'], sourceTables.classParticipants);
     restoreTable(['kca_class_attendance_v1', 'kca_fujairah_attendance_v1'], sourceTables.classAttendance);
-    restoreTable(['kca_fujairah_general_documents_v1'], sourceTables.generalDocuments);
-    restoreTable(['kca_fujairah_letters_v1'], sourceTables.officialLetters);
-    restoreTable(['kca_fujairah_contact_bank_v1'], sourceTables.contactBank);
-    restoreTable(['kca_fujairah_units_v1'], sourceTables.units);
-    restoreTable(['kca_fujairah_signatures_v1'], sourceTables.storedSignatures);
 
+    // 10. Documents Archive
+    restoreTable(['kca_fujairah_general_documents_v1'], sourceTables.generalDocuments);
+
+    // 11. Official Letter Pad
+    restoreTable(['kca_fujairah_letters_v1'], sourceTables.officialLetters || sourceTables.letters);
+
+    // 12. Contact Bank
+    restoreTable(['kca_fujairah_contact_bank_v1'], sourceTables.contactBank);
+
+    // 13. Organizational Units
+    restoreTable(['kca_fujairah_units_v1'], sourceTables.units);
+
+    // 14. Digital Signatures
+    restoreTable(['kca_fujairah_signatures_v1'], sourceTables.storedSignatures || sourceTables.signatures);
+
+    // 15. Letter Series Configuration
     if (sourceTables.letterSeriesConfig) {
       localStorage.setItem('kca_letter_series_config_v1', JSON.stringify(sourceTables.letterSeriesConfig));
       tablesCount++;
     }
 
+    // 16. Custom Organization Logo
     if (sourceTables.customLogoUrl) {
-      localStorage.setItem('kca_portal_custom_logo', sourceTables.customLogoUrl);
-      localStorage.setItem('kca_custom_logo_data_url', sourceTables.customLogoUrl);
-      localStorage.setItem('kca_fujairah_custom_logo_v1', sourceTables.customLogoUrl);
-      window.dispatchEvent(new CustomEvent('kca-custom-logo-changed', { detail: sourceTables.customLogoUrl }));
+      saveCustomLogo(sourceTables.customLogoUrl);
       tablesCount++;
     }
 
-    if (sourceTables.portalTheme) {
-      localStorage.setItem('kca_portal_theme', typeof sourceTables.portalTheme === 'string' ? sourceTables.portalTheme : JSON.stringify(sourceTables.portalTheme));
-      localStorage.setItem('theme', typeof sourceTables.portalTheme === 'string' ? sourceTables.portalTheme : JSON.stringify(sourceTables.portalTheme));
+    // 17. Theme Configuration (Solid Presets, Hex overrides)
+    if (sourceTables.portalTheme || sourceTables.themeConfig) {
+      const themePayload = sourceTables.portalTheme || sourceTables.themeConfig;
+      if (typeof themePayload === 'object' && themePayload?.primary) {
+        saveAndApplyTheme(themePayload);
+      } else if (typeof themePayload === 'string' && themePayload.startsWith('{')) {
+        try {
+          saveAndApplyTheme(JSON.parse(themePayload));
+        } catch {}
+      }
       tablesCount++;
     }
 
+    // 18. Theme Mode
     if (sourceTables.themeMode) {
       localStorage.setItem('kca_theme_mode', sourceTables.themeMode);
-      if (sourceTables.themeMode === 'dark') {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
+      tablesCount++;
+    }
+
+    // 19. Backup Metadata
+    if (sourceTables.backupMetadata && typeof sourceTables.backupMetadata === 'object') {
+      setBackupMetadata(sourceTables.backupMetadata);
       tablesCount++;
     }
 

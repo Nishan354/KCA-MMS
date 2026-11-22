@@ -1,9 +1,21 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
-import { OFFICIAL_ORG_NAME, OFFICIAL_AFFILIATION, OFFICIAL_LOCATION } from '../config/constants';
 import { getActiveLogoPngDataUrl } from '../components/Logo';
+import { HeaderTitleStyle, PortalBrandingConfig } from '../types/portal';
+import { loadCustomLogo, loadPortalConfig } from './storage';
+import {
+  resolveEffectiveTitleStyle,
+  getTitleLockupLines,
+  getTrimmedTitleGraphicDataUrl,
+} from './titleGraphic';
 
-export type SealStyle = 'gold_guilloche' | 'royal_ribbon' | 'association_crest' | 'traditional_kasavu' | 'none';
+export type SealStyle =
+  | 'gold_guilloche'
+  | 'royal_ribbon'
+  | 'association_crest'
+  | 'traditional_kasavu'
+  | 'luxury_gold_rosette'
+  | 'none';
 
 export interface CertificateData {
   id?: string;
@@ -30,6 +42,7 @@ export interface CertificateData {
   customLogoUrl?: string;
   sealType?: SealStyle;
   showWatermark?: boolean;
+  titleStyle?: HeaderTitleStyle;
 }
 
 export interface CertificateTemplate {
@@ -41,10 +54,30 @@ export interface CertificateTemplate {
   accentColor: string;
   bgColor: string;
   description: string;
-  borderStyle: 'formal_double' | 'minimal_clean' | 'heritage_ornate' | 'gold_accent' | 'navy_platinum' | 'festive_starburst' | 'vintage_parchment' | 'emerald_flourish';
+  borderStyle:
+    | 'crimson_gold_luxury'
+    | 'formal_double'
+    | 'minimal_clean'
+    | 'heritage_ornate'
+    | 'gold_accent'
+    | 'navy_platinum'
+    | 'festive_starburst'
+    | 'vintage_parchment'
+    | 'emerald_flourish';
 }
 
 export const CERTIFICATE_TEMPLATES: CertificateTemplate[] = [
+  {
+    id: 'crimson_gold_luxury',
+    name: 'Royal Crimson & Gold Prestige',
+    category: 'Executive Luxury & Honor',
+    primaryColor: '#881337', // Deep Crimson Maroon
+    secondaryColor: '#450A0A', // Deep Garnet
+    accentColor: '#D97706', // Radiant Metallic Gold
+    bgColor: '#FFFDF9',
+    description: 'Modern executive luxury design with low-poly faceted ruby geometric corner frames, double gold borders, and gold rosette ribbon seal.',
+    borderStyle: 'crimson_gold_luxury',
+  },
   {
     id: 'classic_formal',
     name: 'Classic Royal Burgundy',
@@ -135,16 +168,190 @@ export const CERTIFICATE_TEMPLATES: CertificateTemplate[] = [
   },
 ];
 
-export async function generateCertificatePdf(data: CertificateData): Promise<jsPDF> {
+async function renderCertificateHeader(
+  pdf: jsPDF,
+  data: CertificateData,
+  portalConfig: PortalBrandingConfig,
+  pageWidth: number,
+  pCol: { r: number; g: number; b: number },
+  aCol: { r: number; g: number; b: number }
+): Promise<void> {
+  const effectiveTitleStyle = resolveEffectiveTitleStyle(
+    portalConfig,
+    'certificate',
+    data.titleStyle
+  );
+  const certOrgName = (portalConfig.portalName || 'OFFICIAL ORGANIZATION').toUpperCase();
+  const certAffiliation =
+    portalConfig.affiliationText || portalConfig.subtitle || 'Recognized & Affiliated Forum';
+  const certLocation = portalConfig.jurisdiction || 'United Arab Emirates';
+  const unitTermLabel = portalConfig.unitTerm || 'Unit';
+  const unitHeaderLabel =
+    data.unit === 'Central' ? 'Executive Administration' : `${data.unit} ${unitTermLabel}`;
+
+  const activeCustomLogo =
+    portalConfig.customLogoUrl !== undefined ? portalConfig.customLogoUrl : loadCustomLogo();
+  const hasCustomLogoWithoutCustomBanner =
+    !portalConfig.customTitleGraphicUrl && !!activeCustomLogo;
+
+  if (effectiveTitleStyle === 'title_graphic' && !hasCustomLogoWithoutCustomBanner) {
+    // Draw trimmed official title graphic banner centered at top
+    try {
+      const graphic = await getTrimmedTitleGraphicDataUrl(
+        portalConfig.customTitleGraphicUrl,
+        true
+      );
+      const maxH = 14.5;
+      const maxW = 86;
+      let drawW = maxH * graphic.aspectRatio;
+      let drawH = maxH;
+      if (drawW > maxW) {
+        drawW = maxW;
+        drawH = drawW / graphic.aspectRatio;
+      }
+      pdf.addImage(
+        graphic.dataUrl,
+        'PNG',
+        (pageWidth - drawW) / 2,
+        14 + (maxH - drawH) / 2,
+        drawW,
+        drawH
+      );
+    } catch (err) {
+      console.warn('Certificate Title Graphic Render:', err);
+    }
+
+    // Affiliation & Unit subtitle directly below the graphic
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8);
+    pdf.setTextColor(aCol.r, aCol.g, aCol.b);
+    pdf.text(`${certAffiliation}  •  ${unitHeaderLabel}  •  ${certLocation}`, pageWidth / 2, 33.5, {
+      align: 'center',
+    });
+
+    // Metadata cleanly on Top-Right
+    pdf.setFont('courier', 'bold');
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(71, 85, 105);
+    pdf.text(`CERT: ${data.certNumber}`, pageWidth - 18, 19, { align: 'right' });
+    pdf.text(`DATE: ${data.issueDate}`, pageWidth - 18, 24, { align: 'right' });
+    if (data.norkaRegNumber) {
+      pdf.setFontSize(6.5);
+      pdf.text(`REG: ${data.norkaRegNumber}`, pageWidth - 18, 28.5, { align: 'right' });
+    }
+  } else if (
+    effectiveTitleStyle === 'official_lockup' ||
+    (effectiveTitleStyle === 'title_graphic' && hasCustomLogoWithoutCustomBanner)
+  ) {
+    const { line1, line2, line3 } = getTitleLockupLines(portalConfig);
+
+    // Measure lockup text width so circular logo + stacked title block is centered around pageWidth/2
+    pdf.setFont('times', 'bold');
+    pdf.setFontSize(19.5);
+    const l1W = pdf.getTextWidth(line1.toUpperCase());
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(7.5);
+    const l2W = line2 ? pdf.getTextWidth(line2.toUpperCase()) : 0;
+
+    const textBlockW = Math.max(l1W, l2W, 38);
+    const emblemSize = 15;
+    const gap = 3.2;
+    const totalW = emblemSize + gap + textBlockW;
+    const startX = (pageWidth - totalW) / 2;
+    const textCenterX = startX + emblemSize + gap + textBlockW / 2;
+
+    try {
+      const logoPngUrl = await getActiveLogoPngDataUrl();
+      pdf.addImage(logoPngUrl, 'PNG', startX, 14.2, emblemSize, emblemSize);
+    } catch (err) {
+      console.warn('Certificate Lockup Logo Render:', err);
+    }
+
+    // Line 1: Bold Red Serif ("KAIRALI")
+    pdf.setFont('times', 'bold');
+    pdf.setFontSize(19.5);
+    pdf.setTextColor(220, 38, 38);
+    pdf.text(line1.toUpperCase(), textCenterX, 20.5, { align: 'center' });
+
+    // Line 2: Bold Dark Sans ("CULTURAL ASSOCIATION")
+    if (line2) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(15, 23, 42);
+      pdf.text(line2.toUpperCase(), textCenterX, 24.8, { align: 'center' });
+    }
+
+    // Line 3: Bold Location ("Fujairah")
+    if (line3) {
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(8.2);
+      pdf.setTextColor(15, 23, 42);
+      pdf.text(line3, textCenterX, 28.6, { align: 'center' });
+    }
+
+    // Affiliation & Unit Subline
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(7.8);
+    pdf.setTextColor(aCol.r, aCol.g, aCol.b);
+    pdf.text(`${certAffiliation}  •  ${unitHeaderLabel}`, pageWidth / 2, 34.5, {
+      align: 'center',
+    });
+
+    // Metadata cleanly on Top-Right
+    pdf.setFont('courier', 'bold');
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(71, 85, 105);
+    pdf.text(`CERT: ${data.certNumber}`, pageWidth - 18, 19, { align: 'right' });
+    pdf.text(`DATE: ${data.issueDate}`, pageWidth - 18, 24, { align: 'right' });
+    if (data.norkaRegNumber) {
+      pdf.setFontSize(6.5);
+      pdf.text(`REG: ${data.norkaRegNumber}`, pageWidth - 18, 28.5, { align: 'right' });
+    }
+  } else {
+    // Classic Standard Org Header + Right Emblem
+    try {
+      const logoPngUrl = await getActiveLogoPngDataUrl();
+      pdf.addImage(logoPngUrl, 'PNG', pageWidth - 38, 15, 20, 20);
+    } catch (err) {
+      console.warn('Certificate Logo Render:', err);
+    }
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(certOrgName.length > 32 ? 14 : 16);
+    pdf.setTextColor(pCol.r, pCol.g, pCol.b);
+    pdf.text(certOrgName, pageWidth / 2, 23, { align: 'center' });
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(8.5);
+    pdf.setTextColor(aCol.r, aCol.g, aCol.b);
+    pdf.text(certAffiliation, pageWidth / 2, 29, {
+      align: 'center',
+    });
+
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8);
+    pdf.setTextColor(100, 116, 139);
+    pdf.text(`${unitHeaderLabel}  •  ${certLocation}`, pageWidth / 2, 34.5, {
+      align: 'center',
+    });
+
+    // Top Meta Bar: Certificate Number and Date beside QR
+    pdf.setFont('courier', 'bold');
+    pdf.setFontSize(7.5);
+    pdf.setTextColor(71, 85, 105);
+    pdf.text(`CERT: ${data.certNumber}`, 40, 19, { align: 'left' });
+    pdf.text(`DATE: ${data.issueDate}`, 40, 24, { align: 'left' });
+  }
+}
+
+async function renderCertificatePage(
+  pdf: jsPDF,
+  data: CertificateData,
+  portalConfig: PortalBrandingConfig
+): Promise<void> {
   const template =
     CERTIFICATE_TEMPLATES.find((t) => t.id === data.templateId) || CERTIFICATE_TEMPLATES[0];
-
-  // A4 Landscape Dimensions: 297mm x 210mm
-  const pdf = new jsPDF({
-    orientation: 'landscape',
-    unit: 'mm',
-    format: 'a4',
-  });
 
   const pageWidth = 297;
   const pageHeight = 210;
@@ -166,8 +373,13 @@ export async function generateCertificatePdf(data: CertificateData): Promise<jsP
   // 3. Render Borders & Corner Filigree based on theme style
   renderGraphicBorder(pdf, template.borderStyle, pageWidth, pageHeight, pCol, sCol, aCol);
 
+  const orgDisplayName = portalConfig.portalName || 'Official Organization';
+  const orgAffiliation =
+    portalConfig.affiliationText || portalConfig.subtitle || 'Authorized Organization';
+  const unitTermLabel = portalConfig.unitTerm || 'Unit';
+
   // 4. Verification QR Code (Top-Left)
-  const qrString = `KCA OFFICIAL CERTIFICATE\nCert No: ${data.certNumber}\nIssued To: ${data.recipientName}\nID/Roll: ${data.memberOrStudentId || 'N/A'}\nAchievement: ${data.title}\nCourse/Event: ${data.courseOrEvent}\nUnit: ${data.unit}\nDate: ${data.issueDate}\nA Norka affiliated Organisation`;
+  const qrString = `${orgDisplayName.toUpperCase()} OFFICIAL CERTIFICATE\nCert No: ${data.certNumber}\nIssued To: ${data.recipientName}\nID/Roll: ${data.memberOrStudentId || 'N/A'}\nAchievement: ${data.title}\nCourse/Event: ${data.courseOrEvent}\n${unitTermLabel}: ${data.unit}\nDate: ${data.issueDate}\n${orgAffiliation}`;
   try {
     const qrDataUrl = await QRCode.toDataURL(qrString, {
       margin: 1,
@@ -181,42 +393,8 @@ export async function generateCertificatePdf(data: CertificateData): Promise<jsP
     pdf.text('AUTHENTICITY QR', 27, 36.5, { align: 'center' });
   } catch {}
 
-  // 5. Draw Official KCA Emblem / Logo on Top Right with generous margins (guaranteed PNG)
-  try {
-    const logoPngUrl = await getActiveLogoPngDataUrl();
-    pdf.addImage(logoPngUrl, 'PNG', pageWidth - 38, 15, 20, 20);
-  } catch (err) {
-    console.warn('Certificate Logo Render:', err);
-  }
-
-  // 6. Header: Organization Name & NORKA Affiliation
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(17);
-  pdf.setTextColor(pCol.r, pCol.g, pCol.b);
-  pdf.text('KAIRALI CULTURAL ASSOCIATION FUJAIRAH', pageWidth / 2, 23, { align: 'center' });
-
-  // NORKA Roots Affiliation Banner
-  pdf.setFont('helvetica', 'bold');
-  pdf.setFontSize(9);
-  pdf.setTextColor(aCol.r, aCol.g, aCol.b);
-  pdf.text('A Norka affiliated Organisation (Govt. of Kerala)', pageWidth / 2, 29, {
-    align: 'center',
-  });
-
-  pdf.setFont('helvetica', 'normal');
-  pdf.setFontSize(8);
-  pdf.setTextColor(100, 116, 139);
-  const unitHeaderLabel = data.unit === 'Central' ? 'Central Committee' : `${data.unit} Unit`;
-  pdf.text(`${unitHeaderLabel}  •  Fujairah, United Arab Emirates`, pageWidth / 2, 34.5, {
-    align: 'center',
-  });
-
-  // Top Meta Bar: Certificate Number and Date
-  pdf.setFont('courier', 'bold');
-  pdf.setFontSize(7.5);
-  pdf.setTextColor(71, 85, 105);
-  pdf.text(`CERT: ${data.certNumber}`, 40, 19, { align: 'left' });
-  pdf.text(`DATE: ${data.issueDate}`, 40, 24, { align: 'left' });
+  // 5 & 6. Header: Official Lockup, Title Graphic Image, or Standard Organization Header
+  await renderCertificateHeader(pdf, data, portalConfig, pageWidth, pCol, aCol);
 
   // Ornamental Divider Line
   pdf.setDrawColor(aCol.r, aCol.g, aCol.b);
@@ -247,21 +425,24 @@ export async function generateCertificatePdf(data: CertificateData): Promise<jsP
   const nameWidth = pdf.getTextWidth(data.recipientName);
   pdf.line(pageWidth / 2 - nameWidth / 2 - 8, 74, pageWidth / 2 + nameWidth / 2 + 8, 74);
 
-  // Optional Malayalam Name or Registration ID
+  // Optional Registration ID
   if (data.memberOrStudentId) {
     pdf.setFont('courier', 'bold');
     pdf.setFontSize(8.5);
     pdf.setTextColor(100, 116, 139);
-    pdf.text(`ID / REGISTRATION NO: ${data.memberOrStudentId}   |   UNIT: ${data.unit}`, pageWidth / 2, 80, {
-      align: 'center',
-    });
+    pdf.text(
+      `ID / REGISTRATION NO: ${data.memberOrStudentId}   |   ${unitTermLabel.toUpperCase()}: ${data.unit}`,
+      pageWidth / 2,
+      80,
+      { align: 'center' }
+    );
   }
 
   // 10. Citation / Body Text
   pdf.setFont('times', 'italic');
   pdf.setFontSize(12.5);
   pdf.setTextColor(51, 65, 85);
-  const citationFull = `${data.citation} during the ${data.courseOrEvent} organized by Kairali Cultural Association Fujairah.`;
+  const citationFull = `${data.citation} during the ${data.courseOrEvent} organized by ${orgDisplayName}.`;
   const citationLines = pdf.splitTextToSize(citationFull, 215);
   const citationStartY = data.memberOrStudentId ? 88 : 84;
   pdf.text(citationLines, pageWidth / 2, citationStartY, { align: 'center', lineHeightFactor: 1.35 });
@@ -272,32 +453,28 @@ export async function generateCertificatePdf(data: CertificateData): Promise<jsP
   const signY = 168;
   const hasSignatory3 = Boolean(data.signatory3Name);
 
-  // 12. Center Seal / Graphic Stamp (Mathematically aligned and positioned in the breathing zone)
+  // 12. Center Seal / Graphic Stamp
   const sealType: SealStyle = data.sealType || 'gold_guilloche';
   if (sealType !== 'none') {
     let sealY: number;
     let sealR: number;
 
     if (hasSignatory3) {
-      // With 3 signatories (Left, Center, Right), seal is positioned safely above the center signature line (154mm)
-      sealY = 135;
+      sealY = Math.min(135, Math.max(citationEndY + 13, 125));
       sealR = 10.5;
     } else {
-      // With 2 signatories (Left & Right), center zone is open and spacious; center seal at 140mm
-      sealY = 140;
+      sealY = Math.min(140, Math.max(citationEndY + 16, 131));
       sealR = 13;
     }
 
     drawGraphicSeal(pdf, pageWidth / 2, sealY, sealType, pCol, aCol, sealR);
   } else {
-    // Clean Middle Section Divider Line with Vector Diamond
-    const divY = hasSignatory3 ? 135 : 140;
+    const divY = Math.min(138, Math.max(citationEndY + 14, 128));
     pdf.setDrawColor(aCol.r, aCol.g, aCol.b);
     pdf.setLineWidth(0.6);
     pdf.line(pageWidth / 2 - 40, divY, pageWidth / 2 - 8, divY);
     pdf.line(pageWidth / 2 + 8, divY, pageWidth / 2 + 40, divY);
 
-    // Center Gold Vector Diamond
     drawVectorDiamond(pdf, pageWidth / 2, divY, 3.5, 3.5, aCol);
     drawVectorStar(pdf, pageWidth / 2 - 14, divY, 1.8, 0.8, aCol);
     drawVectorStar(pdf, pageWidth / 2 + 14, divY, 1.8, 0.8, aCol);
@@ -308,8 +485,7 @@ export async function generateCertificatePdf(data: CertificateData): Promise<jsP
     pdf.text('OFFICIAL RECOGNITION', pageWidth / 2, divY + 6.5, { align: 'center' });
   }
 
-  // 13. Signatories (Left: Secretary, Center: Coordinator/Examiner, Right: President)
-  // Signatory 1 (Left - Secretary / Signatory 1)
+  // 13. Signatories (Left, Center optional, Right)
   if (data.signatory1SignatureUrl) {
     try {
       pdf.addImage(data.signatory1SignatureUrl, 'PNG', 46, signY - 14, 32, 12);
@@ -327,12 +503,12 @@ export async function generateCertificatePdf(data: CertificateData): Promise<jsP
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(8);
   pdf.setTextColor(100, 116, 139);
-  const sig1UnitLabel = data.unit === 'Central' ? 'Central Committee' : `${data.unit} Unit`;
+  const sig1UnitLabel =
+    data.unit === 'Central' ? 'Central Committee' : `${data.unit} ${unitTermLabel}`;
   pdf.text(`${sig1UnitLabel} ${data.signatory1Title || 'General Secretary'}`, 62, signY + 9, {
     align: 'center',
   });
 
-  // Signatory 2 (Right - President / Signatory 2)
   if (data.signatory2SignatureUrl) {
     try {
       pdf.addImage(data.signatory2SignatureUrl, 'PNG', pageWidth - 78, signY - 14, 32, 12);
@@ -350,12 +526,12 @@ export async function generateCertificatePdf(data: CertificateData): Promise<jsP
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(8);
   pdf.setTextColor(100, 116, 139);
-  const sig2UnitLabel = data.unit === 'Central' ? 'Central Committee' : `${data.unit} Unit`;
+  const sig2UnitLabel =
+    data.unit === 'Central' ? 'Central Committee' : `${data.unit} ${unitTermLabel}`;
   pdf.text(`${sig2UnitLabel} ${data.signatory2Title || 'President'}`, pageWidth - 62, signY + 9, {
     align: 'center',
   });
 
-  // Signatory 3 (Optional Center)
   if (hasSignatory3 && data.signatory3Name) {
     if (data.signatory3SignatureUrl) {
       try {
@@ -379,245 +555,62 @@ export async function generateCertificatePdf(data: CertificateData): Promise<jsP
   pdf.setFontSize(6.8);
   pdf.setTextColor(148, 163, 184);
   pdf.text(
-    `Official Certificate issued by Kairali Cultural Association Fujairah • Verify authenticity via QR Code`,
+    `Official Certificate issued by ${orgDisplayName} • Verify authenticity via QR Code`,
     pageWidth / 2,
     pageHeight - 16.5,
     { align: 'center' }
   );
+}
 
+export async function generateCertificatePdf(data: CertificateData): Promise<jsPDF> {
+  // A4 Landscape Dimensions: 297mm x 210mm
+  const pdf = new jsPDF({
+    orientation: 'landscape',
+    unit: 'mm',
+    format: 'a4',
+  });
+  const portalConfig = loadPortalConfig();
+  await renderCertificatePage(pdf, data, portalConfig);
   return pdf;
 }
 
 /**
  * Bulk Multi-Page Certificate Generator
  */
-export async function generateBulkCertificatesPdf(records: CertificateData[]): Promise<jsPDF> {
+export async function generateBulkCertificatesPdf(
+  records: CertificateData[],
+  onProgress?: (percent: number) => void
+): Promise<jsPDF> {
   const finalDoc = new jsPDF({
     orientation: 'landscape',
     unit: 'mm',
     format: 'a4',
   });
+  const portalConfig = loadPortalConfig();
 
   for (let i = 0; i < records.length; i++) {
     if (i > 0) {
       finalDoc.addPage('a4', 'landscape');
     }
-    const record = records[i];
-    const template =
-      CERTIFICATE_TEMPLATES.find((t) => t.id === record.templateId) || CERTIFICATE_TEMPLATES[0];
-    const pageWidth = 297;
-    const pageHeight = 210;
-    const pCol = hexToRgb(template.primaryColor);
-    const sCol = hexToRgb(template.secondaryColor);
-    const aCol = hexToRgb(template.accentColor);
-    const bgCol = hexToRgb(template.bgColor);
-
-    finalDoc.setFillColor(bgCol.r, bgCol.g, bgCol.b);
-    finalDoc.rect(0, 0, pageWidth, pageHeight, 'F');
-
-    if (record.showWatermark !== false) {
-      drawSubtleWatermark(finalDoc, pageWidth / 2, pageHeight / 2, aCol, bgCol);
+    await renderCertificatePage(finalDoc, records[i], portalConfig);
+    if (onProgress) {
+      onProgress(Math.round(((i + 1) / records.length) * 100));
     }
-    renderGraphicBorder(finalDoc, template.borderStyle, pageWidth, pageHeight, pCol, sCol, aCol);
-
-    // QR Code
-    const qrString = `KCA OFFICIAL CERTIFICATE\nCert No: ${record.certNumber}\nIssued To: ${record.recipientName}\nID/Roll: ${record.memberOrStudentId || 'N/A'}\nAchievement: ${record.title}\nCourse/Event: ${record.courseOrEvent}\nUnit: ${record.unit}\nDate: ${record.issueDate}\nA Norka affiliated Organisation`;
-    try {
-      const qrDataUrl = await QRCode.toDataURL(qrString, {
-        margin: 1,
-        width: 160,
-        color: { dark: template.primaryColor, light: '#FFFFFF' },
-      });
-      finalDoc.addImage(qrDataUrl, 'PNG', 18, 16, 18, 18);
-      finalDoc.setFont('helvetica', 'bold');
-      finalDoc.setFontSize(5);
-      finalDoc.setTextColor(100, 116, 139);
-      finalDoc.text('AUTHENTICITY QR', 27, 36.5, { align: 'center' });
-    } catch {}
-
-    // Logo
-    try {
-      const logoPngUrl = await getActiveLogoPngDataUrl();
-      finalDoc.addImage(logoPngUrl, 'PNG', pageWidth - 38, 15, 20, 20);
-    } catch {}
-
-    // Headers
-    finalDoc.setFont('helvetica', 'bold');
-    finalDoc.setFontSize(17);
-    finalDoc.setTextColor(pCol.r, pCol.g, pCol.b);
-    finalDoc.text('KAIRALI CULTURAL ASSOCIATION FUJAIRAH', pageWidth / 2, 23, { align: 'center' });
-
-    finalDoc.setFont('helvetica', 'bold');
-    finalDoc.setFontSize(9);
-    finalDoc.setTextColor(aCol.r, aCol.g, aCol.b);
-    finalDoc.text('A Norka affiliated Organisation (Govt. of Kerala)', pageWidth / 2, 29, {
-      align: 'center',
-    });
-
-    finalDoc.setFont('helvetica', 'normal');
-    finalDoc.setFontSize(8);
-    finalDoc.setTextColor(100, 116, 139);
-    const recUnitHeader = record.unit === 'Central' ? 'Central Committee' : `${record.unit} Unit`;
-    finalDoc.text(`${recUnitHeader}  •  Fujairah, United Arab Emirates`, pageWidth / 2, 34.5, {
-      align: 'center',
-    });
-
-    finalDoc.setFont('courier', 'bold');
-    finalDoc.setFontSize(7.5);
-    finalDoc.setTextColor(71, 85, 105);
-    finalDoc.text(`CERT: ${record.certNumber}`, 40, 19, { align: 'left' });
-    finalDoc.text(`DATE: ${record.issueDate}`, 40, 24, { align: 'left' });
-
-    finalDoc.setDrawColor(aCol.r, aCol.g, aCol.b);
-    finalDoc.setLineWidth(0.8);
-    finalDoc.line(65, 38, pageWidth - 65, 38);
-
-    // Title
-    finalDoc.setFont('times', 'bold');
-    finalDoc.setFontSize(22);
-    finalDoc.setTextColor(pCol.r, pCol.g, pCol.b);
-    finalDoc.text(record.title.toUpperCase(), pageWidth / 2, 50, { align: 'center' });
-
-    finalDoc.setFont('helvetica', 'normal');
-    finalDoc.setFontSize(9);
-    finalDoc.setTextColor(100, 116, 139);
-    finalDoc.text('THIS IS PROUDLY PRESENTED TO', pageWidth / 2, 58, { align: 'center' });
-
-    finalDoc.setFont('times', 'bold');
-    finalDoc.setFontSize(25);
-    finalDoc.setTextColor(15, 23, 42);
-    finalDoc.text(record.recipientName, pageWidth / 2, 71, { align: 'center' });
-
-    finalDoc.setDrawColor(aCol.r, aCol.g, aCol.b);
-    finalDoc.setLineWidth(1.1);
-    const nWidth = finalDoc.getTextWidth(record.recipientName);
-    finalDoc.line(pageWidth / 2 - nWidth / 2 - 8, 74, pageWidth / 2 + nWidth / 2 + 8, 74);
-
-    if (record.memberOrStudentId) {
-      finalDoc.setFont('courier', 'bold');
-      finalDoc.setFontSize(8.5);
-      finalDoc.setTextColor(100, 116, 139);
-      finalDoc.text(`ID / REGISTRATION NO: ${record.memberOrStudentId}   |   UNIT: ${record.unit}`, pageWidth / 2, 80, {
-        align: 'center',
-      });
-    }
-
-    finalDoc.setFont('times', 'italic');
-    finalDoc.setFontSize(12.5);
-    finalDoc.setTextColor(51, 65, 85);
-    const citFull = `${record.citation} during the ${record.courseOrEvent} organized by Kairali Cultural Association Fujairah.`;
-    const citLines = finalDoc.splitTextToSize(citFull, 215);
-    const citStartY = record.memberOrStudentId ? 88 : 84;
-    finalDoc.text(citLines, pageWidth / 2, citStartY, { align: 'center', lineHeightFactor: 1.35 });
-    const citLineCount = citLines.length;
-    const citEndY = citStartY + (citLineCount - 1) * 6.2;
-
-    const hasSign3 = Boolean(record.signatory3Name);
-    const signY = 168;
-    const sType: SealStyle = record.sealType || 'gold_guilloche';
-    if (sType !== 'none') {
-      let sealY: number;
-      let sealR = 13;
-      if (hasSign3) {
-        sealY = Math.min(131, Math.max(citEndY + 13, 125));
-        sealR = 11;
-      } else {
-        sealY = Math.min(138, Math.max(citEndY + 16, 131));
-        sealR = 13.5;
-      }
-      drawGraphicSeal(finalDoc, pageWidth / 2, sealY, sType, pCol, aCol, sealR);
-    } else {
-      const divY = Math.min(135, Math.max(citEndY + 14, 128));
-      finalDoc.setDrawColor(aCol.r, aCol.g, aCol.b);
-      finalDoc.setLineWidth(0.6);
-      finalDoc.line(pageWidth / 2 - 40, divY, pageWidth / 2 - 8, divY);
-      finalDoc.line(pageWidth / 2 + 8, divY, pageWidth / 2 + 40, divY);
-
-      drawVectorDiamond(finalDoc, pageWidth / 2, divY, 3.5, 3.5, aCol);
-      drawVectorStar(finalDoc, pageWidth / 2 - 14, divY, 1.8, 0.8, aCol);
-      drawVectorStar(finalDoc, pageWidth / 2 + 14, divY, 1.8, 0.8, aCol);
-
-      finalDoc.setFont('helvetica', 'bold');
-      finalDoc.setFontSize(7);
-      finalDoc.setTextColor(aCol.r, aCol.g, aCol.b);
-      finalDoc.text('OFFICIAL RECOGNITION', pageWidth / 2, divY + 6.5, { align: 'center' });
-    }
-
-    if (record.signatory1SignatureUrl) {
-      try {
-        finalDoc.addImage(record.signatory1SignatureUrl, 'PNG', 46, signY - 14, 32, 12);
-      } catch {}
-    }
-    finalDoc.setDrawColor(148, 163, 184);
-    finalDoc.setLineWidth(0.6);
-    finalDoc.line(28, signY, 96, signY);
-    finalDoc.setFont('helvetica', 'bold');
-    finalDoc.setFontSize(9.5);
-    finalDoc.setTextColor(pCol.r, pCol.g, pCol.b);
-    finalDoc.text(record.signatory1Name || 'Authorized Signatory', 62, signY + 5, { align: 'center' });
-    finalDoc.setFont('helvetica', 'normal');
-    finalDoc.setFontSize(8);
-    finalDoc.setTextColor(100, 116, 139);
-    const recSig1Unit = record.unit === 'Central' ? 'Central Committee' : `${record.unit} Unit`;
-    finalDoc.text(`${recSig1Unit} ${record.signatory1Title || 'General Secretary'}`, 62, signY + 9, {
-      align: 'center',
-    });
-
-    if (record.signatory2SignatureUrl) {
-      try {
-        finalDoc.addImage(record.signatory2SignatureUrl, 'PNG', pageWidth - 78, signY - 14, 32, 12);
-      } catch {}
-    }
-    finalDoc.line(pageWidth - 96, signY, pageWidth - 28, signY);
-    finalDoc.setFont('helvetica', 'bold');
-    finalDoc.setFontSize(9.5);
-    finalDoc.setTextColor(pCol.r, pCol.g, pCol.b);
-    finalDoc.text(record.signatory2Name || 'Authorized Signatory', pageWidth - 62, signY + 5, {
-      align: 'center',
-    });
-    finalDoc.setFont('helvetica', 'normal');
-    finalDoc.setFontSize(8);
-    finalDoc.setTextColor(100, 116, 139);
-    const recSig2Unit = record.unit === 'Central' ? 'Central Committee' : `${record.unit} Unit`;
-    finalDoc.text(`${recSig2Unit} ${record.signatory2Title || 'President'}`, pageWidth - 62, signY + 9, {
-      align: 'center',
-    });
-
-    if (hasSign3 && record.signatory3Name) {
-      if (record.signatory3SignatureUrl) {
-        try {
-          finalDoc.addImage(record.signatory3SignatureUrl, 'PNG', 132.5, signY - 14, 32, 12);
-        } catch {}
-      }
-      finalDoc.line(114, signY, 183, signY);
-      finalDoc.setFont('helvetica', 'bold');
-      finalDoc.setFontSize(9);
-      finalDoc.setTextColor(pCol.r, pCol.g, pCol.b);
-      finalDoc.text(record.signatory3Name, 148.5, signY + 5, { align: 'center' });
-      finalDoc.setFont('helvetica', 'normal');
-      finalDoc.setFontSize(7.5);
-      finalDoc.setTextColor(100, 116, 139);
-      finalDoc.text(record.signatory3Title || 'Cultural Convener', 148.5, signY + 9, { align: 'center' });
-    }
-
-    finalDoc.setFont('helvetica', 'bold');
-    finalDoc.setFontSize(6.8);
-    finalDoc.setTextColor(148, 163, 184);
-    finalDoc.text(
-      `Official Certificate issued by Kairali Cultural Association Fujairah • Verify authenticity via QR Code`,
-      pageWidth / 2,
-      pageHeight - 16.5,
-      { align: 'center' }
-    );
   }
 
   return finalDoc;
 }
 
-function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  let c = hex.replace('#', '');
+function hexToRgb(hex?: string | null): { r: number; g: number; b: number } {
+  if (!hex || typeof hex !== 'string') {
+    return { r: 139, g: 0, b: 0 };
+  }
+  let c = hex.replace('#', '').trim();
   if (c.length === 3) c = c.split('').map((x) => x + x).join('');
   const num = parseInt(c, 16);
+  if (isNaN(num)) {
+    return { r: 139, g: 0, b: 0 };
+  }
   return {
     r: (num >> 16) & 255,
     g: (num >> 8) & 255,
@@ -853,6 +846,67 @@ function drawGraphicSeal(
     pdf.setFontSize(r > 11 ? 3.8 : 3.2);
     pdf.setTextColor(aCol.r, aCol.g, aCol.b);
     pdf.text('MERIT', cx, cy + r * 0.52, { align: 'center' });
+  } else if (sealType === 'luxury_gold_rosette') {
+    // 5. Luxury Gold Rosette with Deep Red Ribbon Tails & Golden Trim
+    const tailYStart = cy + r * 0.65;
+    const tailYEnd = tailYStart + r * 1.05;
+
+    // Left Ribbon Tail
+    pdf.setFillColor(136, 19, 55); // #881337
+    pdf.triangle(cx - r * 0.75, tailYStart, cx - r * 0.15, tailYStart, cx - r * 0.7, tailYEnd, 'F');
+    pdf.triangle(cx - r * 0.15, tailYStart, cx - r * 0.7, tailYEnd, cx - r * 0.35, tailYEnd - 2.8, 'F');
+
+    // Right Ribbon Tail
+    pdf.triangle(cx + r * 0.15, tailYStart, cx + r * 0.75, tailYStart, cx + r * 0.7, tailYEnd, 'F');
+    pdf.triangle(cx + r * 0.15, tailYStart, cx + r * 0.7, tailYEnd, cx + r * 0.35, tailYEnd - 2.8, 'F');
+
+    // Gold trim on ribbon edges
+    pdf.setDrawColor(217, 119, 6);
+    pdf.setLineWidth(0.35);
+    pdf.line(cx - r * 0.75, tailYStart, cx - r * 0.7, tailYEnd);
+    pdf.line(cx + r * 0.75, tailYStart, cx + r * 0.7, tailYEnd);
+
+    // Radiating Golden Rosette Medallion
+    pdf.setFillColor(254, 243, 199);
+    pdf.circle(cx, cy, r + 0.8, 'F');
+
+    pdf.setDrawColor(217, 119, 6);
+    pdf.setLineWidth(0.45);
+    for (let angle = 0; angle < 360; angle += 10) {
+      const rad = (angle * Math.PI) / 180;
+      pdf.line(
+        cx + Math.cos(rad) * (r - 1.2),
+        cy + Math.sin(rad) * (r - 1.2),
+        cx + Math.cos(rad) * (r + 0.8),
+        cy + Math.sin(rad) * (r + 0.8)
+      );
+    }
+
+    // Outer & Inner Gold Concentric Rings
+    pdf.setLineWidth(0.85);
+    pdf.circle(cx, cy, r - 0.7);
+    pdf.setLineWidth(0.4);
+    pdf.circle(cx, cy, r - 2.2);
+
+    // Inner Deep Red Core
+    pdf.setFillColor(136, 19, 55);
+    pdf.circle(cx, cy, r - 2.3, 'F');
+
+    // Inner Text & Gold Star
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(r > 11 ? 4.2 : 3.6);
+    pdf.setTextColor(254, 240, 138);
+    pdf.text('KAIRALI', cx, cy - r * 0.38, { align: 'center' });
+
+    drawVectorStar(pdf, cx, cy - 0.3, 2.3, 1.0, { r: 251, g: 191, b: 36 });
+
+    pdf.setFontSize(r > 11 ? 4.8 : 4.0);
+    pdf.setTextColor(255, 255, 255);
+    pdf.text('HONOR', cx, cy + 3.8, { align: 'center' });
+
+    pdf.setFontSize(r > 11 ? 3.4 : 2.8);
+    pdf.setTextColor(253, 230, 138);
+    pdf.text('PRESTIGE SEAL', cx, cy + r * 0.54, { align: 'center' });
   }
 }
 
@@ -919,7 +973,9 @@ function renderGraphicBorder(
   sCol: { r: number; g: number; b: number },
   aCol: { r: number; g: number; b: number }
 ) {
-  if (style === 'formal_double') {
+  if (style === 'crimson_gold_luxury') {
+    drawLuxuryPolygonalCrimsonBorders(pdf, pw, ph, pCol, sCol, aCol);
+  } else if (style === 'formal_double') {
     // Outer heavy border
     pdf.setDrawColor(pCol.r, pCol.g, pCol.b);
     pdf.setLineWidth(3);
@@ -1114,4 +1170,155 @@ function drawCornerSquares(
   pdf.rect(x + w - s / 2, y - s / 2, s, s, 'F');
   pdf.rect(x - s / 2, y + h - s / 2, s, s, 'F');
   pdf.rect(x + w - s / 2, y + h - s / 2, s, s, 'F');
+}
+
+/**
+ * Renders luxury low-poly faceted ruby geometric corner clusters,
+ * dual metallic gold precision borders, and ornate L-shaped gold corner brackets
+ */
+function drawLuxuryPolygonalCrimsonBorders(
+  pdf: jsPDF,
+  pw: number,
+  ph: number,
+  pCol: { r: number; g: number; b: number },
+  sCol: { r: number; g: number; b: number },
+  aCol: { r: number; g: number; b: number }
+) {
+  // 1. Shaded low-poly facet ruby & gold palette
+  const rubyDark = { r: 69, g: 10, b: 10 }; // #450A0A
+  const rubyDeep = { r: 127, g: 29, b: 29 }; // #7F1D1D
+  const rubyMid = { r: 153, g: 27, b: 27 }; // #991B1B
+  const rubyBright = { r: 190, g: 18, b: 60 }; // #BE123C
+  const rubyRoyal = { r: 136, g: 19, b: 55 }; // #881337
+  const goldDark = { r: 180, g: 83, b: 9 }; // #B45309
+  const goldMid = { r: 217, g: 119, b: 6 }; // #D97706
+  const goldBright = { r: 245, g: 158, b: 11 }; // #F59E0B
+
+  const fillTri = (
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    x3: number,
+    y3: number,
+    col: { r: number; g: number; b: number }
+  ) => {
+    pdf.setFillColor(col.r, col.g, col.b);
+    pdf.triangle(x1, y1, x2, y2, x3, y3, 'F');
+  };
+
+  // 2. Corner Facet Clusters
+  // --- TOP-LEFT CORNER FACETS ---
+  fillTri(0, 0, 52, 0, 22, 20, rubyDeep);
+  fillTri(0, 0, 22, 20, 0, 52, rubyRoyal);
+  fillTri(52, 0, 75, 0, 42, 22, rubyDark);
+  fillTri(0, 52, 0, 75, 22, 42, rubyMid);
+  fillTri(22, 20, 42, 22, 22, 42, rubyBright);
+  fillTri(42, 22, 54, 16, 56, 0, goldMid);
+  fillTri(22, 42, 16, 54, 0, 56, goldBright);
+  fillTri(22, 20, 32, 12, 42, 22, goldDark);
+
+  // --- BOTTOM-LEFT CORNER FACETS ---
+  fillTri(0, ph, 52, ph, 22, ph - 20, rubyRoyal);
+  fillTri(0, ph, 22, ph - 20, 0, ph - 52, rubyDeep);
+  fillTri(52, ph, 75, ph, 42, ph - 22, rubyDark);
+  fillTri(0, ph - 52, 0, ph - 75, 22, ph - 42, rubyMid);
+  fillTri(22, ph - 20, 42, ph - 22, 22, ph - 42, rubyBright);
+  fillTri(42, ph - 22, 54, ph - 16, 56, ph, goldMid);
+  fillTri(22, ph - 42, 16, ph - 54, 0, ph - 56, goldBright);
+  fillTri(22, ph - 20, 32, ph - 12, 42, ph - 22, goldDark);
+
+  // --- TOP-RIGHT CORNER FACETS ---
+  fillTri(pw, 0, pw - 52, 0, pw - 22, 20, rubyDeep);
+  fillTri(pw, 0, pw - 22, 20, pw, 52, rubyRoyal);
+  fillTri(pw - 52, 0, pw - 75, 0, pw - 42, 22, rubyDark);
+  fillTri(pw, 52, pw, 75, pw - 22, 42, rubyMid);
+  fillTri(pw - 22, 20, pw - 42, 22, pw - 22, 42, rubyBright);
+  fillTri(pw - 42, 22, pw - 54, 16, pw - 56, 0, goldMid);
+  fillTri(pw - 22, 42, pw - 16, 54, pw, 56, goldBright);
+  fillTri(pw - 22, 20, pw - 32, 12, pw - 42, 22, goldDark);
+
+  // --- BOTTOM-RIGHT CORNER FACETS ---
+  fillTri(pw, ph, pw - 52, ph, pw - 22, ph - 20, rubyRoyal);
+  fillTri(pw, ph, pw - 22, ph - 20, pw, ph - 52, rubyDeep);
+  fillTri(pw - 52, ph, pw - 75, ph, pw - 42, ph - 22, rubyDark);
+  fillTri(pw, ph - 52, pw, ph - 75, pw - 22, ph - 42, rubyMid);
+  fillTri(pw - 22, ph - 20, pw - 42, ph - 22, pw - 22, ph - 42, rubyBright);
+  fillTri(pw - 42, ph - 22, pw - 54, ph - 16, pw - 56, ph, goldMid);
+  fillTri(pw - 22, ph - 42, pw - 16, ph - 54, pw, ph - 56, goldBright);
+  fillTri(pw - 22, ph - 20, pw - 32, ph - 12, pw - 42, ph - 22, goldDark);
+
+  // 3. Facet line accents in subtle gold
+  pdf.setDrawColor(245, 158, 11);
+  pdf.setLineWidth(0.25);
+  pdf.line(0, 0, 22, 20);
+  pdf.line(22, 20, 42, 22);
+  pdf.line(0, ph, 22, ph - 20);
+  pdf.line(22, ph - 20, 42, ph - 22);
+  pdf.line(pw, 0, pw - 22, 20);
+  pdf.line(pw - 22, 20, pw - 42, 22);
+  pdf.line(pw, ph, pw - 22, ph - 20);
+  pdf.line(pw - 22, ph - 20, pw - 42, ph - 22);
+
+  // 4. Double Precision Metallic Gold Frame
+  pdf.setDrawColor(goldMid.r, goldMid.g, goldMid.b);
+  pdf.setLineWidth(1.8);
+  pdf.rect(10, 10, pw - 20, ph - 20);
+
+  pdf.setDrawColor(goldBright.r, goldBright.g, goldBright.b);
+  pdf.setLineWidth(0.65);
+  pdf.rect(13.5, 13.5, pw - 27, ph - 27);
+
+  // 5. Ornate Geometric Gold Corner Brackets with Diamond Nodes
+  drawLuxuryCornerBracket(pdf, 13.5, 13.5, pw - 27, ph - 27, goldMid, goldBright);
+}
+
+function drawLuxuryCornerBracket(
+  pdf: jsPDF,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  colPrimary: { r: number; g: number; b: number },
+  colAccent: { r: number; g: number; b: number }
+) {
+  const arm = 14;
+  pdf.setDrawColor(colPrimary.r, colPrimary.g, colPrimary.b);
+  pdf.setLineWidth(1.1);
+
+  // Top-Left L-bracket
+  pdf.line(x - 2, y, x + arm, y);
+  pdf.line(x, y - 2, x, y + arm);
+  pdf.line(x + 2.5, y + 2.5, x + arm - 3, y + 2.5);
+  pdf.line(x + 2.5, y + 2.5, x + 2.5, y + arm - 3);
+  drawVectorDiamond(pdf, x + arm + 1, y, 2.4, 2.4, colAccent);
+  drawVectorDiamond(pdf, x, y + arm + 1, 2.4, 2.4, colAccent);
+  drawVectorDiamond(pdf, x, y, 3.2, 3.2, colPrimary);
+
+  // Top-Right L-bracket
+  pdf.line(x + w + 2, y, x + w - arm, y);
+  pdf.line(x + w, y - 2, x + w, y + arm);
+  pdf.line(x + w - 2.5, y + 2.5, x + w - arm + 3, y + 2.5);
+  pdf.line(x + w - 2.5, y + 2.5, x + w - 2.5, y + arm - 3);
+  drawVectorDiamond(pdf, x + w - arm - 1, y, 2.4, 2.4, colAccent);
+  drawVectorDiamond(pdf, x + w, y + arm + 1, 2.4, 2.4, colAccent);
+  drawVectorDiamond(pdf, x + w, y, 3.2, 3.2, colPrimary);
+
+  // Bottom-Left L-bracket
+  pdf.line(x - 2, y + h, x + arm, y + h);
+  pdf.line(x, y + h + 2, x, y + h - arm);
+  pdf.line(x + 2.5, y + h - 2.5, x + arm - 3, y + h - 2.5);
+  pdf.line(x + 2.5, y + h - 2.5, x + 2.5, y + h - arm + 3);
+  drawVectorDiamond(pdf, x + arm + 1, y + h, 2.4, 2.4, colAccent);
+  drawVectorDiamond(pdf, x, y + h - arm - 1, 2.4, 2.4, colAccent);
+  drawVectorDiamond(pdf, x, y + h, 3.2, 3.2, colPrimary);
+
+  // Bottom-Right L-bracket
+  pdf.line(x + w + 2, y + h, x + w - arm, y + h);
+  pdf.line(x + w, y + h + 2, x + w, y + h - arm);
+  pdf.line(x + w - 2.5, y + h - 2.5, x + w - arm + 3, y + h - 2.5);
+  pdf.line(x + w - 2.5, y + h - 2.5, x + w - 2.5, y + h - arm + 3);
+  drawVectorDiamond(pdf, x + w - arm - 1, y + h, 2.4, 2.4, colAccent);
+  drawVectorDiamond(pdf, x + w, y + h - arm - 1, 2.4, 2.4, colAccent);
+  drawVectorDiamond(pdf, x + w, y + h, 3.2, 3.2, colPrimary);
 }

@@ -299,10 +299,10 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
       <form
         onSubmit={handleSubmit}
         onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden my-auto"
+        className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden my-auto text-slate-900"
       >
         {/* Header */}
-        <div className="px-6 py-4 bg-[#881337] text-white flex items-center justify-between shadow-xs shrink-0">
+        <div className="px-6 py-4 bg-[#8b0000] text-white flex items-center justify-between border-b border-rose-900/40 shadow-xs shrink-0">
           <div>
             <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
               <PlusCircle className="w-5 h-5 text-amber-300" />
@@ -359,7 +359,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
                       setReceiptNumber(getNextReceiptNumber(existingTransactions, type, unit, checked));
                     }
                   }}
-                  className="rounded text-[#881337] focus:ring-[#881337]"
+                  className="rounded text-[#8b0000] focus:ring-[#8b0000]"
                 />
                 <span>Generate as Invoice</span>
               </label>
@@ -404,7 +404,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
                 value={receiptNumber}
                 onChange={(e) => setReceiptNumber(e.target.value)}
                 required
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold outline-none focus:ring-2 focus:ring-[#881337]"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold outline-none focus:ring-2 focus:ring-[#8b0000] focus:border-[#8b0000]"
               />
             </div>
 
@@ -418,7 +418,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 required
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#881337]"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#8b0000] focus:border-[#8b0000]"
               />
             </div>
 
@@ -431,7 +431,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
                 value={unit}
                 onChange={(e) => handleUnitChange(e.target.value)}
                 disabled={!!lockedUnit}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-[#881337] disabled:opacity-60"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-bold outline-none focus:ring-2 focus:ring-[#8b0000] focus:border-[#8b0000] disabled:opacity-60"
               >
                 {financeUnits.map((u) => (
                   <option key={u} value={u}>
@@ -468,7 +468,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
           {/* Financial Particulars Hierarchy Picker */}
           <div className="p-3.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl space-y-2.5">
             <div className="flex items-center justify-between">
-              <label className="text-[11px] font-bold uppercase tracking-wider text-[#881337] dark:text-rose-400 flex items-center gap-1.5">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-[#8b0000] flex items-center gap-1.5">
                 <FolderTree className="w-3.5 h-3.5" />
                 <span>Financial Particulars Classification</span>
               </label>
@@ -483,7 +483,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
                 <select
                   value={selectedMainParticularId}
                   onChange={(e) => handleMainParticularChange(e.target.value)}
-                  className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium outline-none focus:ring-1 focus:ring-[#881337]"
+                  className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium outline-none focus:ring-1 focus:ring-[#8b0000]"
                 >
                   <option value="">-- Select Master Head --</option>
                   {availableMainParticulars.map((p) => (
@@ -502,7 +502,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
                   value={selectedSubParticularId}
                   onChange={(e) => handleSubParticularChange(e.target.value)}
                   disabled={!selectedMainParticularId || availableSubParticulars.length === 0}
-                  className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium outline-none focus:ring-1 focus:ring-[#881337] disabled:opacity-40"
+                  className="w-full px-2.5 py-1.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium outline-none focus:ring-1 focus:ring-[#8b0000] disabled:opacity-40"
                 >
                   <option value="">
                     {availableSubParticulars.length === 0 ? 'No Sub-Items' : '-- Select Sub-Particular --'}
@@ -528,7 +528,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
               onChange={(e) => setParticulars(e.target.value)}
               placeholder="Detailed description for the voucher / receipt line item..."
               required
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#881337]"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#8b0000]"
             />
           </div>
 
@@ -547,7 +547,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
                 onChange={(e) => setAmountAED(e.target.value === '' ? '' : parseFloat(e.target.value))}
                 placeholder="0.00"
                 required
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold text-sm outline-none focus:ring-2 focus:ring-[#881337]"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono font-bold text-sm outline-none focus:ring-2 focus:ring-[#8b0000]"
               />
             </div>
 
@@ -559,7 +559,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
               <select
                 value={paymentMethod}
                 onChange={(e) => setPaymentMethod(e.target.value as PaymentMethodType)}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold outline-none focus:ring-2 focus:ring-[#881337]"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold outline-none focus:ring-2 focus:ring-[#8b0000]"
               >
                 <option value="Cash">Cash (Immediate Handover)</option>
                 <option value="Bank Transfer">Bank Transfer (Direct / Online)</option>
@@ -585,7 +585,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
                 onChange={(e) => setPartyName(e.target.value)}
                 placeholder={type === 'INCOME' ? 'Payer name or company' : 'Vendor or beneficiary name'}
                 required
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#881337]"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#8b0000]"
               />
             </div>
 
@@ -598,7 +598,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
                 value={contactNumber}
                 onChange={(e) => setContactNumber(e.target.value)}
                 placeholder="+971 50 xxx xxxx"
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#881337]"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#8b0000]"
               />
             </div>
           </div>
@@ -614,7 +614,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
                 value={referenceNumber}
                 onChange={(e) => setReferenceNumber(e.target.value)}
                 placeholder="e.g. CHQ-9921 or TXN-44219"
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#881337]"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#8b0000]"
               />
             </div>
 
@@ -625,7 +625,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as TransactionStatus)}
-                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold outline-none focus:ring-2 focus:ring-[#881337]"
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-semibold outline-none focus:ring-2 focus:ring-[#8b0000]"
               >
                 <option value="Completed">Completed (Cleared &amp; Disbursed)</option>
                 <option value="Pending">Pending (Draft / Unsettled)</option>
@@ -644,14 +644,14 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional committee note, approval note, or authorization detail..."
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#881337]"
+              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-[#8b0000]"
             />
           </div>
 
           {/* Attachment Upload (Bill / Invoice Proof) */}
           <div className="space-y-1.5 pt-1">
             <label className="block text-slate-700 dark:text-slate-300 font-bold flex items-center gap-1.5">
-              <Paperclip className="w-3.5 h-3.5 text-[#881337] dark:text-rose-400" />
+              <Paperclip className="w-3.5 h-3.5 text-slate-400" />
               <span>Attach Bill / Invoice / Voucher Scan (PDF or Image, max 10MB)</span>
             </label>
 
@@ -695,7 +695,7 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
             ) : (
               <div
                 onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-[#881337] rounded-xl p-4 text-center cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-800/40"
+                className="border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-[#8b0000] rounded-xl p-4 text-center cursor-pointer transition-colors bg-slate-50/50 dark:bg-slate-800/40"
               >
                 <input
                   type="file"
@@ -728,9 +728,9 @@ export const FinanceFormModal: React.FC<FinanceFormModalProps> = ({
 
           <button
             type="submit"
-            className="px-5 py-2 rounded-xl bg-[#881337] hover:bg-[#700f2b] text-white font-bold shadow-md transition-colors flex items-center gap-1.5 cursor-pointer"
+            className="px-5 py-2 rounded-xl bg-[#8b0000] hover:bg-[#700000] text-white font-bold shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
           >
-            <PlusCircle className="w-4 h-4 text-amber-300" />
+            <PlusCircle className="w-4 h-4 text-white" />
             <span>{transactionToEdit ? 'Save Changes' : 'Record & Issue Document'}</span>
           </button>
         </div>

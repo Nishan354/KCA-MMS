@@ -7,6 +7,8 @@ import { KcaLogo } from './Logo';
 import { ConfirmDeleteModal } from './ConfirmDeleteModal';
 import { NewLetterModal } from './NewLetterModal';
 import { OFFICIAL_ORG_NAME, OFFICIAL_AFFILIATION, OFFICIAL_LOCATION, OFFICIAL_LETTER_EMAIL } from '../config/constants';
+import { sanitizeHtml } from '../utils/sanitize';
+import { usePortalConfig } from '../hooks/usePortalConfig';
 import {
   FileText,
   Plus,
@@ -40,6 +42,7 @@ import {
   HelpCircle,
   X,
   RotateCcw,
+  PenTool,
 } from 'lucide-react';
 
 interface LetterPadViewProps {
@@ -51,6 +54,7 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
   const isUnitOp = !!userSession && isUnitOperatorRole(userSession.role);
   const defaultUnit = isUnitOp && userSession?.unit ? userSession.unit : 'Central';
 
+  const { portalConfig, unitTerm } = usePortalConfig();
   const [letters, setLetters] = useState<OfficialLetter[]>(() => loadLetters());
   const [activeLetterId, setActiveLetterId] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -106,12 +110,99 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
     }
   }, [toastMessage]);
 
-  // Initialize a fresh new letter on mount if none selected
+  // Initialize on mount: load Custom Letter or first letter if available
   useEffect(() => {
-    if (!activeLetterId) {
+    const loaded = loadLetters();
+    setLetters(loaded);
+    if (!activeLetterId && loaded.length > 0) {
+      const customLetter = loaded.find((l) => l.id === 'let_custom_default') || loaded[0];
+      handleOpenLetterForEdit(customLetter);
+    } else if (!activeLetterId) {
       handleCreateNewLetter(defaultUnit);
     }
   }, []);
+
+  const handleSelectCustomLetter = () => {
+    const currentLetters = loadLetters();
+    setLetters(currentLetters);
+    const custom = currentLetters.find((l) => l.id === 'let_custom_default' || l.subject?.includes('COMMUNITY WELFARE'));
+    if (custom) {
+      handleOpenLetterForEdit(custom);
+      setToastMessage({
+        text: `Loaded Custom Official Letter (${custom.referenceNumber})`,
+        type: 'success',
+      });
+    } else {
+      handleLoadTemplate('tpl_custom');
+    }
+  };
+
+  const handleSelectBlankLetter = () => {
+    const currentLetters = loadLetters();
+    setLetters(currentLetters);
+    const blank = currentLetters.find((l) => l.id === 'let_blank_default' || (!l.subject && !l.toAddress));
+    if (blank) {
+      handleOpenLetterForEdit(blank);
+      setToastMessage({
+        text: `Loaded Blank Official Letter Pad (${blank.referenceNumber})`,
+        type: 'success',
+      });
+    } else {
+      handleCreateBlankLetter(unit);
+    }
+  };
+
+  const handleCreateBlankLetter = (targetUnit: string = unit) => {
+    const currentLetters = loadLetters();
+    setLetters(currentLetters);
+    const nextRef = getNextReferenceNumber(targetUnit);
+    setUnit(targetUnit);
+    setReferenceNumber(nextRef.referenceNumber);
+    setSeriesNumber(nextRef.seriesNumber);
+    setDate(new Date().toISOString().split('T')[0]);
+    setToAddress('');
+    setSubject('');
+    setSalutation('Respected Sir / Madam,');
+    setBodyHtml('<p></p>');
+    if (editorRef.current) {
+      editorRef.current.innerHTML = '<p></p>';
+    }
+    setEditorKey((k) => k + 1);
+    setCategory('General');
+    setStatus('Draft');
+    setActiveLetterId(null);
+    setIsEditing(true);
+    setViewTab('editor');
+
+    // Default Signatories
+    const pres = storedSignatures.find((s) => s.signatoryRole === 'President');
+    const sec = storedSignatures.find((s) => s.signatoryRole === 'General Secretary');
+    if (pres) {
+      setSignatory1Name(pres.name);
+      setSignatory1SigImg(pres.signatureDataUrl || '');
+      setSignatory1ShowSig(Boolean(pres.signatureDataUrl));
+    } else {
+      setSignatory1SigImg('');
+      setSignatory1ShowSig(false);
+    }
+    if (sec) {
+      setSignatory2Name(sec.name);
+      setSignatory2SigImg(sec.signatureDataUrl || '');
+      setSignatory2ShowSig(Boolean(sec.signatureDataUrl));
+    } else {
+      setSignatory2SigImg('');
+      setSignatory2ShowSig(false);
+    }
+
+    setToastMessage({
+      text: `Started Blank Letter Pad (${nextRef.referenceNumber})`,
+      type: 'success',
+    });
+
+    setTimeout(() => {
+      composerTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
 
   const handleCreateNewLetter = (targetUnit: string = defaultUnit) => {
     const currentLetters = loadLetters();
@@ -444,7 +535,11 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
   };
 
   const handleDirectPrint = () => {
+    document.body.classList.add('printing-letterpad');
     window.print();
+    setTimeout(() => {
+      document.body.classList.remove('printing-letterpad');
+    }, 1000);
   };
 
   // Upload custom digital signature image
@@ -519,17 +614,17 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
   return (
     <div className="space-y-6">
       {/* Top Banner Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 border border-slate-200 dark:border-slate-800 shadow-xs letterpad-no-print print:hidden">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-[#881337] dark:text-rose-400 border border-rose-200 dark:border-rose-900/60">
-                <FileText className="w-6 h-6" />
+              <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-[#8b0000] dark:text-rose-300 border border-rose-200 dark:border-rose-800/40 shadow-xs">
+                <FileText className="w-6 h-6 text-[#8b0000] dark:text-rose-400" />
               </div>
               <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white uppercase font-display">
                 Official Letter Pad &amp; Notices
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 dark:bg-amber-950 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-800">
+              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-50 dark:bg-rose-950/60 text-[#8b0000] dark:text-rose-300 border border-rose-200 dark:border-rose-800/40">
                 Automated Reference Series
               </span>
             </div>
@@ -539,18 +634,49 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
           </div>
 
           {/* Top Actions */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Quick Presets: Custom Letter & Blank Letter Pad */}
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+              <button
+                type="button"
+                onClick={handleSelectCustomLetter}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeLetterId === 'let_custom_default' || (subject?.includes('COMMUNITY WELFARE') && viewTab === 'editor')
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-black shadow-xs border border-slate-200 dark:border-slate-700'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 hover:bg-white/60'
+                }`}
+                title="Open Official Custom Letter with full formal representation body"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Custom Letter</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSelectBlankLetter}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                  activeLetterId === 'let_blank_default' || (!subject && !toAddress && viewTab === 'editor')
+                    ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-black shadow-xs border border-slate-200 dark:border-slate-700'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 hover:bg-white/60'
+                }`}
+                title="Open Official Blank Letter Pad for custom handwriting or direct printing"
+              >
+                <PenTool className="w-3.5 h-3.5" />
+                <span>Blank Letter</span>
+              </button>
+            </div>
+
             <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center gap-1 border border-slate-200 dark:border-slate-700">
               <button
                 type="button"
                 onClick={() => setViewTab('editor')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewTab === 'editor'
-                    ? 'bg-white dark:bg-slate-700 text-[#881337] dark:text-rose-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-white dark:bg-slate-900 text-[#8b0000] dark:text-rose-400 border border-slate-200 dark:border-slate-700 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
               >
-                <Edit3 className="w-3.5 h-3.5 inline mr-1" />
+                <Edit3 className="w-3.5 h-3.5 inline mr-1 text-[#8b0000] dark:text-rose-400" />
                 Letter Composer
               </button>
               <button
@@ -558,11 +684,11 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
                 onClick={() => setViewTab('archive')}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewTab === 'archive'
-                    ? 'bg-white dark:bg-slate-700 text-[#881337] dark:text-rose-400 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    ? 'bg-white dark:bg-slate-900 text-[#8b0000] dark:text-rose-400 border border-slate-200 dark:border-slate-700 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
                 }`}
               >
-                <Layers className="w-3.5 h-3.5 inline mr-1" />
+                <Layers className="w-3.5 h-3.5 inline mr-1 text-[#8b0000] dark:text-rose-400" />
                 Issued Archive ({letters.length})
               </button>
             </div>
@@ -570,7 +696,7 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
             <button
               type="button"
               onClick={() => setShowNewLetterModal(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#881337] hover:bg-[#700f2b] text-white shadow-sm transition-transform active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#8b0000] hover:bg-[#730000] text-white shadow-xs transition-transform active:scale-95 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>New Letter</span>
@@ -599,7 +725,7 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
         /* TWO-COLUMN LAYOUT: Controls & Form on Left, Official Live Preview on Right */
         <div ref={composerTopRef} className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* LEFT: Composer Controls */}
-          <div className="lg:col-span-5 space-y-4">
+          <div className="lg:col-span-5 space-y-4 letterpad-no-print print:hidden">
             {/* Quick Templates Accordion / Bar */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-xs space-y-2.5">
               <div className="flex items-center justify-between">
@@ -828,8 +954,8 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
                     key={editorKey}
                     ref={editorRef}
                     contentEditable
-                    dangerouslySetInnerHTML={{ __html: bodyHtml }}
-                    onBlur={(e) => setBodyHtml(e.currentTarget.innerHTML)}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(bodyHtml) }}
+                    onBlur={(e) => setBodyHtml(sanitizeHtml(e.currentTarget.innerHTML))}
                     className="p-3.5 min-h-[160px] max-h-[300px] overflow-y-auto text-xs text-slate-800 dark:text-slate-200 leading-relaxed outline-none focus:ring-1 focus:ring-[#881337]"
                   />
                 </div>
@@ -1003,7 +1129,7 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
                     type="button"
                     onClick={handleExportPdf}
                     disabled={isExporting}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#881337] hover:bg-[#700f2b] text-white shadow-md cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#8b0000] hover:bg-[#730000] text-white shadow-xs cursor-pointer disabled:opacity-50"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>{isExporting ? 'Generating...' : 'Export PDF'}</span>
@@ -1014,9 +1140,9 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
           </div>
 
           {/* RIGHT: Live Authentic Letter Pad View & Print Layout */}
-          <div className="lg:col-span-7">
-            <div className="bg-slate-200 dark:bg-slate-950 p-4 sm:p-6 rounded-2xl border border-slate-300 dark:border-slate-800 shadow-inner">
-              <div className="flex items-center justify-between mb-3 px-1">
+          <div className="lg:col-span-7 print:w-full print:p-0 print:m-0">
+            <div className="bg-slate-200 dark:bg-slate-950 p-4 sm:p-6 rounded-2xl border border-slate-300 dark:border-slate-800 shadow-inner print:bg-white print:border-none print:p-0 print:m-0 print:shadow-none">
+              <div className="flex items-center justify-between mb-3 px-1 print:hidden">
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 font-mono">
                   <Eye className="w-4 h-4 text-rose-700" />
                   Official A4 Letter Pad Live Preview
@@ -1038,7 +1164,10 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
                 style={{ fontFamily: 'ui-sans-serif, system-ui, sans-serif' }}
               >
                 {/* Letter Top Accent Bars */}
-                <div className="absolute top-0 left-0 right-0 h-2.5 bg-[#881337] rounded-t-lg" />
+                <div
+                  className="absolute top-0 left-0 right-0 h-2.5 rounded-t-lg"
+                  style={{ backgroundColor: portalConfig.primaryColor || '#881337' }}
+                />
                 <div className="absolute top-2.5 left-0 right-0 h-1 bg-amber-500" />
 
                 {/* Letter Content Container */}
@@ -1050,14 +1179,17 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
                     </div>
 
                     <div className="flex-1 text-left">
-                      <h2 className="font-display font-black text-base tracking-tight text-[#881337] uppercase leading-tight">
-                        KAIRALI CULTURAL ASSOCIATION FUJAIRAH
+                      <h2
+                        className="font-display font-black text-base tracking-tight uppercase leading-tight"
+                        style={{ color: portalConfig.primaryColor || '#881337' }}
+                      >
+                        {portalConfig.portalName}
                       </h2>
                       <div className="text-[10.5px] font-bold text-amber-700 tracking-wide mt-0.5">
-                        {OFFICIAL_AFFILIATION}
+                        {portalConfig.affiliationText || portalConfig.subtitle}
                       </div>
                       <div className="text-[9px] text-slate-500 font-medium mt-0.5">
-                        {unit === 'Central' ? 'Central Committee' : `${unit} Unit`} • {OFFICIAL_LOCATION} • Email: {OFFICIAL_LETTER_EMAIL}
+                        {unit === 'Central' ? 'Executive Administration' : `${unit} ${unitTerm}`} • {portalConfig.jurisdiction} • Email: {portalConfig.contactEmail}
                       </div>
                     </div>
                   </div>
@@ -1066,7 +1198,7 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
                   <div className="flex items-center justify-between text-xs py-3 border-b border-slate-200 font-mono">
                     <div className="font-bold text-slate-800">
                       <span className="text-slate-500 font-normal">Ref: </span>
-                      {referenceNumber || `KCA/${UNIT_CODE_MAP[unit] || 'CENTRAL'}/REF/2026/001`}
+                      {referenceNumber || `${portalConfig.idPrefix || 'ORG'}/${UNIT_CODE_MAP[unit] || 'CENTRAL'}/REF/${new Date().getFullYear()}/001`}
                     </div>
                     <div className="font-bold text-slate-800">
                       <span className="text-slate-500 font-normal">Date: </span>
@@ -1079,16 +1211,24 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
                   </div>
 
                   {/* To Address */}
-                  {toAddress && (
+                  {toAddress ? (
                     <div className="mt-4 text-xs leading-relaxed text-slate-800 whitespace-pre-line font-medium">
                       {toAddress}
+                    </div>
+                  ) : (
+                    <div className="mt-4 text-xs text-slate-400 font-mono italic print:hidden">
+                      [ Recipient Address Block - Blank for custom writing or typing ]
                     </div>
                   )}
 
                   {/* Subject Line */}
-                  {subject && (
+                  {subject ? (
                     <div className="mt-4 text-xs font-bold text-slate-900 underline decoration-[#881337] decoration-2 underline-offset-4 uppercase tracking-wide">
                       SUBJECT: {subject}
+                    </div>
+                  ) : (
+                    <div className="mt-4 text-xs text-slate-400 font-mono italic print:hidden">
+                      [ Subject Line - Blank ]
                     </div>
                   )}
 
@@ -1100,13 +1240,23 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
                   )}
 
                   {/* Main Letter Body */}
-                  <div
-                    className="mt-3 text-xs text-slate-800 leading-relaxed space-y-2.5"
-                    dangerouslySetInnerHTML={{ __html: bodyHtml }}
-                  />
+                  {(!bodyHtml || bodyHtml.replace(/<[^>]+>/g, '').trim().length === 0) ? (
+                    <div className="my-8 py-20 px-4 border border-dashed border-slate-300 dark:border-slate-600 rounded-xl text-center text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 print:hidden select-none">
+                      <PenTool className="w-8 h-8 mx-auto mb-2 opacity-40 text-slate-400" />
+                      <p className="font-bold text-xs text-slate-500 dark:text-slate-400">Official Blank Letter Pad Area</p>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-1">
+                        Pristine letterhead canvas ready for custom handwriting, typing, or direct printing.
+                      </p>
+                    </div>
+                  ) : (
+                    <div
+                      className="mt-3 text-xs text-slate-800 leading-relaxed space-y-2.5 min-h-[140px]"
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(bodyHtml) }}
+                    />
+                  )}
 
                   {/* Sign-off Greeting */}
-                  <div className="mt-6 text-xs text-slate-800">
+                  <div className={`text-xs text-slate-800 ${(!bodyHtml || bodyHtml.replace(/<[^>]+>/g, '').trim().length === 0) ? 'mt-12' : 'mt-6'}`}>
                     <div>Yours faithfully,</div>
                     <div className="font-bold uppercase tracking-wider text-[#881337] text-[11px] mt-0.5">
                       For KAIRALI CULTURAL ASSOCIATION FUJAIRAH
@@ -1245,10 +1395,10 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
                     </div>
 
                     <h4 className="font-bold text-slate-900 dark:text-white text-sm">
-                      {letter.subject}
+                      {letter.subject || 'Blank Official Letter Pad'}
                     </h4>
                     <p className="text-slate-500 dark:text-slate-400 text-xs line-clamp-1 max-w-2xl">
-                      {letter.toAddress.replace(/\n/g, ', ')}
+                      {letter.toAddress ? letter.toAddress.replace(/\n/g, ', ') : 'Clean official letterhead canvas ready for custom typing or direct print'}
                     </p>
                   </div>
 
@@ -1266,7 +1416,7 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
                     <button
                       type="button"
                       onClick={() => downloadLetterPdf(letter)}
-                      className="p-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/60 hover:bg-rose-100 text-[#881337] dark:text-rose-300 cursor-pointer"
+                      className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-[#8b0000] border border-rose-200 cursor-pointer"
                       title="Download PDF"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -1323,7 +1473,7 @@ export const LetterPadView: React.FC<LetterPadViewProps> = ({ units, userSession
               type="file"
               accept="image/png, image/jpeg, image/webp"
               onChange={(e) => handleSignatureUpload(e, showSigUploadModal)}
-              className="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#881337] file:text-white hover:file:bg-[#700f2b] cursor-pointer"
+              className="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#8b0000] file:text-white hover:file:bg-[#730000] cursor-pointer"
             />
           </div>
         </div>

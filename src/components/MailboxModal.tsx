@@ -306,19 +306,22 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
   const unreadCount = inboxMails.filter((m) => !m.isRead).length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden my-auto animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden my-auto animate-fadeIn">
         {/* Header */}
-        <div className="px-6 py-3.5 bg-[#8b0000] text-white flex items-center justify-between border-b border-[#730000]">
+        <div
+          className="px-6 py-4 text-white flex items-center justify-between"
+          style={{ backgroundColor: 'var(--color-primary, #8b0000)' }}
+        >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-white border border-white/20">
-              <Mail className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-white border border-white/25 shadow-xs">
+              <Mail className="w-5 h-5 text-white" />
             </div>
             <div>
               <h3 className="font-display font-bold text-base sm:text-lg text-white">
                 Official KCA Mailbox &amp; Member Communications
               </h3>
-              <p className="text-xs text-red-100">
+              <p className="text-xs text-rose-100">
                 Direct Dispatch &amp; Official Records for Member Applications &amp; Inquiries
               </p>
             </div>
@@ -326,34 +329,34 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 text-white/80 hover:text-white rounded-md transition-colors cursor-pointer"
+            className="p-1.5 text-white/80 hover:text-white rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Mailbox Banner */}
-        <div className="bg-slate-100 border-b border-slate-200 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="bg-slate-50 border-b border-slate-200 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-700">Official Receiving Address:</span>
-            <code className="bg-white px-2 py-0.5 rounded border border-slate-300 font-mono font-bold text-[#8b0000]">
+            <code className="bg-white px-2 py-0.5 rounded border border-slate-200 font-mono font-bold text-[#8b0000] shadow-xs">
               {officialMailboxEmail}
             </code>
             <button
               type="button"
               onClick={handleCopyMailbox}
-              className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 px-2 py-0.5 rounded hover:bg-slate-200 cursor-pointer font-medium"
+              className="inline-flex items-center gap-1 text-slate-600 hover:text-slate-900 px-2 py-0.5 rounded hover:bg-slate-100 cursor-pointer font-medium border border-slate-200 transition-colors"
               title="Copy Email Address"
             >
-              {copiedEmail ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              {copiedEmail ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
               <span>{copiedEmail ? 'Copied' : 'Copy'}</span>
             </button>
           </div>
 
           <div className="text-[11px] text-slate-500 flex items-center gap-2">
-            <span>Operator: <strong>{userSession.fullName}</strong></span>
+            <span>Operator: <strong className="text-slate-900">{userSession.fullName}</strong></span>
             <span>&bull;</span>
-            <span className="font-mono text-slate-700">{userSession.role}</span>
+            <span className="font-mono text-[#8b0000] font-semibold">{userSession.role}</span>
           </div>
         </div>
 
@@ -366,9 +369,9 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                 setActiveFolder('compose');
                 setSelectedMail(null);
               }}
-              className="w-full py-2.5 px-3 rounded-lg bg-[#8b0000] hover:bg-[#730000] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full py-2.5 px-3 rounded-xl bg-[#8b0000] hover:bg-[#700000] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4 text-white" />
               <span>Compose Email</span>
             </button>
 
@@ -378,14 +381,14 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                   setActiveFolder('inbox');
                   setSelectedMail(null);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeFolder === 'inbox'
-                    ? 'bg-red-50 text-[#8b0000] border border-red-200'
-                    : 'text-slate-700 hover:bg-slate-200/60'
+                    ? 'bg-rose-50 text-[#8b0000] border border-rose-200 shadow-2xs font-bold'
+                    : 'text-slate-700 hover:bg-slate-100 border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <Inbox className="w-4 h-4" />
+                  <Inbox className={`w-4 h-4 ${activeFolder === 'inbox' ? 'text-[#8b0000]' : 'text-slate-500'}`} />
                   <span>Inbox</span>
                 </div>
                 {unreadCount > 0 && (
@@ -400,14 +403,14 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                   setActiveFolder('sent');
                   setSelectedMail(null);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeFolder === 'sent'
-                    ? 'bg-red-50 text-[#8b0000] border border-red-200'
-                    : 'text-slate-700 hover:bg-slate-200/60'
+                    ? 'bg-rose-50 text-[#8b0000] border border-rose-200 shadow-2xs font-bold'
+                    : 'text-slate-700 hover:bg-slate-100 border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <Send className="w-4 h-4" />
+                  <Send className={`w-4 h-4 ${activeFolder === 'sent' ? 'text-[#8b0000]' : 'text-slate-500'}`} />
                   <span>Sent Dispatches</span>
                 </div>
                 <span className="text-slate-500 text-[10px] font-mono font-semibold">
@@ -420,14 +423,14 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                   setActiveFolder('starred');
                   setSelectedMail(null);
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   activeFolder === 'starred'
-                    ? 'bg-red-50 text-[#8b0000] border border-red-200'
-                    : 'text-slate-700 hover:bg-slate-200/60'
+                    ? 'bg-rose-50 text-[#8b0000] border border-rose-200 shadow-2xs font-bold'
+                    : 'text-slate-700 hover:bg-slate-100 border border-transparent'
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                  <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
                   <span>Starred</span>
                 </div>
                 <span className="text-slate-500 text-[10px] font-mono font-semibold">
@@ -451,10 +454,10 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                 <button
                   key={cat.id}
                   onClick={() => setSelectedCategory(cat.id)}
-                  className={`w-full text-left px-2 py-1 rounded text-[11px] font-medium transition-colors cursor-pointer ${
+                  className={`w-full text-left px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors cursor-pointer ${
                     selectedCategory === cat.id
-                      ? 'bg-slate-200 text-slate-900 font-bold'
-                      : 'text-slate-600 hover:bg-slate-100'
+                      ? 'bg-rose-50 text-[#8b0000] font-bold border border-rose-200'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
                   }`}
                 >
                   {cat.label}
@@ -473,40 +476,40 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                     <Send className="w-4 h-4 text-[#8b0000]" />
                     Compose Official Communication
                   </h4>
-                  <span className="text-xs text-slate-500">From: {officialMailboxEmail}</span>
+                  <span className="text-xs text-slate-500">From: <span className="text-[#8b0000] font-mono font-bold">{officialMailboxEmail}</span></span>
                 </div>
 
                 {sentSuccess && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-lg text-xs flex items-center gap-2 animate-fadeIn">
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs flex items-center gap-2 animate-fadeIn shadow-xs">
                     <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                     <span>Communication dispatched successfully and recorded in Sent Log!</span>
                   </div>
                 )}
 
                 {/* Fast Templates */}
-                <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-bold text-slate-700 flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold text-[#8b0000] flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                     Quick Templates:
                   </span>
                   <button
                     type="button"
                     onClick={() => applyTemplate('card_ready')}
-                    className="text-[11px] bg-white hover:bg-slate-100 border border-slate-300 px-2 py-1 rounded font-medium text-slate-700 cursor-pointer"
+                    className="text-[11px] bg-white hover:bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg font-medium text-slate-700 cursor-pointer transition-colors"
                   >
                     Card Ready for Download
                   </button>
                   <button
                     type="button"
                     onClick={() => applyTemplate('renewal_reminder')}
-                    className="text-[11px] bg-white hover:bg-slate-100 border border-slate-300 px-2 py-1 rounded font-medium text-slate-700 cursor-pointer"
+                    className="text-[11px] bg-white hover:bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg font-medium text-slate-700 cursor-pointer transition-colors"
                   >
                     Renewal Reminder
                   </button>
                   <button
                     type="button"
                     onClick={() => applyTemplate('blood_call')}
-                    className="text-[11px] bg-white hover:bg-slate-100 border border-slate-300 px-2 py-1 rounded font-medium text-slate-700 cursor-pointer"
+                    className="text-[11px] bg-white hover:bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg font-medium text-slate-700 cursor-pointer transition-colors"
                   >
                     Emergency Blood Donor Call
                   </button>
@@ -524,15 +527,15 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                       value={composeRecipient}
                       onChange={(e) => setComposeRecipient(e.target.value)}
                       placeholder="member@example.com"
-                      className="flex-1 px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-900 focus:ring-1 focus:ring-[#8b0000] outline-none"
+                      className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 bg-white placeholder-slate-400 focus:border-[#8b0000] focus:ring-1 focus:ring-[#8b0000] outline-none"
                     />
                     <select
                       onChange={(e) => {
                         if (e.target.value) setComposeRecipient(e.target.value);
                       }}
-                      className="px-3 py-2 border border-slate-300 rounded-md text-xs bg-slate-50 text-slate-700 cursor-pointer"
+                      className="px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 focus:border-[#8b0000] outline-none cursor-pointer"
                     >
-                      <option value="">Quick Select Registered Member...</option>
+                      <option value="" className="text-slate-400">Quick Select Registered Member...</option>
                       {members.map((m) => (
                         <option key={m.id} value={m.email}>
                           {m.fullName} ({m.membershipId}) - {m.unit}
@@ -553,7 +556,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                     value={composeSubject}
                     onChange={(e) => setComposeSubject(e.target.value)}
                     placeholder="e.g. KCA Fujairah Membership ID Card Ready / Document Confirmation"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-900 focus:ring-1 focus:ring-[#8b0000] outline-none font-medium"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 bg-white placeholder-slate-400 focus:border-[#8b0000] focus:ring-1 focus:ring-[#8b0000] outline-none font-medium"
                   />
                 </div>
 
@@ -568,7 +571,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                     value={composeBody}
                     onChange={(e) => setComposeBody(e.target.value)}
                     placeholder="Write official communication here..."
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-xs text-slate-900 focus:ring-1 focus:ring-[#8b0000] outline-none leading-relaxed"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 bg-white placeholder-slate-400 focus:border-[#8b0000] focus:ring-1 focus:ring-[#8b0000] outline-none leading-relaxed"
                   />
                 </div>
 
@@ -578,19 +581,19 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                     <button
                       type="button"
                       onClick={handleCopyMessageBody}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-300 text-slate-700 text-xs font-semibold rounded-md hover:bg-slate-100 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-semibold rounded-xl bg-white cursor-pointer transition-colors"
                     >
-                      {copiedMessage ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      {copiedMessage ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
                       <span>{copiedMessage ? 'Copied Content' : 'Copy Formatted Text'}</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={handleOpenInEmailApp}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-blue-300 bg-blue-50 text-blue-800 text-xs font-semibold rounded-md hover:bg-blue-100 cursor-pointer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 bg-slate-50 text-slate-700 text-xs font-semibold rounded-xl hover:bg-slate-100 cursor-pointer transition-colors"
                       title="Open in Gmail / Outlook / System Mail"
                     >
-                      <ExternalLink className="w-3.5 h-3.5" />
+                      <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
                       <span>Send via Email Client (Gmail/Outlook)</span>
                     </button>
                   </div>
@@ -599,15 +602,15 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setActiveFolder('inbox')}
-                      className="px-4 py-2 rounded-md border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
+                      className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-semibold bg-white cursor-pointer transition-colors"
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2 rounded-md bg-[#8b0000] hover:bg-[#730000] text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
+                      className="px-5 py-2 rounded-xl bg-[#8b0000] hover:bg-[#700000] text-white text-xs font-bold shadow-xs flex items-center gap-1.5 cursor-pointer"
                     >
-                      <Send className="w-3.5 h-3.5" />
+                      <Send className="w-3.5 h-3.5 text-white" />
                       <span>Record &amp; Dispatch</span>
                     </button>
                   </div>
@@ -627,24 +630,24 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                     <button
                       type="button"
                       onClick={() => handleToggleStar(selectedMail.id, activeFolder !== 'sent')}
-                      className="p-1 rounded text-slate-400 hover:text-amber-500 cursor-pointer"
+                      className="p-1 rounded-lg text-slate-400 hover:text-amber-500 cursor-pointer transition-colors"
                       title={selectedMail.isStarred ? 'Unstar' : 'Star message'}
                     >
                       <Star
                         className={`w-4 h-4 ${
-                          selectedMail.isStarred ? 'text-amber-500 fill-amber-400' : ''
+                          selectedMail.isStarred ? 'text-amber-500 fill-amber-500' : ''
                         }`}
                       />
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDeleteMail(selectedMail.id, activeFolder !== 'sent')}
-                      className="p-1 rounded text-slate-400 hover:text-rose-600 cursor-pointer"
+                      className="p-1 rounded-lg text-slate-400 hover:text-rose-600 cursor-pointer transition-colors"
                       title="Delete message"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                    <span className="text-xs text-slate-500">{formatDate(selectedMail.date)}</span>
+                    <span className="text-xs text-slate-400 font-mono">{formatDate(selectedMail.date)}</span>
                   </div>
                 </div>
 
@@ -652,30 +655,30 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                   <h3 className="text-base font-bold text-slate-900">{selectedMail.subject}</h3>
                   <div className="flex flex-wrap items-center justify-between mt-2 text-xs text-slate-600 gap-2">
                     <div>
-                      From: <strong>{selectedMail.senderName}</strong> &lt;{selectedMail.senderEmail}&gt;
+                      From: <strong className="text-slate-900">{selectedMail.senderName}</strong> &lt;<span className="text-[#8b0000] font-mono">{selectedMail.senderEmail}</span>&gt;
                       {selectedMail.recipientEmail && (
                         <span className="block text-slate-500 text-[11px]">
-                          To: {selectedMail.recipientEmail}
+                          To: <span className="text-slate-700 font-mono">{selectedMail.recipientEmail}</span>
                         </span>
                       )}
                     </div>
                     {selectedMail.memberId && (
-                      <span className="bg-red-50 text-[#8b0000] px-2 py-0.5 rounded font-mono font-bold border border-red-200">
+                      <span className="bg-rose-50 text-[#8b0000] px-2 py-0.5 rounded-lg font-mono font-bold border border-rose-200">
                         Member ID: {selectedMail.memberId}
                       </span>
                     )}
                   </div>
                 </div>
 
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
                   {selectedMail.body}
                 </div>
 
                 {selectedMail.hasAttachment && (
-                  <div className="p-3 bg-white border border-slate-200 rounded-lg flex items-center justify-between">
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Paperclip className="w-4 h-4 text-[#8b0000]" />
-                      <span className="text-xs font-semibold text-slate-900">
+                      <Paperclip className="w-4 h-4 text-slate-600" />
+                      <span className="text-xs font-semibold text-slate-800">
                         {selectedMail.attachmentName || 'Attachment.pdf'}
                       </span>
                     </div>
@@ -704,9 +707,9 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                       );
                       setActiveFolder('compose');
                     }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md bg-[#8b0000] text-white text-xs font-semibold hover:bg-[#730000] cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-[#8b0000] hover:bg-[#700000] text-white text-xs font-bold shadow-xs cursor-pointer transition-colors"
                   >
-                    <Reply className="w-3.5 h-3.5" />
+                    <Reply className="w-3.5 h-3.5 text-white" />
                     Reply
                   </button>
 
@@ -719,9 +722,9 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                       )}?subject=${encodeURIComponent(`Re: ${selectedMail.subject}`)}`;
                       window.open(mailtoUrl, '_blank');
                     }}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md border border-slate-300 text-slate-700 text-xs font-semibold hover:bg-slate-100 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-50 bg-white text-xs font-semibold cursor-pointer transition-colors"
                   >
-                    <ExternalLink className="w-3.5 h-3.5" />
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-500" />
                     Reply via Email Client
                   </button>
                 </div>
@@ -730,19 +733,19 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
               /* 3. MAIL LIST VIEW */
               <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Search Bar */}
-                <div className="p-3 border-b border-slate-200 flex items-center gap-2 bg-slate-50/50">
+                <div className="p-3 border-b border-slate-200 flex items-center gap-2 bg-slate-50/60">
                   <Search className="w-4 h-4 text-slate-400 shrink-0" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search messages by sender name, recipient, subject, or Member ID..."
-                    className="w-full text-xs text-slate-800 bg-transparent outline-none"
+                    className="w-full text-xs text-slate-800 placeholder-slate-400 bg-transparent outline-none"
                   />
                   {searchQuery && (
                     <button
                       onClick={() => setSearchQuery('')}
-                      className="text-xs text-slate-400 hover:text-slate-600"
+                      className="text-xs text-slate-400 hover:text-slate-700"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
@@ -761,8 +764,8 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                             prev.map((m) => (m.id === mail.id ? { ...m, isRead: true } : m))
                           );
                         }}
-                        className={`p-3.5 flex items-center justify-between hover:bg-slate-50 cursor-pointer transition-colors ${
-                          !mail.isRead ? 'bg-amber-50/40 font-semibold' : ''
+                        className={`p-3.5 flex items-center justify-between hover:bg-slate-50/80 cursor-pointer transition-colors ${
+                          !mail.isRead ? 'bg-rose-50/40 font-semibold' : ''
                         }`}
                       >
                         <div className="flex items-center gap-3 min-w-0">
@@ -772,16 +775,16 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                               e.stopPropagation();
                               handleToggleStar(mail.id, activeFolder !== 'sent');
                             }}
-                            className="text-slate-300 hover:text-amber-500 cursor-pointer p-0.5"
+                            className="text-slate-400 hover:text-amber-500 cursor-pointer p-0.5 transition-colors"
                           >
                             <Star
                               className={`w-4 h-4 ${
-                                mail.isStarred ? 'text-amber-500 fill-amber-400' : ''
+                                mail.isStarred ? 'text-amber-500 fill-amber-500' : ''
                               }`}
                             />
                           </button>
 
-                          <div className="w-8 h-8 rounded-full bg-red-50 text-[#8b0000] flex items-center justify-center text-xs font-bold shrink-0 border border-red-100">
+                          <div className="w-8 h-8 rounded-xl bg-rose-50 text-[#8b0000] flex items-center justify-center text-xs font-bold shrink-0 border border-rose-200">
                             {mail.senderName.charAt(0)}
                           </div>
 
@@ -793,15 +796,15 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                                   : mail.senderName}
                               </span>
                               {mail.memberId && (
-                                <span className="text-[10px] font-mono font-bold bg-slate-200 px-1.5 py-0.2 rounded text-slate-700">
+                                <span className="text-[10px] font-mono font-bold bg-rose-50 text-[#8b0000] border border-rose-200 px-1.5 py-0.2 rounded">
                                   {mail.memberId}
                                 </span>
                               )}
-                              <span className="text-[9px] uppercase font-bold text-slate-500 bg-slate-100 px-1 rounded">
+                              <span className="text-[9px] uppercase font-bold text-slate-500 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">
                                 {mail.category.replace('_', ' ')}
                               </span>
                             </div>
-                            <div className="text-xs text-slate-600 truncate">{mail.subject}</div>
+                            <div className="text-xs text-slate-500 truncate">{mail.subject}</div>
                           </div>
                         </div>
 
@@ -809,7 +812,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
                           {mail.hasAttachment && (
                             <Paperclip className="w-3.5 h-3.5 text-slate-400" />
                           )}
-                          <span className="text-[11px] text-slate-400">
+                          <span className="text-[11px] text-slate-400 font-mono">
                             {formatDate(mail.date)}
                           </span>
                         </div>
@@ -835,7 +838,7 @@ export const MailboxModal: React.FC<MailboxModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="px-3 py-1 bg-white border border-slate-300 rounded text-slate-700 hover:bg-slate-100 font-medium cursor-pointer"
+            className="px-3.5 py-1.5 bg-white border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-100 font-medium cursor-pointer transition-colors"
           >
             Close
           </button>

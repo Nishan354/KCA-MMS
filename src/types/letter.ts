@@ -46,6 +46,26 @@ export interface LetterTemplate {
 
 export const DEFAULT_LETTER_TEMPLATES: LetterTemplate[] = [
   {
+    id: 'tpl_custom',
+    title: 'Custom Official Letter',
+    category: 'General',
+    subject: 'COMMUNITY WELFARE INITIATIVES & OFFICIAL ORGANIZATIONAL REPRESENTATION',
+    toAddress: 'To Whom It May Concern,\nRelevant Government Authorities & Cultural Councils,\nEmirate of Fujairah, United Arab Emirates.',
+    salutation: 'Respected Sir / Madam,',
+    bodyHtml: `<p>We are writing on behalf of the Central Executive Committee of <strong>Kairali Cultural Association Fujairah (A NORKA Affiliated Organisation)</strong> to officially submit this formal communication regarding our ongoing cultural, social welfare, and humanitarian community empowerment programs in the Emirate of Fujairah.</p>
+<p>As an officially recognized cultural association established since 1978, KCA Fujairah continues to serve the Indian expatriate community while fostering fraternal ties with local authorities, government bodies, and socio-cultural institutions across the East Coast of the UAE.</p>
+<p>We kindly request your esteemed office to extend all formal cooperation and support for our accredited community outreach initiatives.</p>`,
+  },
+  {
+    id: 'tpl_blank',
+    title: 'Blank Official Letter Pad',
+    category: 'General',
+    subject: '',
+    toAddress: '',
+    salutation: 'Respected Sir / Madam,',
+    bodyHtml: '<p></p>',
+  },
+  {
     id: 'tpl_general_noc',
     title: 'No Objection Certificate (NOC)',
     category: 'NOC',

@@ -334,7 +334,7 @@ export const ParticipantFormModal: React.FC<ParticipantFormModalProps> = ({
         {/* Header */}
         <div
           className="p-5 text-white flex items-center justify-between"
-          style={{ backgroundColor: 'var(--color-primary, #881337)' }}
+          style={{ backgroundColor: 'var(--color-primary, #0ea5e9)' }}
         >
           <div className="flex items-center gap-2.5">
             <span className="p-2 rounded-xl bg-white/10 text-amber-300">
@@ -773,7 +773,7 @@ export const ParticipantFormModal: React.FC<ParticipantFormModalProps> = ({
             <button
               type="submit"
               className="px-5 py-2 text-white font-bold rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5"
-              style={{ backgroundColor: 'var(--color-primary, #881337)' }}
+              style={{ backgroundColor: 'var(--color-primary, #0ea5e9)' }}
             >
               <CheckCircle2 className="w-4 h-4 text-emerald-300" />
               <span>{editingParticipant ? 'Save Changes' : 'Register Student & Save'}</span>

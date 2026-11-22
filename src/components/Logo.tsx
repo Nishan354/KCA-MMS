@@ -1,5 +1,7 @@
-import React, { useId, useState, useEffect } from 'react';
-import { loadCustomLogo } from '../utils/storage';
+import React, { useId, useState, useEffect, useMemo } from 'react';
+import { loadCustomLogo, loadPortalConfig } from '../utils/storage';
+import { STORAGE_KEY_PORTAL_CONFIG } from '../types/portal';
+
 
 interface LogoProps {
   size?: number | string;
@@ -20,12 +22,32 @@ export function useCustomLogo(): {
   useEffect(() => {
     const handleLogoChange = (e: Event) => {
       const customEvent = e as CustomEvent<string | null>;
-      setCustomLogo(customEvent.detail ?? loadCustomLogo());
+      const hasDetail = 'detail' in customEvent && customEvent.detail !== undefined;
+      setCustomLogo(hasDetail ? customEvent.detail : loadCustomLogo());
+    };
+
+    const handleConfigChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ customLogoUrl?: string | null }>;
+      if (customEvent.detail && customEvent.detail.customLogoUrl !== undefined) {
+        setCustomLogo(customEvent.detail.customLogoUrl ?? null);
+      } else {
+        setCustomLogo(loadCustomLogo());
+      }
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'kca_fujairah_custom_logo_v1' || e.key === STORAGE_KEY_PORTAL_CONFIG) {
+        setCustomLogo(loadCustomLogo());
+      }
     };
 
     window.addEventListener('kca-custom-logo-changed', handleLogoChange);
+    window.addEventListener('kca-portal-config-changed', handleConfigChange);
+    window.addEventListener('storage', handleStorage);
     return () => {
       window.removeEventListener('kca-custom-logo-changed', handleLogoChange);
+      window.removeEventListener('kca-portal-config-changed', handleConfigChange);
+      window.removeEventListener('storage', handleStorage);
     };
   }, []);
 
@@ -156,7 +178,7 @@ if (typeof window !== 'undefined') {
     invalidateLogoCache();
   });
   window.addEventListener('storage', (e) => {
-    if (e.key === 'kca_fujairah_custom_logo_v1' || e.key === 'kca_fujairah_portal_config_v1') {
+    if (e.key === 'kca_fujairah_custom_logo_v1' || e.key === STORAGE_KEY_PORTAL_CONFIG) {
       invalidateLogoCache();
     }
   });
@@ -192,7 +214,9 @@ export async function getActiveLogoPngDataUrl(): Promise<string> {
     try {
       const pngUrl = await new Promise<string>((resolve) => {
         const img = new Image();
-        img.crossOrigin = 'anonymous';
+        if (src.startsWith('http://') || src.startsWith('https://')) {
+          img.crossOrigin = 'anonymous';
+        }
         img.onload = () => {
           try {
             const canvas = document.createElement('canvas');
@@ -252,7 +276,7 @@ export function getActiveLogoDataUrl(): string {
 }
 
 /**
- * Official KCA Fujairah Emblem or Custom Uploaded Logo
+ * Dynamic Emblem or Custom Uploaded Logo
  * Guaranteed 100% concentric, perfectly aligned circular badge
  */
 export const KcaLogo: React.FC<LogoProps> = ({
@@ -263,9 +287,41 @@ export const KcaLogo: React.FC<LogoProps> = ({
 }) => {
   const uid = useId().replace(/:/g, '_');
   const { customLogo: storedLogo } = useCustomLogo();
+  const [config, setConfig] = useState(() => loadPortalConfig());
 
-  const activeLogoUrl = customLogoUrl !== undefined ? customLogoUrl : storedLogo;
+  useEffect(() => {
+    const handleConfig = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setConfig(detail || loadPortalConfig());
+    };
+    window.addEventListener('kca-portal-config-changed', handleConfig);
+    return () => window.removeEventListener('kca-portal-config-changed', handleConfig);
+  }, []);
+
+  const activeLogoUrl =
+    customLogoUrl !== undefined
+      ? customLogoUrl
+      : storedLogo !== null
+      ? storedLogo
+      : config.customLogoUrl || null;
   const numericSize = typeof size === 'number' ? size : parseInt(String(size), 10) || 64;
+
+  const isDefaultKca =
+    !config.portalName ||
+    config.portalName.toLowerCase().includes('kairali') ||
+    config.portalName.toLowerCase().includes('kca');
+
+  // Compute monogram for custom organizations
+  const monogram = useMemo(() => {
+    if (config.shortName && config.shortName.length <= 4) {
+      return config.shortName.replace(/[^a-zA-Z0-9]/g, '');
+    }
+    const words = (config.portalName || 'ORG').trim().split(/\s+/);
+    if (words.length === 1) return words[0].substring(0, 2).toUpperCase();
+    return (words[0][0] + (words[1] ? words[1][0] : '')).toUpperCase();
+  }, [config.portalName, config.shortName]);
+
+  const primaryCol = config.primaryColor || '#8b0000';
 
   return (
     <div className={`inline-flex items-center gap-3 ${className}`}>
@@ -276,13 +332,14 @@ export const KcaLogo: React.FC<LogoProps> = ({
           style={{ width: `${numericSize}px`, height: `${numericSize}px` }}
         >
           <img
+            key={activeLogoUrl.slice(0, 128) + activeLogoUrl.length}
             src={activeLogoUrl}
-            alt="Kairali Cultural Association Fujairah Logo"
+            alt={`${config.portalName} Logo`}
             className="w-full h-full object-contain p-0.5"
-            crossOrigin="anonymous"
+            crossOrigin={activeLogoUrl.startsWith('data:') ? undefined : 'anonymous'}
           />
         </div>
-      ) : (
+      ) : isDefaultKca ? (
         // Official KCA Fujairah Vector Emblem
         <div
           className="shrink-0 relative rounded-full overflow-hidden flex items-center justify-center bg-transparent shadow-xs"
@@ -360,15 +417,63 @@ export const KcaLogo: React.FC<LogoProps> = ({
             <circle cx="120" cy="120" r="74" fill="none" stroke="#f59e0b" strokeWidth="1.8" />
           </svg>
         </div>
+      ) : (
+        // Custom Organization Monogram Crest Emblem
+        <div
+          className="shrink-0 relative rounded-full overflow-hidden flex items-center justify-center bg-transparent shadow-xs"
+          style={{ width: `${numericSize}px`, height: `${numericSize}px` }}
+        >
+          <svg
+            width={numericSize}
+            height={numericSize}
+            viewBox="0 0 240 240"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            className="w-full h-full select-none shrink-0"
+          >
+            <defs>
+              <linearGradient id={`customBgGrad_${uid}`} x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stopColor={primaryCol} />
+                <stop offset="100%" stopColor="#0f172a" />
+              </linearGradient>
+            </defs>
+
+            {/* Outer Ring with Golden Border */}
+            <circle cx="120" cy="120" r="114" fill={`url(#customBgGrad_${uid})`} stroke="#f59e0b" strokeWidth="3.5" />
+            <circle cx="120" cy="120" r="108" fill="none" stroke="#ffffff" strokeWidth="1.2" opacity="0.8" />
+
+            {/* Inner Disc */}
+            <circle cx="120" cy="120" r="78" fill="#ffffff" stroke="#f59e0b" strokeWidth="2.5" />
+
+            {/* Monogram in Center */}
+            <text
+              x="120"
+              y="132"
+              fill={primaryCol}
+              fontSize={monogram.length > 3 ? '42' : '52'}
+              fontWeight="900"
+              fontFamily="'Arial Black', Arial, sans-serif"
+              textAnchor="middle"
+              dominantBaseline="middle"
+              letterSpacing="1"
+            >
+              {monogram}
+            </text>
+
+            {/* Star Accents */}
+            <circle cx="120" cy="65" r="4" fill="#f59e0b" />
+            <circle cx="120" cy="175" r="4" fill="#f59e0b" />
+          </svg>
+        </div>
       )}
 
       {showText && (
         <div className="flex flex-col text-left">
           <span className="font-display font-bold text-slate-900 leading-tight tracking-tight text-lg">
-            KAIRALI CULTURAL ASSOCIATION
+            {config.portalName}
           </span>
           <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-primary, #8b0000)' }}>
-            FUJAIRAH, UAE
+            {config.jurisdiction}
           </span>
         </div>
       )}
@@ -377,37 +482,56 @@ export const KcaLogo: React.FC<LogoProps> = ({
 };
 
 /**
- * Official Header Banner for KCA Fujairah
+ * Official Dynamic Header Banner for configured Organization
  */
 export const OfficialKcaHeaderBanner: React.FC<{ className?: string }> = ({ className = '' }) => {
+  const [config, setConfig] = useState(() => loadPortalConfig());
+
+  useEffect(() => {
+    const handleConfig = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setConfig(detail || loadPortalConfig());
+    };
+    window.addEventListener('kca-portal-config-changed', handleConfig);
+    return () => window.removeEventListener('kca-portal-config-changed', handleConfig);
+  }, []);
+
   return (
     <div
-      className={`p-4 sm:p-5 rounded-xl border border-slate-200 text-white shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors duration-300 ${className}`}
+      className={`relative overflow-hidden rounded-2xl border border-white/15 text-white shadow-xs p-5 transition-all duration-300 ${className}`}
       style={{ backgroundColor: 'var(--color-primary, #8b0000)' }}
     >
-      <div className="flex items-center gap-4 text-center sm:text-left">
-        <div className="w-14 h-14 rounded-full bg-white p-0.5 shadow-sm border border-white/30 shrink-0 flex items-center justify-center">
-          <KcaLogo size={50} />
-        </div>
-        <div>
-          <h1 className="font-display font-black text-lg sm:text-xl tracking-tight text-white uppercase leading-tight">
-            KAIRALI CULTURAL ASSOCIATION FUJAIRAH
-          </h1>
-          <div className="text-xs text-amber-300 font-semibold tracking-wide flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-0.5">
-            <span>Official Central Register &amp; Membership Portal</span>
-            <span className="text-white/60">&bull;</span>
-            <span className="text-white/90">Fujairah, UAE</span>
+      <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4 text-center md:text-left">
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <div className="w-14 h-14 rounded-xl bg-white p-1 shadow-xs border border-white/20 shrink-0 flex items-center justify-center">
+            <KcaLogo size={46} />
+          </div>
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white/15 text-[10px] font-bold text-white/90 uppercase tracking-widest mb-1">
+              <span>{config.affiliationText || `Established ${config.establishedYear || '1978'}`}</span>
+            </div>
+            <h1 className="font-display font-black text-lg sm:text-xl tracking-tight text-white uppercase leading-snug">
+              {config.portalName}
+            </h1>
+            <p className="text-xs text-white/80 font-medium">
+              {config.subtitle} &bull; {config.jurisdiction}
+            </p>
           </div>
         </div>
-      </div>
 
-      <div className="flex items-center gap-2 shrink-0">
-        <div className="bg-black/20 backdrop-blur-xs border border-white/20 px-3 py-1.5 rounded-lg text-right hidden md:block">
-          <div className="text-[10px] text-amber-200 uppercase font-semibold">Jurisdiction</div>
-          <div className="text-xs font-bold text-white">Fujairah &bull; East Coast UAE</div>
+        <div className="hidden sm:flex items-center gap-2 shrink-0 text-right">
+          <div className="bg-black/20 px-3.5 py-2 rounded-xl border border-white/15 text-right">
+            <div className="text-[10px] text-white/70 uppercase font-semibold tracking-wider">
+              {config.shortName || 'Portal'}
+            </div>
+            <div className="text-xs font-bold text-white">
+              Executive Administration
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 };
+
 

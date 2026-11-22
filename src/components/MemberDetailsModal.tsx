@@ -52,6 +52,7 @@ import {
 
 interface MemberDetailsModalProps {
   member: Member | null;
+  existingMembers?: Member[];
   units?: string[];
   customFields?: CustomFieldDefinition[];
   userSession?: UserSession;
@@ -68,6 +69,7 @@ interface MemberDetailsModalProps {
   onUpdateMemberDocuments?: (member: Member, updatedDocuments: MemberDocument[]) => void;
   onDeleteMember?: (memberId: string) => void;
   onGenerateCertificate?: (member: Member) => void;
+  onViewApplicationForm?: (member: Member) => void;
 }
 
 const BLOOD_GROUPS: BloodGroup[] = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
@@ -91,6 +93,7 @@ const KERALA_DISTRICTS = [
 
 export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   member,
+  existingMembers = [],
   units = ['Fujairah', 'Kalba', 'Khorfakhan', 'Dibba'],
   customFields = [],
   userSession,
@@ -107,6 +110,7 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   onUpdateMemberDocuments,
   onDeleteMember,
   onGenerateCertificate,
+  onViewApplicationForm,
 }) => {
   const isAdmin = !userSession || hasAdminPrivilege(userSession.role);
   const isUnitOp = !!userSession && isUnitOperatorRole(userSession.role);
@@ -120,12 +124,14 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   const [fullName, setFullName] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
-  const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O+');
+  const [bloodGroup, setBloodGroup] = useState<BloodGroup>('');
   const [unit, setUnit] = useState('');
   const [membershipType, setMembershipType] = useState<MembershipType>('General Member');
   const [expiryDate, setExpiryDate] = useState('');
   const [phoneUAE, setPhoneUAE] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
+  const [facebookId, setFacebookId] = useState('');
+  const [instagramId, setInstagramId] = useState('');
   const [email, setEmail] = useState('');
   const [emiratesId, setEmiratesId] = useState('');
   const [passportNumber, setPassportNumber] = useState('');
@@ -138,6 +144,9 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   const [emergencyContactName, setEmergencyContactName] = useState('');
   const [emergencyContactRelation, setEmergencyContactRelation] = useState('');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
+  const [introducedByMode, setIntroducedByMode] = useState<'existing' | 'manual'>('manual');
+  const [introducedByMemberId, setIntroducedByMemberId] = useState('');
+  const [introducedByMembershipId, setIntroducedByMembershipId] = useState('');
   const [introducedByName, setIntroducedByName] = useState('');
   const [introducedByPhone, setIntroducedByPhone] = useState('');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('Paid');
@@ -161,12 +170,14 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
       setFullName(member.fullName || '');
       setPhotoUrl(member.photoUrl || '');
       setDateOfBirth(member.dateOfBirth || '');
-      setBloodGroup(member.bloodGroup || 'O+');
+      setBloodGroup(member.bloodGroup || '');
       setUnit(member.unit || units[0] || 'Fujairah');
       setMembershipType(member.membershipType || 'General Member');
       setExpiryDate(member.expiryDate || '');
       setPhoneUAE(member.phoneUAE || '');
       setWhatsapp(member.whatsapp || member.phoneUAE || '');
+      setFacebookId(member.facebookId || '');
+      setInstagramId(member.instagramId || '');
       setEmail(member.email || '');
       setEmiratesId(member.emiratesId || '');
       setPassportNumber(member.passportNumber || '');
@@ -179,16 +190,26 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
       setEmergencyContactName(member.emergencyContactName || '');
       setEmergencyContactRelation(member.emergencyContactRelation || '');
       setEmergencyContactPhone(member.emergencyContactPhone || '');
-      setIntroducedByName(
-        typeof member.introducedBy === 'object'
-          ? member.introducedBy.name || ''
-          : typeof member.introducedBy === 'string'
-          ? member.introducedBy
-          : ''
-      );
-      setIntroducedByPhone(
-        typeof member.introducedBy === 'object' ? member.introducedBy.phone || '' : ''
-      );
+      if (member.introducedBy && typeof member.introducedBy === 'object') {
+        const introObj = member.introducedBy as any;
+        setIntroducedByMode(introObj.type === 'existing' ? 'existing' : 'manual');
+        setIntroducedByMemberId(introObj.memberId || '');
+        setIntroducedByMembershipId(introObj.membershipId || '');
+        setIntroducedByName(introObj.name || '');
+        setIntroducedByPhone(introObj.phone || '');
+      } else if (typeof member.introducedBy === 'string') {
+        setIntroducedByMode('manual');
+        setIntroducedByMemberId('');
+        setIntroducedByMembershipId('');
+        setIntroducedByName(member.introducedBy);
+        setIntroducedByPhone('');
+      } else {
+        setIntroducedByMode(existingMembers.length > 0 ? 'existing' : 'manual');
+        setIntroducedByMemberId('');
+        setIntroducedByMembershipId('');
+        setIntroducedByName('');
+        setIntroducedByPhone('');
+      }
       setPaymentStatus(member.paymentStatus || 'Paid');
 
       setStatus(member.status || 'Active');
@@ -276,6 +297,8 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
       expiryDate,
       phoneUAE: phoneUAE.trim(),
       whatsapp: (whatsapp || phoneUAE).trim(),
+      facebookId: facebookId.trim() || undefined,
+      instagramId: instagramId.trim() || undefined,
       email: email.trim(),
       emiratesId: emiratesId.trim() || undefined,
       passportNumber: passportNumber.trim() || undefined,
@@ -288,12 +311,28 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
       emergencyContactName: emergencyContactName.trim(),
       emergencyContactRelation: emergencyContactRelation.trim(),
       emergencyContactPhone: emergencyContactPhone.trim(),
-      introducedBy: introducedByName.trim()
-        ? {
-            name: introducedByName.trim(),
-            phone: introducedByPhone.trim() || undefined,
-          }
-        : member.introducedBy,
+      introducedBy:
+        introducedByMode === 'existing' && introducedByMemberId
+          ? (() => {
+              const refM = existingMembers.find((m) => m.id === introducedByMemberId);
+              return refM
+                ? {
+                    type: 'existing' as const,
+                    memberId: refM.id,
+                    membershipId: refM.membershipId,
+                    name: refM.fullName,
+                    phone: refM.phoneUAE || refM.whatsapp || '',
+                  }
+                : member.introducedBy;
+            })()
+          : introducedByName.trim() || introducedByMembershipId.trim()
+          ? {
+              type: 'manual' as const,
+              name: introducedByName.trim(),
+              membershipId: introducedByMembershipId.trim() || undefined,
+              phone: introducedByPhone.trim() || undefined,
+            }
+          : undefined,
       paymentStatus,
 
       status,
@@ -349,7 +388,8 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
       const targetPhone = (member.whatsapp || member.phoneUAE || '').replace(/[^\d+]/g, '');
       const cleanPhone = targetPhone.startsWith('+') ? targetPhone.slice(1) : targetPhone;
       const verifyLink = getMemberVerifyUrl(member);
-      const message = `*KAIRALI CULTURAL ASSOCIATION FUJAIRAH*\n*OFFICIAL DIGITAL MEMBERSHIP ID CARD*\n\nDear *${member.fullName}*,\n\nYour official KCA Fujairah Membership ID Card is ready and active in our database.\n\n📋 *Membership Details:*\n• *Member ID:* ${member.membershipId}\n• *Full Name:* ${member.fullName}\n• *Unit:* ${member.unit} Unit\n• *Blood Group:* ${member.bloodGroup}\n• *Validity:* ${formatCardDate(member.expiryDate)}\n\n🔗 *View & Download Your ID Card:*\n${verifyLink}\n\nPlease keep this digital card for association events, programs, and welfare benefits.\n\n_Warm Regards,_\n*Kairali Cultural Association Fujairah*`;
+      const bloodLine = member.bloodGroup ? `• *Blood Group:* ${member.bloodGroup}\n` : '';
+      const message = `*KAIRALI CULTURAL ASSOCIATION FUJAIRAH*\n*OFFICIAL DIGITAL MEMBERSHIP ID CARD*\n\nDear *${member.fullName}*,\n\nYour official KCA Fujairah Membership ID Card is ready and active in our database.\n\n📋 *Membership Details:*\n• *Member ID:* ${member.membershipId}\n• *Full Name:* ${member.fullName}\n• *Unit:* ${member.unit} Unit\n${bloodLine}• *Validity:* ${formatCardDate(member.expiryDate)}\n\n🔗 *View & Download Your ID Card:*\n${verifyLink}\n\nPlease keep this digital card for association events, programs, and welfare benefits.\n\n_Warm Regards,_\n*Kairali Cultural Association Fujairah*`;
       const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
       window.open(url, '_blank');
     }
@@ -583,13 +623,14 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Blood Group *
+                    Blood Group
                   </label>
                   <select
                     value={bloodGroup}
                     onChange={(e) => setBloodGroup(e.target.value as BloodGroup)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-bold text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
                   >
+                    <option value="">-- Not Specified --</option>
                     {BLOOD_GROUPS.map((bg) => (
                       <option key={bg} value={bg}>
                         {bg}
@@ -672,6 +713,34 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
                     placeholder="name@domain.com"
+                  />
+                </div>
+              </div>
+
+              {/* Row 3B: Social Media IDs */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Facebook ID / Username
+                  </label>
+                  <input
+                    type="text"
+                    value={facebookId}
+                    onChange={(e) => setFacebookId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
+                    placeholder="Facebook ID / Name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Instagram ID / Handle
+                  </label>
+                  <input
+                    type="text"
+                    value={instagramId}
+                    onChange={(e) => setInstagramId(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
+                    placeholder="@instagram_handle"
                   />
                 </div>
               </div>
@@ -832,31 +901,103 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
               </div>
 
               {/* Row 7: Introduced By / Proposer */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Introduced By (Proposer Name)
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="block text-xs font-bold text-slate-700 uppercase">
+                    Introduced By (Proposer Name &amp; Membership ID)
                   </label>
-                  <input
-                    type="text"
-                    value={introducedByName}
-                    onChange={(e) => setIntroducedByName(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
-                    placeholder="e.g. Ramesh V. K."
-                  />
+                  <div className="inline-flex rounded-md bg-white p-0.5 border border-slate-300">
+                    <button
+                      type="button"
+                      onClick={() => setIntroducedByMode('existing')}
+                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition-colors cursor-pointer ${
+                        introducedByMode === 'existing'
+                          ? 'bg-[#8b0000] text-white'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Choose Existing Member
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIntroducedByMode('manual')}
+                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition-colors cursor-pointer ${
+                        introducedByMode === 'manual'
+                          ? 'bg-[#8b0000] text-white'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      Add Manually
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Proposer Phone Number
-                  </label>
-                  <input
-                    type="text"
-                    value={introducedByPhone}
-                    onChange={(e) => setIntroducedByPhone(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-mono text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
-                    placeholder="+971 50 ..."
-                  />
-                </div>
+
+                {introducedByMode === 'existing' ? (
+                  <div>
+                    <select
+                      value={introducedByMemberId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        setIntroducedByMemberId(id);
+                        const refM = existingMembers.find((m) => m.id === id);
+                        if (refM) {
+                          setIntroducedByName(refM.fullName);
+                          setIntroducedByMembershipId(refM.membershipId || '');
+                          setIntroducedByPhone(refM.phoneUAE || refM.whatsapp || '');
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
+                    >
+                      <option value="">-- Choose Proposer from Existing KCA Member List --</option>
+                      {existingMembers
+                        .filter((m) => m.id !== member.id)
+                        .map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.fullName} — {m.membershipId} ({m.unit})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        Proposer Full Name
+                      </label>
+                      <input
+                        type="text"
+                        value={introducedByName}
+                        onChange={(e) => setIntroducedByName(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
+                        placeholder="e.g. Ramesh V. K."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        Proposer Membership ID
+                      </label>
+                      <input
+                        type="text"
+                        value={introducedByMembershipId}
+                        onChange={(e) => setIntroducedByMembershipId(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-mono text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
+                        placeholder="e.g. KCA-FUJ-101"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 uppercase mb-1">
+                        Proposer Phone Number
+                      </label>
+                      <input
+                        type="text"
+                        value={introducedByPhone}
+                        onChange={(e) => setIntroducedByPhone(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm font-mono text-slate-900 bg-white focus:ring-2 focus:ring-[#8b0000] outline-none"
+                        placeholder="+971 50 ..."
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Inline Action Buttons */}
@@ -938,7 +1079,7 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
 
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Blood Group</div>
-                  <div className="font-mono font-bold text-sm text-[#8b0000] mt-0.5">{member.bloodGroup}</div>
+                  <div className="font-mono font-bold text-sm text-[#8b0000] mt-0.5">{member.bloodGroup || '—'}</div>
                 </div>
 
                 <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-xs">
@@ -1019,6 +1160,20 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
                       <span className="text-slate-500 font-medium">WhatsApp:</span>
                       <span className="font-mono font-semibold text-emerald-700">{member.whatsapp || member.phoneUAE}</span>
                     </div>
+
+                    {member.facebookId && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-medium">Facebook ID:</span>
+                        <span className="font-semibold text-blue-700">{member.facebookId}</span>
+                      </div>
+                    )}
+
+                    {member.instagramId && (
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-medium">Instagram ID:</span>
+                        <span className="font-semibold text-pink-700">{member.instagramId}</span>
+                      </div>
+                    )}
 
                     <div className="flex justify-between">
                       <span className="text-slate-500 font-medium">Email:</span>
@@ -1354,7 +1509,19 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {onViewApplicationForm && (
+              <button
+                type="button"
+                onClick={() => onViewApplicationForm(member)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-md bg-purple-800 hover:bg-purple-900 text-white shadow-xs transition-colors cursor-pointer"
+                title="Generate Official Membership Application Form for Committee Approval"
+              >
+                <FileText className="w-4 h-4" />
+                Application Form
+              </button>
+            )}
+
             {onGenerateCertificate && (
               <button
                 type="button"

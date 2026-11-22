@@ -184,9 +184,11 @@ export const QrScannerModal: React.FC<QrScannerModalProps> = ({
                     )}
 
                     <div className="flex flex-wrap items-center gap-2 mt-2">
-                      <span className="px-2 py-0.5 bg-red-50 text-[#8b0000] font-mono font-semibold text-xs rounded border border-red-200">
-                        Blood: {scannedMember.bloodGroup}
-                      </span>
+                      {scannedMember.bloodGroup && (
+                        <span className="px-2 py-0.5 bg-red-50 text-[#8b0000] font-mono font-semibold text-xs rounded border border-red-200">
+                          Blood: {scannedMember.bloodGroup}
+                        </span>
+                      )}
                       <span className="px-2 py-0.5 bg-slate-100 text-slate-800 font-medium text-xs rounded border border-slate-200">
                         Unit: {scannedMember.unit}
                       </span>

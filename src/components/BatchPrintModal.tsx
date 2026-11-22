@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Member, CustomFieldDefinition } from '../types/member';
 import { IdCard } from './IdCard';
+import { useCustomLogo } from './Logo';
+import { usePortalConfig } from '../hooks/usePortalConfig';
 import {
   X,
   Printer,
@@ -11,8 +13,12 @@ import {
   FileCheck,
   Scissors,
   Loader2,
+  Palette,
+  Type,
 } from 'lucide-react';
 import { generateBatchIdCardsPdf } from '../utils/pdfGenerator';
+import { IdCardDesignId, ID_CARD_DESIGNS } from '../types/cardDesign';
+import { HeaderTitleStyle } from '../types/portal';
 
 interface BatchPrintModalProps {
   members: Member[];
@@ -27,15 +33,27 @@ export const BatchPrintModal: React.FC<BatchPrintModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  const { portalConfig } = usePortalConfig();
+  const { customLogo } = useCustomLogo();
   const [selectedIds, setSelectedIds] = useState<string[]>(members.map((m) => m.id));
   const [printSide, setPrintSide] = useState<'front' | 'back' | 'both'>('front');
   const [layout, setLayout] = useState<'8_per_page' | '10_per_page'>('8_per_page');
   const [bothSideMode, setBothSideMode] = useState<'side_by_side' | 'duplex_pages'>('side_by_side');
   const [showCropMarks, setShowCropMarks] = useState<boolean>(true);
+  const [batchDesign, setBatchDesign] = useState<IdCardDesignId | 'member_default'>('member_default');
+  const [batchTitleStyle, setBatchTitleStyle] = useState<HeaderTitleStyle | 'portal_default'>('portal_default');
   const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
   const [pdfProgress, setPdfProgress] = useState<{ current: number; total: number } | null>(null);
 
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedIds(members.map((m) => m.id));
+    }
+  }, [isOpen, members]);
+
   if (!isOpen) return null;
+
+  const brandRevisionKey = `${customLogo ? customLogo.length : 'def'}-${portalConfig.updatedAt || '0'}-${portalConfig.headerTitleStyle || 'ol'}`;
 
   const toggleSelectAll = () => {
     if (selectedIds.length === members.length) {
@@ -98,24 +116,31 @@ export const BatchPrintModal: React.FC<BatchPrintModalProps> = ({
         showCropMarks,
         bothSideMode,
         customFields,
+        cardDesign: batchDesign === 'member_default' ? undefined : batchDesign,
+        titleStyle: batchTitleStyle === 'portal_default' ? undefined : batchTitleStyle,
         onProgress: (current, total) => {
           setPdfProgress({ current, total });
         },
       });
     } catch (e) {
       console.error('Batch PDF generation failed:', e);
-      alert('Error generating batch PDF. Falling back to browser print.');
+      window.print();
     } finally {
       setIsGeneratingPdf(false);
       setPdfProgress(null);
     }
   };
 
+  const primaryHex = portalConfig.primaryColor || '#8b0000';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
       <div className="batch-print-modal-container bg-white rounded-xl shadow-2xl border border-slate-200 w-full max-w-6xl max-h-[94vh] flex flex-col overflow-hidden my-auto">
         {/* Modal Header */}
-        <div className="no-print px-5 py-3.5 bg-[#8b0000] text-white flex items-center justify-between border-b border-[#730000]">
+        <div
+          className="no-print px-5 py-3.5 text-white flex items-center justify-between border-b border-black/15"
+          style={{ backgroundColor: primaryHex }}
+        >
           <div>
             <h3 className="font-display font-bold text-base sm:text-lg text-white flex items-center gap-2">
               <span>Batch ID Card Print Studio</span>
@@ -123,8 +148,8 @@ export const BatchPrintModal: React.FC<BatchPrintModalProps> = ({
                 A4 ISO CR-80 (85.6 × 54mm)
               </span>
             </h3>
-            <p className="text-xs text-red-100 mt-0.5">
-              Standard 2-column layout aligned for standard A4 PVC card sheets, badges, and laminates
+            <p className="text-xs text-white/85 mt-0.5">
+              {portalConfig.portalName} • Standard 2-column layout aligned for A4 PVC card sheets, badges, and laminates
             </p>
           </div>
 
@@ -196,10 +221,46 @@ export const BatchPrintModal: React.FC<BatchPrintModalProps> = ({
               <select
                 value={layout}
                 onChange={(e) => setLayout(e.target.value as any)}
-                className="font-bold text-slate-800 outline-none bg-transparent"
+                className="font-bold text-slate-800 outline-none bg-transparent cursor-pointer"
               >
                 <option value="8_per_page">8 Cards (2×4 Grid - Recommended)</option>
                 <option value="10_per_page">10 Cards (2×5 Grid - High Density)</option>
+              </select>
+            </div>
+
+            {/* Batch Card Design Template Selector */}
+            <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-md border border-slate-300 text-xs">
+              <Palette className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-slate-500 font-medium">Design:</span>
+              <select
+                value={batchDesign}
+                onChange={(e) => setBatchDesign(e.target.value as any)}
+                className="font-bold text-slate-800 outline-none bg-transparent cursor-pointer"
+                title="Override design template for all batch cards or use member default"
+              >
+                <option value="member_default">Member Assigned Default</option>
+                {ID_CARD_DESIGNS.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.badge})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Batch Title Header Style Selector */}
+            <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-md border border-slate-300 text-xs">
+              <Type className="w-3.5 h-3.5 text-slate-500" />
+              <span className="text-slate-500 font-medium">Title:</span>
+              <select
+                value={batchTitleStyle}
+                onChange={(e) => setBatchTitleStyle(e.target.value as any)}
+                className="font-bold text-slate-800 outline-none bg-transparent cursor-pointer"
+                title="Override title header style for all batch cards or use portal default"
+              >
+                <option value="portal_default">System Default Title</option>
+                <option value="official_lockup">Official KCA Title</option>
+                <option value="title_graphic">Title Graphic Image</option>
+                <option value="standard">Standard Org Text</option>
               </select>
             </div>
 
@@ -282,7 +343,7 @@ export const BatchPrintModal: React.FC<BatchPrintModalProps> = ({
                     >
                       {pageCards.map((item) => (
                         <div
-                          key={item.id}
+                          key={`${item.id}-${brandRevisionKey}`}
                           className={`batch-card-cell relative transition-transform hover:scale-[1.01] ${
                             showCropMarks ? 'border border-dashed border-slate-300' : ''
                           }`}
@@ -313,11 +374,14 @@ export const BatchPrintModal: React.FC<BatchPrintModalProps> = ({
                             }}
                           >
                             <IdCard
+                              key={`${item.id}-${brandRevisionKey}`}
                               member={item.member}
                               customFields={customFields}
                               side={item.side}
                               idPrefix={`batch-${item.side}`}
                               showShadow={false}
+                              cardDesign={batchDesign === 'member_default' ? undefined : batchDesign}
+                              titleStyle={batchTitleStyle === 'portal_default' ? undefined : batchTitleStyle}
                             />
                           </div>
                         </div>
@@ -326,7 +390,7 @@ export const BatchPrintModal: React.FC<BatchPrintModalProps> = ({
 
                     {/* Sheet Footer Note */}
                     <div className="no-print text-center text-[11px] text-slate-400 border-t border-slate-100 pt-3 mt-6">
-                      Kairali Cultural Association Fujairah • Print at 100% scale (No scaling / Actual size) for exact PVC card punch
+                      {portalConfig.portalName} • Print at 100% scale (No scaling / Actual size) for exact PVC card punch
                     </div>
                   </div>
                 );

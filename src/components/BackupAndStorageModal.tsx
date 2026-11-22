@@ -49,10 +49,11 @@ import {
   Share2,
   Smartphone,
   Globe,
-  ShieldAlert,
   ShieldCheck,
   FileText,
+  Laptop,
 } from 'lucide-react';
+import { SystemManualModal } from './SystemManualModal';
 
 interface BackupAndStorageModalProps {
   members: Member[];
@@ -89,6 +90,7 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
   const [importError, setImportError] = useState<string | null>(null);
   const [recoverySnapshots, setRecoverySnapshots] = useState<LocalStorageSnapshot[]>([]);
   const [recoverySuccessMsg, setRecoverySuccessMsg] = useState<string | null>(null);
+  const [showManualModal, setShowManualModal] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
 
   // Supabase Cloud Configuration State (Admin Only)
@@ -444,7 +446,7 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                 <p className="text-xs text-slate-600 mb-4 leading-relaxed">
                   Your data is permanently stored on this computer in local storage. It remains completely available even when disconnected from the internet. You can backup or restore the entire database snapshot at any time.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <button
                     type="button"
                     onClick={() => downloadMembersCsv(members)}
@@ -469,7 +471,22 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                       Full System Backup (JSON)
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Save complete system snapshot to PC.
+                      1-Click download of all 14 system tables &amp; ledgers.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveToFolder}
+                    disabled={isSavingLocal}
+                    className="p-3.5 rounded-xl border border-slate-200 hover:border-purple-500 hover:bg-purple-50/40 text-left transition-all group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-purple-800">
+                      <FolderPlus className="w-4 h-4 text-purple-600" />
+                      Save to PC Folder / USB
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      {isSavingLocal ? 'Selecting folder...' : 'Save complete database & CSV to dedicated directory.'}
                     </p>
                   </button>
 
@@ -483,7 +500,21 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                       Restore Full Database
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Import backup to restore all tables.
+                      Import backup JSON to restore all tables &amp; ledgers.
+                    </p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowManualModal(true)}
+                    className="p-3.5 rounded-xl border border-slate-200 hover:border-blue-500 hover:bg-blue-50/40 text-left transition-all group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-blue-800">
+                      <Laptop className="w-4 h-4 text-blue-600" />
+                      Windows Setup Guide
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Step-by-step commands &amp; batch scripts to run offline on Windows PC.
                     </p>
                   </button>
 
@@ -497,9 +528,45 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                       System Manual (PDF)
                     </div>
                     <p className="text-[11px] text-slate-500 mt-1">
-                      Export architecture &amp; logic manual.
+                      Export architecture, logic &amp; Windows PC installation commands.
                     </p>
                   </button>
+                </div>
+
+                {localStatusMessage && (
+                  <div className="mt-3 p-3 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-xs flex items-center gap-2">
+                    <FolderCheck className="w-4 h-4 text-purple-700 shrink-0" />
+                    <span>{localStatusMessage}</span>
+                  </div>
+                )}
+
+                {/* System Backup Completeness Guarantee Checklist */}
+                <div className="mt-4 pt-4 border-t border-slate-200 bg-slate-50/70 -mx-5 -mb-5 p-5 rounded-b-2xl space-y-2.5">
+                  <div className="flex items-center justify-between text-slate-800 font-bold text-xs">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      Every Part of System Guaranteed in Backup:
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-300/50">
+                      100% Complete Snapshot (v3.0)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-[11px] text-slate-600">
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>1. Members Directory</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>2. Children&apos;s Wing</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>3. Finance Ledger</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>4. Particulars &amp; Balances</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>5. Asset Inventory &amp; Logs</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>6. Cultural Classes</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>7. Class Attendance</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>8. Official Letter Pad</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>9. Document Archive</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>10. VIP Contact Bank</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>11. Executive Signatures</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>12. Branch Units Hierarchy</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>13. Admin Accounts &amp; Roles</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>14. Logo, Theme &amp; Audit Logs</span></div>
+                  </div>
                 </div>
               </div>
 
@@ -776,7 +843,7 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                 <p className="text-[11px] text-slate-600 mb-3">
                   All databases (members, finance, inventory, classes, letters, documents, contact bank, portal settings, audit logs) reside on your local PC storage and remain 100% accessible offline.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <button
                     type="button"
                     onClick={() => downloadMembersCsv(members)}
@@ -798,7 +865,22 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                       <Download className="w-4 h-4 text-blue-600" />
                       Full System Backup (JSON)
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1">Export all system tables &amp; ledger state</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Export all 14 system tables &amp; ledger state</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveToFolder}
+                    disabled={isSavingLocal}
+                    className="p-3 rounded-xl border border-slate-200 hover:border-purple-400 bg-white text-left transition-all hover:shadow-xs group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-purple-700">
+                      <FolderPlus className="w-4 h-4 text-purple-600" />
+                      Save to PC Folder / USB
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      {isSavingLocal ? 'Selecting folder...' : 'Save full database & CSV directly to PC folder'}
+                    </p>
                   </button>
 
                   <button
@@ -815,6 +897,18 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
 
                   <button
                     type="button"
+                    onClick={() => setShowManualModal(true)}
+                    className="p-3 rounded-xl border border-slate-200 hover:border-slate-300 bg-white text-left transition-all hover:shadow-xs group cursor-pointer"
+                  >
+                    <div className="flex items-center gap-2 font-bold text-xs text-slate-800 group-hover:text-blue-700">
+                      <Laptop className="w-4 h-4 text-blue-600" />
+                      Windows Setup Guide
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-1">Commands &amp; 1-click batch launcher for Windows PC</p>
+                  </button>
+
+                  <button
+                    type="button"
                     onClick={() => downloadSystemDocumentationPdf(userSession?.fullName || 'KCA System Administration')}
                     className="p-3 rounded-xl border border-slate-200 hover:border-slate-300 bg-white text-left transition-all hover:shadow-xs group cursor-pointer"
                   >
@@ -822,7 +916,7 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                       <FileText className="w-4 h-4 text-rose-600" />
                       System Manual (PDF)
                     </div>
-                    <p className="text-[10px] text-slate-500 mt-1">Export architecture &amp; logic manual</p>
+                    <p className="text-[10px] text-slate-500 mt-1">Export architecture, logic &amp; Windows installation guide</p>
                   </button>
                   <input
                     ref={importFileRef}
@@ -831,6 +925,42 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
                     className="hidden"
                     onChange={handleImportJsonFile}
                   />
+                </div>
+
+                {localStatusMessage && (
+                  <div className="mt-3 p-3 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-xs flex items-center gap-2">
+                    <FolderCheck className="w-4 h-4 text-purple-700 shrink-0" />
+                    <span>{localStatusMessage}</span>
+                  </div>
+                )}
+
+                {/* System Backup Completeness Guarantee Checklist */}
+                <div className="mt-4 p-4 rounded-xl bg-slate-100 border border-slate-200 text-xs space-y-2">
+                  <div className="flex items-center justify-between text-slate-800 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      All 14 System Subsystems Guaranteed in Every Backup:
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md border border-emerald-300/50">
+                      100% Complete Snapshot (v3.0)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-[11px] text-slate-600">
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>1. Members Directory</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>2. Children&apos;s Wing</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>3. Finance Ledger</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>4. Particulars &amp; Balances</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>5. Asset Inventory &amp; Logs</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>6. Cultural Classes</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>7. Class Attendance</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>8. Official Letter Pad</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>9. Document Archive</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>10. VIP Contact Bank</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>11. Executive Signatures</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>12. Branch Units Hierarchy</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>13. Admin Accounts &amp; Roles</span></div>
+                    <div className="flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /><span>14. Logo, Theme &amp; Audit Logs</span></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -851,6 +981,13 @@ export const BackupAndStorageModal: React.FC<BackupAndStorageModalProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Interactive System Manual & Windows PC Setup Guide Modal */}
+      <SystemManualModal
+        isOpen={showManualModal}
+        onClose={() => setShowManualModal(false)}
+        userName={userSession?.fullName}
+      />
     </div>
   );
 };

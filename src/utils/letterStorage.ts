@@ -14,7 +14,73 @@ export const UNIT_CODE_MAP: Record<string, string> = {
   Dibba: 'DBA',
 };
 
-export const INITIAL_LETTERS: OfficialLetter[] = [];
+export const INITIAL_LETTERS: OfficialLetter[] = [
+  {
+    id: 'let_custom_default',
+    referenceNumber: 'KCA/CENTRAL/REF/2026/001',
+    seriesNumber: 1,
+    date: new Date().toISOString().split('T')[0],
+    unit: 'Central',
+    toAddress: 'To Whom It May Concern,\nRelevant Government Authorities & Cultural Councils,\nEmirate of Fujairah, United Arab Emirates.',
+    subject: 'COMMUNITY WELFARE INITIATIVES & OFFICIAL ORGANIZATIONAL REPRESENTATION',
+    salutation: 'Respected Sir / Madam,',
+    bodyHtml: `<p>We are writing on behalf of the Central Executive Committee of <strong>Kairali Cultural Association Fujairah (A NORKA Affiliated Organisation)</strong> to officially submit this formal communication regarding our ongoing cultural, social welfare, and humanitarian community empowerment programs in the Emirate of Fujairah.</p><p>As an officially recognized cultural association established since 1978, KCA Fujairah continues to serve the Indian expatriate community while fostering fraternal ties with local authorities, government bodies, and socio-cultural institutions across the East Coast of the UAE.</p><p>We kindly request your esteemed office to extend all formal cooperation and support for our accredited community outreach initiatives.</p>`,
+    signatories: [
+      {
+        id: 'sig_1',
+        title: 'President',
+        name: 'K. V. Mohanan',
+        unit: 'Central',
+        showSignature: true,
+      },
+      {
+        id: 'sig_2',
+        title: 'General Secretary',
+        name: 'Suresh Kumar Pillai',
+        unit: 'Central',
+        showSignature: true,
+      },
+    ],
+    status: 'Issued',
+    category: 'General',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    issuedAt: new Date().toISOString(),
+    createdByName: 'Central Executive Committee',
+  },
+  {
+    id: 'let_blank_default',
+    referenceNumber: 'KCA/CENTRAL/REF/2026/002',
+    seriesNumber: 2,
+    date: new Date().toISOString().split('T')[0],
+    unit: 'Central',
+    toAddress: '',
+    subject: '',
+    salutation: 'Respected Sir / Madam,',
+    bodyHtml: '<p></p>',
+    signatories: [
+      {
+        id: 'sig_1',
+        title: 'President',
+        name: 'K. V. Mohanan',
+        unit: 'Central',
+        showSignature: true,
+      },
+      {
+        id: 'sig_2',
+        title: 'General Secretary',
+        name: 'Suresh Kumar Pillai',
+        unit: 'Central',
+        showSignature: true,
+      },
+    ],
+    status: 'Draft',
+    category: 'General',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    createdByName: 'Central Executive Committee',
+  },
+];
 
 export function loadLetters(): OfficialLetter[] {
   if (typeof window === 'undefined') return INITIAL_LETTERS;
@@ -22,13 +88,31 @@ export function loadLetters(): OfficialLetter[] {
     const raw = localStorage.getItem(STORAGE_KEY_LETTERS);
     if (raw !== null) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Ensure both custom letter and blank letter are available
+        const hasCustom = parsed.some((l) => l.id === 'let_custom_default' || l.subject?.includes('COMMUNITY WELFARE'));
+        const hasBlank = parsed.some((l) => l.id === 'let_blank_default' || (!l.subject && !l.toAddress));
+
+        let merged = [...parsed];
+        let changed = false;
+        if (!hasCustom) {
+          merged.unshift(INITIAL_LETTERS[0]);
+          changed = true;
+        }
+        if (!hasBlank) {
+          merged.push(INITIAL_LETTERS[1]);
+          changed = true;
+        }
+        if (changed) {
+          saveLetters(merged);
+        }
+        return merged;
       }
     }
   } catch (err) {
     console.error('Error loading letters from storage:', err);
   }
+  saveLetters(INITIAL_LETTERS);
   return INITIAL_LETTERS;
 }
 
@@ -172,7 +256,7 @@ export async function downloadLetterPdf(letter: OfficialLetter): Promise<void> {
   doc.setTextColor(30, 41, 59);
 
   // Helper to strip html tags and preserve linebreaks
-  const cleanBodyText = letter.bodyHtml
+  const cleanBodyText = (letter.bodyHtml || '')
     .replace(/<p>/gi, '')
     .replace(/<\/p>/gi, '\n\n')
     .replace(/<br\s*[\/]?>/gi, '\n')
@@ -185,16 +269,22 @@ export async function downloadLetterPdf(letter: OfficialLetter): Promise<void> {
     .replace(/<[^>]+>/g, '')
     .trim();
 
-  const paragraphs = cleanBodyText.split('\n\n');
-  for (const para of paragraphs) {
-    if (!para.trim()) continue;
-    const lines = doc.splitTextToSize(para.trim(), contentWidth);
-    doc.text(lines, margin, currentY);
-    currentY += lines.length * 5 + 4;
+  if (cleanBodyText) {
+    const paragraphs = cleanBodyText.split('\n\n');
+    for (const para of paragraphs) {
+      if (!para.trim()) continue;
+      const lines = doc.splitTextToSize(para.trim(), contentWidth);
+      doc.text(lines, margin, currentY);
+      currentY += lines.length * 5 + 4;
+    }
   }
 
-  // 8. Sign-off Statement
-  currentY += 4;
+  // 8. Sign-off Statement (Positioned cleanly at bottom if blank letter pad)
+  if (!cleanBodyText) {
+    currentY = Math.max(currentY, pageHeight - 68);
+  } else {
+    currentY += 4;
+  }
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.text('Yours faithfully,', margin, currentY);

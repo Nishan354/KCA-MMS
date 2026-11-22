@@ -203,39 +203,37 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
   return (
     <div className="space-y-6 pb-16 antialiased">
       {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
+      <div className="bg-white p-5 sm:p-6 rounded-xl border border-slate-200 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <span
-              className="p-1.5 rounded-lg text-white"
-              style={{ backgroundColor: 'var(--color-primary, #881337)' }}
-            >
-              <GraduationCap className="w-5 h-5 text-amber-300" />
-            </span>
-            <h2 className="font-display font-bold text-xl text-slate-900 tracking-tight">
-              Unit Cultural Classes &amp; Student Attendance
-            </h2>
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-center text-[#8b0000] shrink-0">
+              <GraduationCap className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="font-display font-bold text-xl sm:text-2xl text-slate-900 tracking-tight leading-tight">
+                Unit Cultural Classes &amp; Student Attendance
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Manage unit-specific training classes (Chenda Melam, Classical Dance, Music, Yoga, Malayalam Padanam) &amp; participant attendance registries.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-slate-600 mt-1">
-            Manage unit-specific training classes (Chenda Melam, Classical Dance, Music, Yoga, Malayalam Padanam) &amp; participant attendance registries.
-          </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => onOpenAddParticipant()}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
           >
-            <UserPlus className="w-4 h-4 text-emerald-400" />
+            <UserPlus className="w-4 h-4 text-emerald-600" />
             <span>+ Register Student</span>
           </button>
 
           <button
             onClick={onOpenAddClass}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
-            style={{ backgroundColor: 'var(--color-primary, #881337)' }}
+            className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[#8b0000] hover:bg-[#730000] text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
           >
-            <PlusCircle className="w-4 h-4 text-amber-300" />
+            <PlusCircle className="w-4 h-4 text-white" />
             <span>+ Create Class Batch</span>
           </button>
         </div>
@@ -243,84 +241,84 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
       {/* 4 Metric Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-        <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-xs">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Enrolled Students
             </span>
-            <span className="p-1.5 rounded-lg bg-slate-100 text-slate-700">
+            <span className="p-2 rounded-xl bg-rose-50 text-[#8b0000] border border-rose-200">
               <Users className="w-4 h-4" />
             </span>
           </div>
-          <div className="font-mono font-bold text-2xl text-slate-900 mt-2">
+          <div className="font-mono font-black text-2xl text-slate-900 mt-2">
             {totalStudentsCount}
           </div>
-          <div className="text-[11px] text-slate-500 mt-0.5">
+          <div className="text-[11px] text-slate-500 mt-1">
             {paidStudentsCount} Paid • {pendingStudentsCount} Due
           </div>
         </div>
 
-        <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-xs">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Fees Collected (AED)
             </span>
-            <span className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200">
               <Sparkles className="w-4 h-4" />
             </span>
           </div>
-          <div className="font-mono font-bold text-2xl text-emerald-700 mt-2">
+          <div className="font-mono font-black text-2xl text-emerald-600 mt-2">
             {formatAED(totalCollectedAED)}
           </div>
-          <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">
+          <div className="text-[11px] text-emerald-600 font-semibold mt-1">
             Linked to Unit Finance
           </div>
         </div>
 
-        <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-xs">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Pending Fees (AED)
             </span>
-            <span className="p-1.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
+            <span className="p-2 rounded-xl bg-amber-50 text-amber-600 border border-amber-200">
               <Tag className="w-4 h-4" />
             </span>
           </div>
-          <div className="font-mono font-bold text-2xl text-amber-600 mt-2">
+          <div className="font-mono font-black text-2xl text-amber-600 mt-2">
             {formatAED(totalPendingAED)}
           </div>
-          <div className="text-[11px] text-slate-500 mt-0.5">
+          <div className="text-[11px] text-slate-500 mt-1">
             {pendingStudentsCount} pending collections
           </div>
         </div>
 
-        <div className="bg-white p-4.5 rounded-xl border border-slate-200 shadow-xs">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               Active Batches
             </span>
-            <span className="p-1.5 rounded-lg bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
               <GraduationCap className="w-4 h-4" />
             </span>
           </div>
-          <div className="font-mono font-bold text-2xl text-blue-700 mt-2">
+          <div className="font-mono font-black text-2xl text-blue-600 mt-2">
             {activeClassesCount} Batches
           </div>
-          <div className="text-[11px] text-slate-500 mt-0.5">
+          <div className="text-[11px] text-slate-500 mt-1">
             {scopedAttendance.length} Attendance logs
           </div>
         </div>
       </div>
 
       {/* Sub Tabs */}
-      <div className="flex items-center justify-between border-b border-slate-200 flex-wrap gap-2">
+      <div className="flex items-center justify-between border-b border-slate-200 pb-2 flex-wrap gap-2">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setActiveSubTab('classes')}
-            className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
               activeSubTab === 'classes'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                ? 'bg-[#8b0000] text-white shadow-xs font-bold'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
             }`}
           >
             <GraduationCap className="w-4 h-4" />
@@ -329,10 +327,10 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
           <button
             onClick={() => setActiveSubTab('students')}
-            className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
               activeSubTab === 'students'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                ? 'bg-[#8b0000] text-white shadow-xs font-bold'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
             }`}
           >
             <Users className="w-4 h-4" />
@@ -341,10 +339,10 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
           <button
             onClick={() => setActiveSubTab('attendance')}
-            className={`pb-2.5 px-3 text-xs font-bold flex items-center gap-1.5 border-b-2 transition-all cursor-pointer ${
+            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
               activeSubTab === 'attendance'
-                ? 'border-slate-900 text-slate-900'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                ? 'bg-[#8b0000] text-white shadow-xs font-bold'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
             }`}
           >
             <Clock className="w-4 h-4" />
@@ -356,7 +354,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
           {activeSubTab === 'students' && (
             <button
               onClick={handleExportStudents}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 shadow-xs transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5 text-slate-600" />
               <span>Export Students CSV</span>
@@ -366,18 +364,17 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
           {activeSubTab === 'attendance' && (
             <button
               onClick={handleExportAttendance}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold border border-slate-200 shadow-xs transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5 text-slate-600" />
               <span>Export Attendance CSV</span>
             </button>
           )}
         </div>
-
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+      <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
           {/* Search */}
           <div className="relative flex-1 max-w-md">
@@ -387,7 +384,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by student name, course, instructor, phone number..."
-              className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:bg-white outline-none transition-colors"
+              className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-900 placeholder:text-slate-400 focus:border-[#8b0000] focus:ring-1 focus:ring-[#8b0000] outline-none transition-colors"
             />
             {searchQuery && (
               <button
@@ -406,7 +403,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
               <select
                 value={selectedUnit}
                 onChange={(e) => setSelectedUnit(e.target.value)}
-                className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 bg-slate-50 focus:bg-white outline-none cursor-pointer"
+                className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white focus:border-[#8b0000] focus:ring-1 focus:ring-[#8b0000] outline-none cursor-pointer"
               >
                 <option value="ALL">All Units</option>
                 {units.map((u) => (
@@ -423,7 +420,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 bg-slate-50 focus:bg-white outline-none cursor-pointer"
+                className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white focus:border-[#8b0000] focus:ring-1 focus:ring-[#8b0000] outline-none cursor-pointer"
               >
                 <option value="ALL">All Disciplines</option>
                 {CLASS_CATEGORY_OPTIONS.map((c) => (
@@ -439,7 +436,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
               <select
                 value={selectedClassId}
                 onChange={(e) => setSelectedClassId(e.target.value)}
-                className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 bg-slate-50 focus:bg-white outline-none cursor-pointer"
+                className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white focus:border-[#8b0000] focus:ring-1 focus:ring-[#8b0000] outline-none cursor-pointer"
               >
                 <option value="ALL">All Classes / Batches</option>
                 {classes.map((c) => (
@@ -455,7 +452,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
               <select
                 value={selectedFeeStatus}
                 onChange={(e) => setSelectedFeeStatus(e.target.value)}
-                className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 bg-slate-50 focus:bg-white outline-none cursor-pointer"
+                className="px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white focus:border-[#8b0000] focus:ring-1 focus:ring-[#8b0000] outline-none cursor-pointer"
               >
                 <option value="ALL">All Fee Status</option>
                 <option value="Paid">Paid</option>
@@ -471,7 +468,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
       {activeSubTab === 'classes' && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {scopedClasses.length === 0 ? (
-            <div className="col-span-full bg-white p-12 text-center rounded-xl border border-slate-200 text-slate-500">
+            <div className="col-span-full bg-white p-12 text-center rounded-xl border border-slate-200 text-slate-500 shadow-xs">
               No cultural training classes found matching your search.
             </div>
           ) : (
@@ -486,7 +483,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
               return (
                 <div
                   key={cls.id}
-                  className="bg-white rounded-xl border border-slate-200 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
+                  className="bg-white rounded-xl border border-slate-200 shadow-xs hover:border-slate-300 hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
                 >
                   {/* Card Header */}
                   <div className="p-4 border-b border-slate-100">
@@ -495,10 +492,10 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                         {cls.code}
                       </span>
                       <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
                           cls.status === 'Active'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : 'bg-amber-50 text-amber-700 border-amber-200'
                         }`}
                       >
                         {cls.status}
@@ -510,11 +507,11 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                     </h3>
 
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <span className="text-[11px] font-semibold text-slate-700 flex items-center gap-1">
-                        <Building2 className="w-3.5 h-3.5 text-rose-800" />
+                      <span className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
                         <span>{cls.unit} Unit</span>
                       </span>
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-50 text-slate-600 border border-slate-200">
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
                         {cls.category}
                       </span>
                     </div>
@@ -523,7 +520,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                   {/* Card Body */}
                   <div className="p-4 space-y-2.5 text-xs text-slate-600">
                     <div>
-                      <span className="font-bold text-slate-700">Guru / Instructor:</span>{' '}
+                      <span className="font-bold text-slate-500">Guru / Instructor:</span>{' '}
                       <span className="font-semibold text-slate-900">{cls.instructorName}</span>
                       {cls.instructorContact && (
                         <div className="text-[11px] font-mono text-slate-500 mt-0.5">
@@ -532,12 +529,12 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 text-slate-600">
                       <Calendar className="w-3.5 h-3.5 text-slate-400" />
                       <span>{cls.scheduleDays.join(', ')}</span>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 text-slate-600">
                       <Clock className="w-3.5 h-3.5 text-slate-400" />
                       <span>{cls.scheduleTime}</span>
                     </div>
@@ -551,7 +548,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                     <div className="flex items-center justify-between pt-2 border-t border-slate-100">
                       <div>
                         <div className="text-[10px] uppercase font-bold text-slate-400">Monthly Fee</div>
-                        <div className="font-mono font-bold text-sm text-rose-900">
+                        <div className="font-mono font-bold text-sm text-[#8b0000]">
                           {formatAED(cls.monthlyFeeAED)}
                         </div>
                       </div>
@@ -565,21 +562,20 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                   </div>
 
                   {/* Card Actions */}
-                  <div className="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-1.5">
+                  <div className="p-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-1.5">
                     <button
                       onClick={() => onOpenTakeAttendance(cls)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-white text-[11px] font-bold transition-all shadow-xs cursor-pointer active:scale-95"
-                      style={{ backgroundColor: 'var(--color-primary, #881337)' }}
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#8b0000] hover:bg-[#730000] text-white text-[11px] font-bold transition-all shadow-xs cursor-pointer active:scale-95"
                       title="Take class session attendance"
                     >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-300" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-white" />
                       <span>Take Attendance</span>
                     </button>
 
                     <div className="flex items-center gap-1">
                       <button
                         onClick={() => handlePrintAttendanceSheet(cls)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition-colors cursor-pointer border border-slate-200"
                         title="Print / Download PDF Attendance Sheet"
                       >
                         <Printer className="w-3.5 h-3.5" />
@@ -587,7 +583,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
                       <button
                         onClick={() => onOpenAddParticipant(cls.id)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer border border-emerald-200"
                         title="Add student to this batch"
                       >
                         <UserPlus className="w-3.5 h-3.5" />
@@ -595,7 +591,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
                       <button
                         onClick={() => onEditClass(cls)}
-                        className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition-colors cursor-pointer"
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-200 transition-colors cursor-pointer border border-slate-200"
                         title="Edit Class Details"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -604,7 +600,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                       {isAdmin && (
                         <button
                           onClick={() => setClassToDelete(cls)}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                          className="p-1.5 rounded-lg text-rose-600 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer border border-rose-200"
                           title="Delete Class"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -621,10 +617,10 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
       {/* SUB-TAB 2: Students & Participants Registry Table */}
       {activeSubTab === 'students' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider select-none">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider select-none text-[11px]">
                 <tr>
                   <th className="p-3.5">Student ID</th>
                   <th className="p-3.5">Student Name &amp; Contact</th>
@@ -635,10 +631,10 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-slate-100 bg-white text-slate-800">
                 {scopedParticipants.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="p-12 text-center text-slate-500">
+                    <td colSpan={6} className="p-12 text-center text-slate-400">
                       No student records found matching your filter criteria.
                     </td>
                   </tr>
@@ -651,7 +647,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                       <tr key={p.id} className="hover:bg-slate-50/80 transition-colors">
                         {/* Student ID */}
                         <td className="p-3.5 whitespace-nowrap">
-                          <span className="font-mono font-bold text-slate-900 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-xs">
+                          <span className="font-mono font-bold text-[#8b0000] bg-rose-50 px-2 py-0.5 rounded border border-rose-200 text-xs">
                             {p.studentId}
                           </span>
                           <div className="text-[10px] text-slate-400 font-mono mt-1">
@@ -664,12 +660,12 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                           <div className="font-bold text-slate-900 text-sm leading-snug">
                             {p.fullName}
                           </div>
-                          <div className="text-[11px] text-slate-600 mt-0.5">
+                          <div className="text-[11px] text-slate-500 mt-0.5">
                             {p.age && <span>Age: {p.age} yrs • </span>}
                             <span>Parent: {p.guardianName || 'Guardian'}</span>
                           </div>
                           <div className="text-[11px] font-mono text-slate-500 mt-0.5 flex items-center gap-1.5">
-                            <span>📞 {p.guardianPhone}</span>
+                            <span className="text-slate-600">📞 {p.guardianPhone}</span>
                             {waLink && (
                               <a
                                 href={waLink}
@@ -686,9 +682,9 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
                         {/* Class & Unit */}
                         <td className="p-3.5">
-                          <div className="font-bold text-slate-800">{p.className}</div>
-                          <div className="text-[11px] text-slate-500 font-bold flex items-center gap-1 mt-0.5">
-                            <Building2 className="w-3 h-3" style={{ color: 'var(--color-primary, #881337)' }} />
+                          <div className="font-bold text-slate-900">{p.className}</div>
+                          <div className="text-[11px] text-slate-600 font-semibold flex items-center gap-1 mt-0.5">
+                            <Building2 className="w-3.5 h-3.5 text-slate-400" />
                             <span>{p.unit} Unit</span>
                           </div>
                         </td>
@@ -700,7 +696,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                               {Object.entries(p.customOptions).map(([key, val]) => (
                                 <span
                                   key={key}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium border border-slate-200"
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-50 text-slate-700 text-[10px] font-medium border border-slate-200"
                                 >
                                   <span className="font-bold text-slate-900">{key}:</span> {val}
                                 </span>
@@ -721,12 +717,12 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                           </div>
                           <div className="flex flex-col items-center gap-1 mt-1">
                             <span
-                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold ${
+                              className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${
                                 p.feeStatus === 'Paid'
-                                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                   : p.feeStatus === 'Exempt'
-                                  ? 'bg-slate-100 text-slate-700 border border-slate-300'
-                                  : 'bg-amber-100 text-amber-800 border border-amber-300'
+                                  ? 'bg-slate-100 text-slate-700 border border-slate-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
                               }`}
                             >
                               {p.feeStatus === 'Paid' ? '✓ Paid' : p.feeStatus === 'Exempt' ? 'Exempt' : '⚠ Not Paid'}
@@ -748,7 +744,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                             {p.feeStatus === 'Paid' && onViewReceipt && (
                               <button
                                 onClick={() => onViewReceipt(p)}
-                                className="inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold text-emerald-700 hover:text-emerald-900 hover:underline cursor-pointer"
+                                className="inline-flex items-center gap-0.5 text-[10px] font-mono font-semibold text-emerald-600 hover:text-emerald-700 hover:underline cursor-pointer"
                                 title="Click to view & print official receipt"
                               >
                                 <Printer className="w-2.5 h-2.5" />
@@ -764,7 +760,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                             {p.feeStatus === 'Paid' && onViewReceipt && (
                               <button
                                 onClick={() => onViewReceipt(p)}
-                                className="p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer border border-emerald-200"
                                 title="Print / Download Student Fee Receipt"
                               >
                                 <Printer className="w-3.5 h-3.5" />
@@ -774,7 +770,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                             {(p.feeStatus === 'Pending' || (p.feeStatus as any) === 'Not Paid') && onQuickPayFee && (
                               <button
                                 onClick={() => onQuickPayFee(p)}
-                                className="p-1.5 rounded-lg text-amber-700 hover:bg-amber-50 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors cursor-pointer border border-amber-200"
                                 title="Record Fee & Issue Receipt"
                               >
                                 <Sparkles className="w-3.5 h-3.5" />
@@ -783,7 +779,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
                             <button
                               onClick={() => onEditParticipant(p)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200"
                               title="Edit Student Record"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
@@ -792,7 +788,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                             {isAdmin && (
                               <button
                                 onClick={() => setStudentToDelete(p)}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                                className="p-1.5 rounded-lg text-rose-500 hover:text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer border border-rose-200"
                                 title="Delete Student Record"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -812,10 +808,10 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
       {/* SUB-TAB 3: Attendance History & Session Logs */}
       {activeSubTab === 'attendance' && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+              <thead className="bg-slate-50 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider select-none text-[11px]">
                 <tr>
                   <th className="p-3.5 w-8 text-center"></th>
                   <th className="p-3.5">Date</th>
@@ -827,10 +823,10 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                 </tr>
               </thead>
 
-              <tbody className="divide-y divide-slate-100 bg-white">
+              <tbody className="divide-y divide-slate-100 bg-white text-slate-800">
                 {scopedAttendance.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="p-12 text-center text-slate-500">
+                    <td colSpan={7} className="p-12 text-center text-slate-400">
                       No attendance registers recorded yet. Click "Take Attendance" on any class to start tracking sessions.
                     </td>
                   </tr>
@@ -841,12 +837,12 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
                     return (
                       <React.Fragment key={rec.id}>
-                        <tr className={`hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-rose-50/20' : ''}`}>
+                        <tr className={`hover:bg-slate-50/80 transition-colors ${isExpanded ? 'bg-slate-50' : ''}`}>
                           {/* Expand Toggle */}
                           <td className="p-3.5 text-center">
                             <button
                               onClick={() => setExpandedAttendanceId(isExpanded ? null : rec.id)}
-                              className="p-1 rounded hover:bg-slate-200 text-slate-500 transition-transform cursor-pointer"
+                              className="p-1 rounded hover:bg-slate-200 text-slate-600 transition-transform cursor-pointer"
                               title={isExpanded ? 'Collapse Student Details' : 'Expand Student Roster'}
                             >
                               <span className="inline-block text-xs font-bold font-mono">
@@ -867,7 +863,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                           </td>
 
                           <td className="p-3.5">
-                            <div className="font-semibold text-slate-800">
+                            <div className="font-medium text-slate-700">
                               {rec.topicCovered || 'Regular Practice Session'}
                             </div>
                           </td>
@@ -887,8 +883,8 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                                   {rec.lateCount} Late
                                 </span>
                               )}
-                              <span className="font-mono text-slate-400">/ {rec.totalStudents}</span>
-                              <span className="font-mono font-bold text-[10px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                              <span className="font-mono text-slate-500">/ {rec.totalStudents}</span>
+                              <span className="font-mono font-bold text-[10px] text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
                                 {presentRate}%
                               </span>
                             </div>
@@ -901,7 +897,7 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                           <td className="p-3.5 text-center whitespace-nowrap">
                             <button
                               onClick={() => setExpandedAttendanceId(isExpanded ? null : rec.id)}
-                              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 transition-colors cursor-pointer"
+                              className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 shadow-2xs transition-colors cursor-pointer"
                             >
                               {isExpanded ? 'Hide Roster ▲' : `View Status (${rec.records?.length || rec.totalStudents}) ▼`}
                             </button>
@@ -910,12 +906,12 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
 
                         {/* Expanded Student Attendance Details */}
                         {isExpanded && (
-                          <tr className="bg-slate-50/70 border-b border-slate-200">
+                          <tr className="bg-slate-50 border-b border-slate-200">
                             <td colSpan={7} className="p-4">
-                              <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-2xs space-y-2.5">
-                                <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                                  <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                                    <Users className="w-3.5 h-3.5 text-rose-800" />
+                              <div className="bg-white rounded-xl p-3.5 border border-slate-200 shadow-xs space-y-2.5">
+                                <div className="flex items-center justify-between border-b border-slate-200 pb-2">
+                                  <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                                    <Users className="w-3.5 h-3.5 text-[#8b0000]" />
                                     <span>Individual Student Attendance Status for this Session</span>
                                   </span>
                                   <span className="text-[11px] text-slate-500 font-mono">
@@ -943,12 +939,12 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                                         <span
                                           className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded border ${
                                             st.status === 'Present'
-                                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                               : st.status === 'Absent'
-                                              ? 'bg-rose-100 text-rose-800 border-rose-300'
+                                              ? 'bg-rose-50 text-rose-700 border-rose-200'
                                               : st.status === 'Late'
-                                              ? 'bg-amber-100 text-amber-900 border-amber-300'
-                                              : 'bg-blue-100 text-blue-800 border-blue-300'
+                                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                              : 'bg-slate-100 text-slate-700 border-slate-200'
                                           }`}
                                         >
                                           {st.status}
@@ -970,7 +966,6 @@ export const ClassesView: React.FC<ClassesViewProps> = ({
                   })
                 )}
               </tbody>
-
             </table>
           </div>
         </div>

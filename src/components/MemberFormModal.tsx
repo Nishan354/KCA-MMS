@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Member,
   MembershipType,
+  CoordinationCommitteeType,
   RegistrationCategory,
   BloodGroup,
   PaymentMethod,
@@ -16,6 +17,8 @@ import { getNextMembershipId, getDefaultExpiryDate, getNextMarch31Date, getUnitI
 import { DynamicFieldInput } from './DynamicFieldInput';
 import { optimizeImageFile } from '../utils/imageOptimizer';
 import { saveMemberPhotoToDb } from '../utils/indexedDbStorage';
+import { downloadBlankApplicationFormPdf } from '../utils/applicationFormPdfGenerator';
+import { IdCardDesignId, ID_CARD_DESIGNS } from '../types/cardDesign';
 import {
   X,
   User,
@@ -45,7 +48,12 @@ import {
   Award,
   Crown,
 } from 'lucide-react';
-import { loadSubcommittees, EXECUTIVE_DESIGNATIONS, SUBCOMMITTEE_DESIGNATIONS } from '../types/subcommittee';
+import {
+  loadSubcommittees,
+  EXECUTIVE_DESIGNATIONS,
+  SUBCOMMITTEE_DESIGNATIONS,
+  COORDINATION_COMMITTEE_DESIGNATIONS,
+} from '../types/subcommittee';
 import { CommitteeBadge } from './CommitteeBadge';
 
 interface MemberFormModalProps {
@@ -58,7 +66,7 @@ interface MemberFormModalProps {
   userSession?: UserSession;
   isOpen: boolean;
   onClose: () => void;
-  onSave: (member: Member) => void;
+  onSave: (member: Member, options?: { openApplicationForm?: boolean }) => void;
   onOpenFieldManager: () => void;
 }
 
@@ -105,7 +113,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   const [fullName, setFullName] = useState('');
   const [gender, setGender] = useState<'Male' | 'Female' | 'Other'>((member?.gender as any) || initialGender || 'Male');
   const [dateOfBirth, setDateOfBirth] = useState('1990-01-01');
-  const [bloodGroup, setBloodGroup] = useState<BloodGroup>('O+');
+  const [bloodGroup, setBloodGroup] = useState<BloodGroup>('');
   const [unit, setUnit] = useState(effectiveDefaultUnit);
   const [isCustomUnit, setIsCustomUnit] = useState(false);
   const [customUnitInput, setCustomUnitInput] = useState('');
@@ -113,6 +121,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   const [isOptimizingPhoto, setIsOptimizingPhoto] = useState(false);
   const [photoStatusMessage, setPhotoStatusMessage] = useState<string | null>(null);
   const [expiryDate, setExpiryDate] = useState(getDefaultExpiryDate());
+  const [cardDesign, setCardDesign] = useState<IdCardDesignId | ''>(member?.cardDesign || '');
   const [membershipType, setMembershipType] = useState<MembershipType>('General Member');
   const [registrationCategory, setRegistrationCategory] = useState<RegistrationCategory>('New');
   const [paymentPurpose, setPaymentPurpose] = useState<'New Membership Fee' | 'Renewal Fee'>('New Membership Fee');
@@ -120,20 +129,30 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
   const [status, setStatus] = useState<MemberStatus>('Active');
 
   // Committee & Subcommittee Framework State
-  const [committeeTier, setCommitteeTier] = useState<'Central' | 'Unit' | 'General'>('General');
+  const [committeeTier, setCommitteeTier] = useState<
+    'Central' | 'Unit' | 'General' | 'Central Coordination' | 'Executive Coordination'
+  >('General');
   const [subcommittee, setSubcommittee] = useState<string>('');
   const [designation, setDesignation] = useState<string>('');
   const [isCustomSubcommittee, setIsCustomSubcommittee] = useState(false);
   const [customSubcommitteeInput, setCustomSubcommitteeInput] = useState('');
   const [isCustomDesignation, setIsCustomDesignation] = useState(false);
   const [customDesignationInput, setCustomDesignationInput] = useState('');
+  const [coordinationCommittee, setCoordinationCommittee] =
+    useState<CoordinationCommitteeType>('');
+  const [coordinationDesignation, setCoordinationDesignation] = useState<string>('');
 
   // Contact
   const [phoneUAE, setPhoneUAE] = useState('+971 50 ');
   const [whatsapp, setWhatsapp] = useState('');
   const [email, setEmail] = useState('');
+  const [poBox, setPoBox] = useState('');
+  const [facebookId, setFacebookId] = useState('');
+  const [instagramId, setInstagramId] = useState('');
   const [emiratesId, setEmiratesId] = useState('784-');
+  const [emiratesIdExpiry, setEmiratesIdExpiry] = useState('');
   const [passportNumber, setPassportNumber] = useState('');
+  const [passportExpiry, setPassportExpiry] = useState('');
   const [norkaId, setNorkaId] = useState('');
   const [profession, setProfession] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -146,19 +165,29 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 
   // Address
   const [uaeAddress, setUaeAddress] = useState('Fujairah, UAE');
+  const [uaeArea, setUaeArea] = useState('');
   const [keralaAddress, setKeralaAddress] = useState('');
   const [keralaDistrict, setKeralaDistrict] = useState('Kozhikode');
+  const [indiaMobile, setIndiaMobile] = useState('');
+  const [indiaLandline, setIndiaLandline] = useState('');
+  const [autoGenerateApplicationForm, setAutoGenerateApplicationForm] = useState(true);
 
   // Emergency
   const [emergencyContactName, setEmergencyContactName] = useState('');
   const [emergencyContactRelation, setEmergencyContactRelation] = useState('Spouse');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('+971 ');
 
-  // Reference / Introduced By (Proposer)
+  // Reference / Introduced By (Proposer) & Application Signatures
   const [introducedByType, setIntroducedByType] = useState<'none' | 'existing' | 'manual'>('none');
   const [introducedByMemberId, setIntroducedByMemberId] = useState<string>('');
+  const [introducedByMembershipCode, setIntroducedByMembershipCode] = useState<string>('');
   const [introducedByName, setIntroducedByName] = useState<string>('');
   const [introducedByPhone, setIntroducedByPhone] = useState<string>('');
+  const [proposerSearchQuery, setProposerSearchQuery] = useState<string>('');
+  const [proposerSignatureUrl, setProposerSignatureUrl] = useState<string>('');
+  const [applicantSignatureUrl, setApplicantSignatureUrl] = useState<string>('');
+  const proposerSigFileInputRef = useRef<HTMLInputElement>(null);
+  const applicantSigFileInputRef = useRef<HTMLInputElement>(null);
 
   // Payment in AED
   const [feeAmountAED, setFeeAmountAED] = useState<number>(30);
@@ -185,7 +214,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         setFullName(member.fullName);
         setGender((member.gender as any) || 'Male');
         setDateOfBirth(member.dateOfBirth || '1990-01-01');
-        setBloodGroup(member.bloodGroup || 'O+');
+        setBloodGroup(member.bloodGroup || '');
 
         if (units.includes(member.unit)) {
           setUnit(member.unit);
@@ -199,6 +228,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 
         setPhotoUrl(member.photoUrl || '');
         setExpiryDate(member.expiryDate || getDefaultExpiryDate());
+        setCardDesign(member.cardDesign || '');
         setMembershipType(member.membershipType || 'General Member');
         setRegistrationCategory(member.registrationCategory || 'Renewal');
         setPaymentPurpose(member.registrationCategory === 'New' ? 'New Membership Fee' : 'Renewal Fee');
@@ -206,53 +236,80 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         setStatus(member.status || 'Active');
 
         // Sync committee fields
-        setCommitteeTier(member.committeeTier || (member.membershipType === 'Central Committee Member' ? 'Central' : member.membershipType === 'Executive Member' ? 'Unit' : 'General'));
+        setCommitteeTier(
+          member.committeeTier ||
+            (member.membershipType === 'Central Committee Member'
+              ? 'Central'
+              : member.membershipType === 'Executive Member'
+              ? 'Unit'
+              : 'General')
+        );
         setSubcommittee(member.subcommittee || '');
         setDesignation(member.designation || '');
         setIsCustomSubcommittee(false);
         setCustomSubcommitteeInput('');
         setIsCustomDesignation(false);
         setCustomDesignationInput('');
+        setCoordinationCommittee(member.coordinationCommittee || '');
+        setCoordinationDesignation(member.coordinationDesignation || '');
 
         setPhoneUAE(member.phoneUAE || '+971 50 ');
         setWhatsapp(member.whatsapp || member.phoneUAE || '');
         setEmail(member.email || '');
+        setPoBox(member.poBox || '');
+        setFacebookId(member.facebookId || '');
+        setInstagramId(member.instagramId || '');
         setEmiratesId(member.emiratesId || '784-');
+        setEmiratesIdExpiry(member.emiratesIdExpiry || '');
         setPassportNumber(member.passportNumber || '');
+        setPassportExpiry(member.passportExpiry || '');
         setNorkaId(member.norkaId || '');
         setProfession(member.profession || '');
         setCompanyName(member.companyName || '');
         setDocuments(member.documents || []);
 
         setUaeAddress(member.uaeAddress || 'Fujairah, UAE');
+        setUaeArea(member.uaeArea || '');
         setKeralaAddress(member.keralaAddress || '');
         setKeralaDistrict(member.keralaDistrict || 'Kozhikode');
+        setIndiaMobile(member.indiaMobile || '');
+        setIndiaLandline(member.indiaLandline || '');
+        setAutoGenerateApplicationForm(false);
 
         setEmergencyContactName(member.emergencyContactName || '');
         setEmergencyContactRelation(member.emergencyContactRelation || 'Spouse');
         setEmergencyContactPhone(member.emergencyContactPhone || member.phoneUAE || '+971 ');
 
-        // Populate Introduced By
+        // Populate Introduced By & Signatures
+        setProposerSearchQuery('');
+        setProposerSignatureUrl(member.proposerSignatureUrl || '');
+        setApplicantSignatureUrl(member.applicantSignatureUrl || '');
         if (member.introducedBy) {
           if (typeof member.introducedBy === 'object') {
             if (member.introducedBy.memberId) {
               setIntroducedByType('existing');
               setIntroducedByMemberId(member.introducedBy.memberId);
+              setIntroducedByMembershipCode(member.introducedBy.membershipId || '');
               setIntroducedByName(member.introducedBy.name || '');
               setIntroducedByPhone(member.introducedBy.phone || '');
             } else {
               setIntroducedByType('manual');
+              setIntroducedByMemberId('');
+              setIntroducedByMembershipCode(member.introducedBy.membershipId || '');
               setIntroducedByName(member.introducedBy.name || '');
               setIntroducedByPhone(member.introducedBy.phone || '');
             }
           } else {
             setIntroducedByType('manual');
+            setIntroducedByMemberId('');
+            setIntroducedByMembershipCode('');
             setIntroducedByName(String(member.introducedBy));
             setIntroducedByPhone('');
           }
         } else {
           setIntroducedByType('none');
           setIntroducedByMemberId('');
+          setIntroducedByMembershipCode('');
           setIntroducedByName('');
           setIntroducedByPhone('');
         }
@@ -268,7 +325,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         setMembershipId(getNextMembershipId(existingMembers, targetUnit));
         setFullName('');
         setDateOfBirth('1990-01-01');
-        setBloodGroup('O+');
+        setBloodGroup('');
         setUnit(targetUnit);
         setIsCustomUnit(false);
         setCustomUnitInput('');
@@ -288,20 +345,31 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         setCustomSubcommitteeInput('');
         setIsCustomDesignation(false);
         setCustomDesignationInput('');
+        setCoordinationCommittee('');
+        setCoordinationDesignation('');
 
         setPhoneUAE('+971 50 ');
         setWhatsapp('');
         setEmail('');
+        setPoBox('');
+        setFacebookId('');
+        setInstagramId('');
         setEmiratesId('784-');
+        setEmiratesIdExpiry('');
         setPassportNumber('');
+        setPassportExpiry('');
         setNorkaId('');
         setProfession('');
         setCompanyName('');
         setDocuments([]);
 
         setUaeAddress('Fujairah, UAE');
+        setUaeArea('');
         setKeralaAddress('');
         setKeralaDistrict('Kozhikode');
+        setIndiaMobile('');
+        setIndiaLandline('');
+        setAutoGenerateApplicationForm(true);
 
         setEmergencyContactName('');
         setEmergencyContactRelation('Spouse');
@@ -310,8 +378,12 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         // Reset Introduced By for new member
         setIntroducedByType('none');
         setIntroducedByMemberId('');
+        setIntroducedByMembershipCode('');
         setIntroducedByName('');
         setIntroducedByPhone('');
+        setProposerSearchQuery('');
+        setProposerSignatureUrl('');
+        setApplicantSignatureUrl('');
 
         setFeeAmountAED(30);
         setPaymentStatus('Paid');
@@ -430,7 +502,28 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
     setDocuments((prev) => prev.filter((d) => d.id !== docId));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleUploadSignatureImage = (
+    target: 'proposer' | 'applicant',
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataUrl = ev.target?.result as string;
+      if (dataUrl) {
+        if (target === 'proposer') {
+          setProposerSignatureUrl(dataUrl);
+        } else {
+          setApplicantSignatureUrl(dataUrl);
+        }
+      }
+    };
+    reader.readAsDataURL(file);
+    if (e.target) e.target.value = '';
+  };
+
+  const handleSubmit = (e: React.FormEvent, forceOpenAppForm?: boolean) => {
     e.preventDefault();
     if (!fullName.trim()) {
       alert('Please enter member full name');
@@ -486,6 +579,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
       unit: finalUnit,
       photoUrl,
       expiryDate,
+      cardDesign: (cardDesign as IdCardDesignId) || undefined,
       membershipType,
       registrationCategory,
       registrationDate,
@@ -494,17 +588,35 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
       committeeTier,
       subcommittee: effectiveSubcommittee || undefined,
       designation: finalDesignation || undefined,
+      coordinationCommittee: coordinationCommittee || undefined,
+      coordinationDesignation:
+        coordinationCommittee && coordinationDesignation.trim()
+          ? coordinationDesignation.trim()
+          : coordinationCommittee
+          ? 'Coordinator'
+          : undefined,
+      coordinationAssignedDate: coordinationCommittee
+        ? member?.coordinationAssignedDate || registrationDate
+        : undefined,
       phoneUAE: phoneUAE.trim(),
       whatsapp: (whatsapp || phoneUAE).trim(),
       email: email.trim() || 'member@kca-fujairah.ae',
+      poBox: poBox.trim() || undefined,
+      facebookId: facebookId.trim() || undefined,
+      instagramId: instagramId.trim() || undefined,
       emiratesId: emiratesId.trim() || undefined,
+      emiratesIdExpiry: emiratesIdExpiry || undefined,
       passportNumber: passportNumber.trim() || undefined,
+      passportExpiry: passportExpiry || undefined,
       norkaId: norkaId.trim() || undefined,
       profession: profession.trim(),
       companyName: companyName.trim(),
       uaeAddress: uaeAddress.trim(),
+      uaeArea: uaeArea.trim() || undefined,
       keralaAddress: keralaAddress.trim(),
       keralaDistrict,
+      indiaMobile: indiaMobile.trim() || undefined,
+      indiaLandline: indiaLandline.trim() || undefined,
       emergencyContactName: emergencyContactName.trim() || 'KCA Helpline',
       emergencyContactRelation: emergencyContactRelation.trim() || 'Relation',
       emergencyContactPhone: emergencyContactPhone.trim() || phoneUAE,
@@ -512,16 +624,26 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         introducedByType === 'existing' && introducedByMemberId
           ? {
               memberId: introducedByMemberId,
-              membershipId: existingMembers.find((m) => m.id === introducedByMemberId)?.membershipId || '',
-              name: existingMembers.find((m) => m.id === introducedByMemberId)?.fullName || introducedByName,
-              phone: existingMembers.find((m) => m.id === introducedByMemberId)?.phoneUAE || introducedByPhone,
+              membershipId:
+                existingMembers.find((m) => m.id === introducedByMemberId)?.membershipId ||
+                introducedByMembershipCode ||
+                '',
+              name:
+                existingMembers.find((m) => m.id === introducedByMemberId)?.fullName ||
+                introducedByName,
+              phone:
+                existingMembers.find((m) => m.id === introducedByMemberId)?.phoneUAE ||
+                introducedByPhone,
             }
-          : introducedByType === 'manual' && introducedByName.trim()
+          : introducedByType === 'manual' && (introducedByName.trim() || introducedByMembershipCode.trim())
           ? {
-              name: introducedByName.trim(),
+              name: introducedByName.trim() || introducedByMembershipCode.trim(),
+              membershipId: introducedByMembershipCode.trim() || undefined,
               phone: introducedByPhone.trim() || undefined,
             }
           : undefined,
+      proposerSignatureUrl: proposerSignatureUrl || undefined,
+      applicantSignatureUrl: applicantSignatureUrl || undefined,
       feeAmountAED: Number(feeAmountAED),
       paymentStatus,
       paymentMethod,
@@ -533,7 +655,9 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
       updatedAt: new Date().toISOString(),
     };
 
-    onSave(savedMember);
+    const shouldOpenForm =
+      forceOpenAppForm !== undefined ? forceOpenAppForm : autoGenerateApplicationForm;
+    onSave(savedMember, { openApplicationForm: shouldOpenForm });
     onClose();
   };
 
@@ -564,6 +688,16 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => downloadBlankApplicationFormPdf(unit)}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md bg-amber-400/20 hover:bg-amber-400/30 text-amber-100 text-xs font-bold transition-colors border border-amber-300/30 cursor-pointer"
+              title="Download empty printable Membership Application Form PDF"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Download Free Form</span>
+            </button>
+
             <button
               type="button"
               onClick={onOpenFieldManager}
@@ -732,13 +866,14 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Blood Group <span className="text-red-600">*</span>
+                  Blood Group
                 </label>
                 <select
                   value={bloodGroup}
                   onChange={(e) => setBloodGroup(e.target.value as BloodGroup)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-bold bg-white focus:ring-1 focus:ring-[#8b0000] outline-none"
                 >
+                  <option value="">-- Select Blood Group (Optional) --</option>
                   {BLOOD_GROUPS.map((bg) => (
                     <option key={bg} value={bg}>
                       {bg}
@@ -870,6 +1005,27 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                 />
                 <p className="text-[10px] text-slate-500 mt-1">
                   CR80 Expiry
+                </p>
+              </div>
+
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider mb-1">
+                  ID Card Design Template
+                </label>
+                <select
+                  value={cardDesign}
+                  onChange={(e) => setCardDesign(e.target.value as any)}
+                  className="w-full px-3 py-1.5 border border-slate-200 rounded-md font-bold text-xs bg-white text-slate-800 focus:ring-1 focus:ring-[#8b0000] outline-none cursor-pointer"
+                >
+                  <option value="">System Organization Default</option>
+                  {ID_CARD_DESIGNS.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.badge})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  CR80 Layout Style
                 </p>
               </div>
 
@@ -1056,6 +1212,66 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                 </p>
               </div>
             </div>
+
+            {/* Coordination Committee Layer (Central Coordination & Executive Coordination) */}
+            <div className="pt-3 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Coordination Committee Layer (Between Central &amp; Unit)
+                </label>
+                <select
+                  value={coordinationCommittee}
+                  onChange={(e) => {
+                    const val = e.target.value as CoordinationCommitteeType;
+                    setCoordinationCommittee(val);
+                    if (val === 'Central Coordination Committee' && !coordinationDesignation) {
+                      setCoordinationDesignation('Central Coordinator');
+                    } else if (
+                      val === 'Executive Coordination Committee' &&
+                      !coordinationDesignation
+                    ) {
+                      setCoordinationDesignation('Executive Coordinator');
+                    } else if (!val) {
+                      setCoordinationDesignation('');
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-semibold bg-white focus:ring-1 focus:ring-[#8b0000] outline-none"
+                >
+                  <option value="">-- Not in Coordination Committee --</option>
+                  <option value="Central Coordination Committee">
+                    Central Coordination Committee (CCC)
+                  </option>
+                  <option value="Executive Coordination Committee">
+                    Executive Coordination Committee (ECC - Operational Layer)
+                  </option>
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Separate coordination committees bridging Central &amp; Unit committees
+                </p>
+              </div>
+
+              {coordinationCommittee && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Coordination Committee Role / Designation
+                  </label>
+                  <select
+                    value={coordinationDesignation}
+                    onChange={(e) => setCoordinationDesignation(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-semibold bg-white focus:ring-1 focus:ring-[#8b0000] outline-none"
+                  >
+                    {COORDINATION_COMMITTEE_DESIGNATIONS.map((role) => (
+                      <option key={role} value={role}>
+                        {role}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Role within {coordinationCommittee}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Section 2: Member Photo */}
@@ -1220,7 +1436,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Emirates ID No.
@@ -1236,6 +1452,18 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Emirates ID Valid Till
+                </label>
+                <input
+                  type="date"
+                  value={emiratesIdExpiry}
+                  onChange={(e) => setEmiratesIdExpiry(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-mono text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
                   Passport Number
                 </label>
                 <input
@@ -1244,6 +1472,59 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                   onChange={(e) => setPassportNumber(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-mono text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
                   placeholder="e.g. Z1234567"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Passport Valid Till
+                </label>
+                <input
+                  type="date"
+                  value={passportExpiry}
+                  onChange={(e) => setPassportExpiry(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-mono text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  P.O. Box No. (UAE)
+                </label>
+                <input
+                  type="text"
+                  value={poBox}
+                  onChange={(e) => setPoBox(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-mono text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
+                  placeholder="e.g. P.O. Box 1234"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Facebook ID <span className="text-[10px] font-normal text-slate-500">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={facebookId}
+                  onChange={(e) => setFacebookId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
+                  placeholder="Facebook ID / Name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Instagram ID <span className="text-[10px] font-normal text-slate-500">(Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={instagramId}
+                  onChange={(e) => setInstagramId(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
+                  placeholder="@instagram_handle"
                 />
               </div>
 
@@ -1277,17 +1558,31 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 
             {/* Addresses */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  UAE Address / Area (Fujairah / East Coast)
-                </label>
-                <input
-                  type="text"
-                  value={uaeAddress}
-                  onChange={(e) => setUaeAddress(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
-                  placeholder="Building, Road, Area, Fujairah"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    Contact Address in U.A.E.
+                  </label>
+                  <input
+                    type="text"
+                    value={uaeAddress}
+                    onChange={(e) => setUaeAddress(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
+                    placeholder="Building, Road, Fujairah"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                    UAE Area
+                  </label>
+                  <input
+                    type="text"
+                    value={uaeArea}
+                    onChange={(e) => setUaeArea(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
+                    placeholder="Area name"
+                  />
+                </div>
               </div>
 
               <div>
@@ -1310,17 +1605,45 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Permanent Home
+                      Contact Address in India
                     </label>
                     <input
                       type="text"
                       value={keralaAddress}
                       onChange={(e) => setKeralaAddress(e.target.value)}
                       className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
-                      placeholder="House name, Post"
+                      placeholder="House name, Post, PIN"
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Contact No. in India (Mobile)
+                </label>
+                <input
+                  type="text"
+                  value={indiaMobile}
+                  onChange={(e) => setIndiaMobile(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-mono text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
+                  placeholder="+91 98470 XXXXX"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                  Contact No. in India (Landline)
+                </label>
+                <input
+                  type="text"
+                  value={indiaLandline}
+                  onChange={(e) => setIndiaLandline(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 font-mono text-sm focus:ring-1 focus:ring-[#8b0000] outline-none"
+                  placeholder="0495-XXXXXXX"
+                />
               </div>
             </div>
           </div>
@@ -1461,9 +1784,9 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
             <h4 className="font-display font-bold text-sm text-slate-900 flex items-center justify-between border-b border-slate-100 pb-2">
               <span className="flex items-center gap-2">
                 <UserCheck className="w-4 h-4 text-[#8b0000]" />
-                Introduced By / Proposer (Reference Member)
+                Introduced By (Proposer Name &amp; Membership ID)
               </span>
-              <span className="text-[11px] text-slate-500 font-normal">Optional</span>
+              <span className="text-[11px] text-slate-500 font-normal">Choose from Existing Members or Add Manually</span>
             </h4>
 
             <div className="space-y-3">
@@ -1473,6 +1796,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                   onClick={() => {
                     setIntroducedByType('none');
                     setIntroducedByMemberId('');
+                    setIntroducedByMembershipCode('');
                     setIntroducedByName('');
                     setIntroducedByPhone('');
                   }}
@@ -1493,7 +1817,7 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                       : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  Select Existing KCA Member
+                  Choose from Existing Member List
                 </button>
                 <button
                   type="button"
@@ -1504,64 +1828,114 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                       : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  Manual Proposer Entry
+                  Add Proposer Manually
                 </button>
               </div>
 
               {introducedByType === 'existing' && (
                 <div className="space-y-3 p-3.5 bg-slate-50 rounded-lg border border-slate-200">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Select Proposer from Existing Members <span className="text-red-600">*</span>
-                    </label>
-                    <select
-                      value={introducedByMemberId}
-                      onChange={(e) => {
-                        const selectedId = e.target.value;
-                        setIntroducedByMemberId(selectedId);
-                        const found = existingMembers.find((m) => m.id === selectedId);
-                        if (found) {
-                          setIntroducedByName(found.fullName);
-                          setIntroducedByPhone(found.phoneUAE);
-                        }
-                      }}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white font-medium focus:ring-1 focus:ring-[#8b0000] outline-none"
-                    >
-                      <option value="">-- Choose registered member --</option>
-                      {existingMembers
-                        .filter((m) => !member || m.id !== member.id)
-                        .map((m) => (
-                          <option key={m.id} value={m.id}>
-                            [{m.membershipId}] {m.fullName} &bull; {m.unit} Unit ({m.phoneUAE})
-                          </option>
-                        ))}
-                    </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Filter / Search Member List
+                      </label>
+                      <input
+                        type="text"
+                        value={proposerSearchQuery}
+                        onChange={(e) => setProposerSearchQuery(e.target.value)}
+                        placeholder="Type Name, KCA ID, Unit, or Mobile to filter..."
+                        className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white text-xs focus:ring-1 focus:ring-[#8b0000] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                        Select Proposer from Existing Members <span className="text-red-600">*</span>
+                      </label>
+                      <select
+                        value={introducedByMemberId}
+                        onChange={(e) => {
+                          const selectedId = e.target.value;
+                          setIntroducedByMemberId(selectedId);
+                          const found = existingMembers.find((m) => m.id === selectedId);
+                          if (found) {
+                            setIntroducedByName(found.fullName);
+                            setIntroducedByMembershipCode(found.membershipId);
+                            setIntroducedByPhone(found.phoneUAE);
+                          }
+                        }}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white font-medium text-xs focus:ring-1 focus:ring-[#8b0000] outline-none"
+                      >
+                        <option value="">-- Choose registered member --</option>
+                        {existingMembers
+                          .filter((m) => {
+                            if (member && m.id === member.id) return false;
+                            const q = proposerSearchQuery.trim().toLowerCase();
+                            if (!q) return true;
+                            return (
+                              m.fullName.toLowerCase().includes(q) ||
+                              m.membershipId.toLowerCase().includes(q) ||
+                              m.unit.toLowerCase().includes(q) ||
+                              (m.phoneUAE && m.phoneUAE.toLowerCase().includes(q))
+                            );
+                          })
+                          .map((m) => (
+                            <option key={m.id} value={m.id}>
+                              [{m.membershipId}] {m.fullName} &bull; {m.unit} Unit ({m.phoneUAE})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                   </div>
 
                   {introducedByMemberId && (
-                    <div className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800">
-                      <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <span>
-                        Proposer Linked: <strong>{introducedByName}</strong> (
-                        {existingMembers.find((m) => m.id === introducedByMemberId)?.membershipId}) &bull; {introducedByPhone}
-                      </span>
+                    <div className="flex items-center justify-between gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-md text-xs text-emerald-800">
+                      <div className="flex items-center gap-2">
+                        <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>
+                          Proposer Linked: <strong>{introducedByName}</strong> (
+                          <span className="font-mono font-bold">
+                            {existingMembers.find((m) => m.id === introducedByMemberId)?.membershipId ||
+                              introducedByMembershipCode}
+                          </span>
+                          ) &bull; {introducedByPhone}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIntroducedByType('manual')}
+                        className="text-[11px] font-bold underline text-emerald-900 hover:text-emerald-700 cursor-pointer"
+                      >
+                        Customize Manually
+                      </button>
                     </div>
                   )}
                 </div>
               )}
 
               {introducedByType === 'manual' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 bg-slate-50 rounded-lg border border-slate-200">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-lg border border-slate-200">
                   <div>
                     <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Proposer / Referrer Name <span className="text-red-600">*</span>
+                      Proposer Full Name <span className="text-red-600">*</span>
                     </label>
                     <input
                       type="text"
                       value={introducedByName}
                       onChange={(e) => setIntroducedByName(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white focus:ring-1 focus:ring-[#8b0000] outline-none"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white text-xs focus:ring-1 focus:ring-[#8b0000] outline-none"
                       placeholder="e.g. Ramesh V. K."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                      Proposer Membership ID
+                    </label>
+                    <input
+                      type="text"
+                      value={introducedByMembershipCode}
+                      onChange={(e) => setIntroducedByMembershipCode(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white font-mono text-xs focus:ring-1 focus:ring-[#8b0000] outline-none"
+                      placeholder="e.g. KCA-FU-1012"
                     />
                   </div>
                   <div>
@@ -1572,12 +1946,110 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
                       type="text"
                       value={introducedByPhone}
                       onChange={(e) => setIntroducedByPhone(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white font-mono focus:ring-1 focus:ring-[#8b0000] outline-none"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-md text-slate-900 bg-white font-mono text-xs focus:ring-1 focus:ring-[#8b0000] outline-none"
                       placeholder="+971 50 123 4567"
                     />
                   </div>
                 </div>
               )}
+
+              {/* Proposer & Applicant Signature Upload Options for Application Form */}
+              <div className="pt-2 border-t border-slate-100">
+                <input
+                  type="file"
+                  ref={proposerSigFileInputRef}
+                  onChange={(e) => handleUploadSignatureImage('proposer', e)}
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                />
+                <input
+                  type="file"
+                  ref={applicantSigFileInputRef}
+                  onChange={(e) => handleUploadSignatureImage('applicant', e)}
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Proposer Signature Upload */}
+                  <div className="p-3 rounded-lg border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Proposer Signature (Optional)
+                      </div>
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {proposerSignatureUrl ? 'Signature uploaded for Application Form' : 'Upload Proposer signature image'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {proposerSignatureUrl && (
+                        <img
+                          src={proposerSignatureUrl}
+                          alt="Proposer Signature"
+                          className="h-8 w-16 object-contain bg-white border border-slate-200 rounded px-1"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => proposerSigFileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#8b0000] hover:bg-[#730000] text-white text-xs font-semibold cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{proposerSignatureUrl ? 'Change' : 'Upload'}</span>
+                      </button>
+                      {proposerSignatureUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setProposerSignatureUrl('')}
+                          className="p-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
+                          title="Clear Proposer Signature"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Applicant Signature Upload */}
+                  <div className="p-3 rounded-lg border border-slate-200 bg-slate-50/70 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Applicant Signature (Optional)
+                      </div>
+                      <div className="text-[11px] text-slate-500 truncate">
+                        {applicantSignatureUrl ? 'Signature uploaded for Application Form' : 'Upload Applicant signature image'}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {applicantSignatureUrl && (
+                        <img
+                          src={applicantSignatureUrl}
+                          alt="Applicant Signature"
+                          className="h-8 w-16 object-contain bg-white border border-slate-200 rounded px-1"
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => applicantSigFileInputRef.current?.click()}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-[#8b0000] hover:bg-[#730000] text-white text-xs font-semibold cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{applicantSignatureUrl ? 'Change' : 'Upload'}</span>
+                      </button>
+                      {applicantSignatureUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setApplicantSignatureUrl('')}
+                          className="p-1.5 rounded-md bg-rose-50 hover:bg-rose-100 text-rose-600 cursor-pointer"
+                          title="Clear Applicant Signature"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           {otherCustomFields.length > 0 && (
@@ -1874,20 +2346,32 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
         </form>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 bg-white border-t border-slate-200 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-xs font-medium rounded-md border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors"
-          >
-            Cancel
-          </button>
+        <div className="px-6 py-4 bg-white border-t border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-medium rounded-md border border-slate-200 text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
 
-          <div className="flex items-center gap-2">
+            <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-800 bg-rose-50/80 border border-rose-200 px-3 py-1.5 rounded-lg cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoGenerateApplicationForm}
+                onChange={(e) => setAutoGenerateApplicationForm(e.target.checked)}
+                className="rounded border-rose-300 text-[#8b0000] focus:ring-[#8b0000] w-4 h-4"
+              />
+              <span>Auto-generate Membership Application Form for Committee Approval</span>
+            </label>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={onOpenFieldManager}
-              className="px-3.5 py-2 text-xs font-semibold rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors inline-flex items-center gap-1.5"
+              className="px-3.5 py-2 text-xs font-semibold rounded-md border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors inline-flex items-center gap-1.5 cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 text-[#8b0000]" />
               Add More Fields
@@ -1895,11 +2379,21 @@ export const MemberFormModal: React.FC<MemberFormModalProps> = ({
 
             <button
               type="button"
-              onClick={handleSubmit}
-              className="inline-flex items-center gap-2 px-6 py-2.5 text-xs font-semibold rounded-md bg-[#8b0000] hover:bg-[#730000] text-white transition-colors shadow-xs"
+              onClick={(e) => handleSubmit(e, true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold rounded-md bg-purple-800 hover:bg-purple-900 text-white transition-colors shadow-xs cursor-pointer"
+              title="Save member and immediately open the official printable Membership Application Form for Committee Approval"
+            >
+              <FileText className="w-4 h-4" />
+              Save &amp; Generate Application Form
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => handleSubmit(e)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold rounded-md bg-[#8b0000] hover:bg-[#730000] text-white transition-colors shadow-xs cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              {isEditing ? 'Save Changes' : 'Save & Generate ID Card'}
+              {isEditing ? 'Save Changes' : 'Save Member'}
             </button>
           </div>
         </div>

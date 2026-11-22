@@ -131,6 +131,126 @@ export async function optimizeImageFile(
 }
 
 /**
+ * Optimizes an uploaded organization logo file (PNG, JPG, WebP, SVG) for fast rendering
+ * and reliable persistence across localStorage & batch print exports while preserving transparency.
+ */
+export async function optimizeLogoFile(
+  file: File,
+  maxDimension: number = 512
+): Promise<{ dataUrl: string; originalSize: number; optimizedSize: number }> {
+  const originalSize = file.size;
+
+  // Preserve lightweight vector SVGs directly
+  if (file.type === 'image/svg+xml' && file.size <= 150 * 1024) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const raw = (reader.result as string) || '';
+        resolve({
+          dataUrl: raw,
+          originalSize,
+          optimizedSize: Math.round((raw.length * 3) / 4),
+        });
+      };
+      reader.onerror = () => resolve({ dataUrl: '', originalSize, optimizedSize: 0 });
+      reader.readAsDataURL(file);
+    });
+  }
+
+  return new Promise((resolve) => {
+    const fallbackWithFileReader = () => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const raw = (reader.result as string) || '';
+        resolve({
+          dataUrl: raw,
+          originalSize,
+          optimizedSize: Math.round((raw.length * 3) / 4),
+        });
+      };
+      reader.onerror = () => resolve({ dataUrl: '', originalSize, optimizedSize: 0 });
+      reader.readAsDataURL(file);
+    };
+
+    let objectUrl: string | null = null;
+    try {
+      objectUrl = URL.createObjectURL(file);
+    } catch {
+      objectUrl = null;
+    }
+
+    if (!objectUrl) {
+      fallbackWithFileReader();
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      try {
+        let width = img.naturalWidth || img.width;
+        let height = img.naturalHeight || img.height;
+
+        if (!width || !height) {
+          fallbackWithFileReader();
+          return;
+        }
+
+        // If already compact and within bounds, keep original encoding unless oversized
+        if (width <= maxDimension && height <= maxDimension && originalSize <= 180 * 1024) {
+          fallbackWithFileReader();
+          return;
+        }
+
+        if (width > maxDimension || height > maxDimension) {
+          const ratio = Math.min(maxDimension / width, maxDimension / height);
+          width = Math.max(1, Math.round(width * ratio));
+          height = Math.max(1, Math.round(height * ratio));
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          fallbackWithFileReader();
+          return;
+        }
+
+        // Preserve transparent alpha channel (do not fill white background)
+        ctx.clearRect(0, 0, width, height);
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        let dataUrl = canvas.toDataURL('image/png');
+        // If PNG is still very large (> 300KB base64), re-encode at slightly smaller size as WebP with alpha
+        if (dataUrl.length > 300000) {
+          const webpUrl = canvas.toDataURL('image/webp', 0.9);
+          if (webpUrl.startsWith('data:image/webp') && webpUrl.length < dataUrl.length) {
+            dataUrl = webpUrl;
+          }
+        }
+
+        resolve({
+          dataUrl,
+          originalSize,
+          optimizedSize: Math.round((dataUrl.length * 3) / 4),
+        });
+      } catch (err) {
+        console.warn('Logo optimization fallback:', err);
+        fallbackWithFileReader();
+      }
+    };
+    img.onerror = () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      fallbackWithFileReader();
+    };
+    img.src = objectUrl;
+  });
+}
+
+/**
  * Optimizes an existing base64 DataURL (scales down & compresses legacy large photos).
  */
 export async function optimizeDataUrl(

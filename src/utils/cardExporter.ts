@@ -1,8 +1,16 @@
 import { toPng } from 'html-to-image';
 import QRCode from 'qrcode';
 import { Member, CustomFieldDefinition } from '../types/member';
+import { IdCardDesignId } from '../types/cardDesign';
+import { HeaderTitleStyle } from '../types/portal';
 import { formatCardBloodGroup, formatCardDate, getMemberVerifyUrl } from './idGenerator';
-import { getActiveLogoDataUrl, getActiveLogoPngDataUrl } from '../components/Logo';
+import { getActiveLogoPngDataUrl } from '../components/Logo';
+import { loadCustomLogo, loadPortalConfig } from './storage';
+import {
+  getTitleLockupLines,
+  getTrimmedTitleGraphicDataUrl,
+  resolveEffectiveTitleStyle,
+} from './titleGraphic';
 
 /**
  * Trigger file download for a data URL or blob
@@ -25,14 +33,20 @@ export function downloadDataUrl(dataUrl: string, filename: string) {
  */
 async function preloadImages(element: HTMLElement): Promise<void> {
   const imgElements = Array.from(element.querySelectorAll('img'));
-  const promises = imgElements.map((img) => {
-    if (img.complete && img.naturalHeight !== 0) {
-      return Promise.resolve();
+  const promises = imgElements.map(async (img) => {
+    if (!img.complete || img.naturalHeight === 0) {
+      await new Promise<void>((resolve) => {
+        img.onload = () => resolve();
+        img.onerror = () => resolve();
+      });
     }
-    return new Promise<void>((resolve) => {
-      img.onload = () => resolve();
-      img.onerror = () => resolve();
-    });
+    if (typeof img.decode === 'function') {
+      try {
+        await img.decode();
+      } catch {
+        // Ignore decode rejection for SVGs or partial assets
+      }
+    }
   });
   await Promise.all(promises);
 }
@@ -51,14 +65,16 @@ export async function captureElementAsPng(
   const { pixelRatio = 3, backgroundColor = '#ffffff', quality = 1.0 } = options;
 
   await preloadImages(element);
-  await new Promise((resolve) => setTimeout(resolve, 80));
+  await new Promise((resolve) => setTimeout(resolve, 60));
 
   try {
     const dataUrl = await toPng(element, {
       pixelRatio,
       backgroundColor,
       quality,
-      cacheBust: true,
+      cacheBust: false,
+      skipFonts: true,
+      fontEmbedCSS: '',
       style: {
         transform: 'none',
         margin: '0',
@@ -80,6 +96,8 @@ export async function captureElementAsPng(
         backgroundColor,
         quality: 0.95,
         cacheBust: false,
+        skipFonts: true,
+        fontEmbedCSS: '',
       });
       return fallbackDataUrl;
     } catch (fallbackError) {
@@ -123,7 +141,8 @@ function drawRoundedRect(
  */
 export async function generateDirectCardPng(
   member: Member,
-  customFields: CustomFieldDefinition[] = []
+  customFields: CustomFieldDefinition[] = [],
+  cardOptions?: { cardDesign?: IdCardDesignId; titleStyle?: HeaderTitleStyle }
 ): Promise<string> {
   // First check if matching DOM element is currently mounted in document
   const domIds = [
@@ -257,36 +276,102 @@ export async function generateDirectCardPng(
   ctx.bezierCurveTo(426, 800, 534, 890, 720, 890);
   ctx.stroke();
 
-  // 5. TOP HEADER: Draw Emblem Logo & Header Typography
-  try {
-    const logoDataUrl = await getActiveLogoPngDataUrl();
-    const logoImg = new Image();
-    logoImg.crossOrigin = 'anonymous';
-    await new Promise<void>((resolve) => {
-      logoImg.onload = () => resolve();
-      logoImg.onerror = () => resolve();
-      logoImg.src = logoDataUrl;
-    });
-    if (logoImg.complete && logoImg.naturalWidth > 0) {
-      ctx.drawImage(logoImg, 48, 38, 144, 144);
+  // 5. TOP HEADER: Draw Emblem Logo & Header Typography according to configured Title Style
+  const portalConfig = loadPortalConfig();
+  const effectiveTitleStyle = resolveEffectiveTitleStyle(
+    portalConfig,
+    'member_card',
+    cardOptions?.titleStyle
+  );
+  const activeCustomLogo =
+    portalConfig.customLogoUrl !== undefined ? portalConfig.customLogoUrl : loadCustomLogo();
+  const hasCustomLogoWithoutCustomBanner = !portalConfig.customTitleGraphicUrl && !!activeCustomLogo;
+
+  if (effectiveTitleStyle === 'title_graphic' && !hasCustomLogoWithoutCustomBanner) {
+    try {
+      const { dataUrl, aspectRatio } = await getTrimmedTitleGraphicDataUrl(
+        portalConfig.customTitleGraphicUrl,
+        true
+      );
+      const titleImg = new Image();
+      if (/^https?:\/\//i.test(dataUrl)) {
+        titleImg.crossOrigin = 'anonymous';
+      }
+      await new Promise<void>((resolve) => {
+        titleImg.onload = () => resolve();
+        titleImg.onerror = () => resolve();
+        titleImg.src = dataUrl;
+      });
+      if (titleImg.complete && titleImg.naturalWidth > 0) {
+        const drawH = 126;
+        const drawW = Math.min(640, drawH * aspectRatio);
+        ctx.drawImage(titleImg, 48, 36, drawW, drawH);
+      }
+    } catch (err) {
+      console.warn('Canvas direct title graphic draw failed:', err);
     }
-  } catch (err) {
-    console.warn('Canvas direct card logo draw failed:', err);
+    ctx.fillStyle = '#b91c1c';
+    ctx.font = '700 20px "Arial", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(portalConfig.affiliationText || 'NORKA Roots Affiliated', 52, 186);
+  } else {
+    try {
+      const logoDataUrl = await getActiveLogoPngDataUrl();
+      const logoImg = new Image();
+      if (/^https?:\/\//i.test(logoDataUrl)) {
+        logoImg.crossOrigin = 'anonymous';
+      }
+      await new Promise<void>((resolve) => {
+        logoImg.onload = () => resolve();
+        logoImg.onerror = () => resolve();
+        logoImg.src = logoDataUrl;
+      });
+      if (logoImg.complete && logoImg.naturalWidth > 0) {
+        ctx.drawImage(logoImg, 48, 38, 144, 144);
+      }
+    } catch (err) {
+      console.warn('Canvas direct card logo draw failed:', err);
+    }
+
+    if (effectiveTitleStyle === 'official_lockup' || effectiveTitleStyle === 'title_graphic') {
+      const { line1, line2, line3 } = getTitleLockupLines(portalConfig);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'alphabetic';
+      const centerTextX = 435;
+
+      ctx.fillStyle = '#dc2626';
+      ctx.font = '700 54px "Georgia", "Times New Roman", serif';
+      ctx.fillText(line1, centerTextX, 92);
+
+      if (line2) {
+        ctx.fillStyle = '#0f172a';
+        ctx.font = '800 23px "Arial", sans-serif';
+        ctx.fillText(line2, centerTextX, 122);
+      }
+      if (line3) {
+        ctx.fillStyle = '#0f172a';
+        ctx.font = '700 24px "Arial", sans-serif';
+        ctx.fillText(line3, centerTextX, 152);
+      }
+      ctx.fillStyle = '#b91c1c';
+      ctx.font = '700 18px "Arial", sans-serif';
+      ctx.fillText(portalConfig.affiliationText || 'NORKA Roots Affiliated', centerTextX, 180);
+      ctx.textAlign = 'left';
+    } else {
+      ctx.fillStyle = '#0f172a';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'alphabetic';
+      ctx.font = '900 36px "Arial", sans-serif';
+      ctx.fillText((portalConfig.portalName || 'KAIRALI CULTURAL ASSOCIATION').toUpperCase(), 210, 82);
+
+      ctx.font = '900 30px "Arial", sans-serif';
+      ctx.fillText((portalConfig.jurisdiction || 'FUJAIRAH').toUpperCase(), 210, 122);
+
+      ctx.fillStyle = '#b91c1c';
+      ctx.font = '700 22px "Arial", sans-serif';
+      ctx.fillText(portalConfig.affiliationText || 'A NORKA Roots Affiliated Association', 210, 158);
+    }
   }
-
-  // Header Title matching IdCard.tsx
-  ctx.fillStyle = '#0f172a';
-  ctx.textAlign = 'left';
-  ctx.textBaseline = 'alphabetic';
-  ctx.font = '900 38px "Arial", sans-serif';
-  ctx.fillText('KAIRALI CULTURAL ASSOCIATION', 210, 82);
-
-  ctx.font = '900 32px "Arial", sans-serif';
-  ctx.fillText('FUJAIRAH', 210, 122);
-
-  ctx.fillStyle = '#b91c1c';
-  ctx.font = '700 22px "Arial", sans-serif';
-  ctx.fillText('A NORKA Roots Affiliated Association', 210, 158);
 
   // 6. MAIN CARD BODY: Member Photo Frame (Left)
   const photoOuterX = 54;
@@ -316,7 +401,9 @@ export async function generateDirectCardPng(
   if (member.photoUrl && member.photoUrl.trim()) {
     try {
       const img = new Image();
-      img.crossOrigin = 'anonymous';
+      if (/^https?:\/\//i.test(member.photoUrl)) {
+        img.crossOrigin = 'anonymous';
+      }
       await new Promise<void>((resolve) => {
         img.onload = () => resolve();
         img.onerror = () => resolve();
@@ -463,7 +550,9 @@ export async function generateDirectCardPng(
     });
 
     const qrImg = new Image();
-    qrImg.crossOrigin = 'anonymous';
+    if (/^https?:\/\//i.test(qrDataUrl)) {
+      qrImg.crossOrigin = 'anonymous';
+    }
     await new Promise<void>((resolve) => {
       qrImg.onload = () => resolve();
       qrImg.onerror = () => resolve();
@@ -485,12 +574,13 @@ export async function generateDirectCardPng(
 }
 
 /**
- * Pixel-Perfect Canvas Generator for KCA ID Card (Back View)
+ * Pixel-Perfect Canvas Generator for ID Card (Back View)
  * Matches IdCard.tsx back side 100% at 300-DPI high resolution (1440x900)
  */
 export async function generateDirectBackCardPng(
   member: Member,
-  _customFields: CustomFieldDefinition[] = []
+  _customFields: CustomFieldDefinition[] = [],
+  _cardOptions?: { cardDesign?: IdCardDesignId; titleStyle?: HeaderTitleStyle }
 ): Promise<string> {
   const domIds = [
     `batch-back-${member.id}-back`,
@@ -543,15 +633,20 @@ export async function generateDirectBackCardPng(
   ctx.closePath();
   ctx.fill();
 
-  // 3. Top Header Red Banner
-  ctx.fillStyle = '#991b1b';
+  const portalConfig = loadPortalConfig();
+  const orgNameDisplay = portalConfig.portalName || 'Kairali Cultural Association Fujairah';
+  const orgShortDisplay = portalConfig.shortName || orgNameDisplay;
+  const orgColor = portalConfig.primaryColor || '#991b1b';
+
+  // 3. Top Header Banner
+  ctx.fillStyle = orgColor;
   ctx.fillRect(0, 0, width, 110);
-  ctx.fillStyle = '#7f1d1d';
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
   ctx.fillRect(0, 104, width, 6);
 
   ctx.fillStyle = '#ffffff';
   ctx.font = '900 32px "Arial", sans-serif';
-  ctx.fillText('KAIRALI CULTURAL ASSOCIATION FUJAIRAH', 60, 68);
+  ctx.fillText(orgNameDisplay.toUpperCase(), 60, 68);
 
   ctx.fillStyle = '#fee2e2';
   ctx.font = '700 24px "Courier New", monospace';
@@ -568,7 +663,7 @@ export async function generateDirectBackCardPng(
   drawRoundedRect(ctx, 45, rulesBoxY, width - 90, rulesBoxH, 20, true, true);
 
   const drawNumberedRule = (num: string, text1: string, text2: string, yPos: number) => {
-    ctx.fillStyle = '#b91c1c';
+    ctx.fillStyle = orgColor;
     ctx.font = '900 28px "Arial", sans-serif';
     ctx.fillText(num, 75, yPos);
 
@@ -580,9 +675,9 @@ export async function generateDirectBackCardPng(
     }
   };
 
-  drawNumberedRule('1.', 'This identity card is non-transferable and remains the official property of', 'Kairali Cultural Association Fujairah.', rulesBoxY + 50);
-  drawNumberedRule('2.', 'Entitles active member to participate in association events, cultural activities,', 'sports programs, community privileges, and welfare support.', rulesBoxY + 140);
-  drawNumberedRule('3.', 'If found, please return to KCA Fujairah Office or hand over to any', 'authorized Unit Executive Officer / Coordinator.', rulesBoxY + 230);
+  drawNumberedRule('1.', 'This identity card is non-transferable and remains the official property of', `${orgNameDisplay}.`, rulesBoxY + 50);
+  drawNumberedRule('2.', 'Entitles active member to official privileges, organizational programs,', 'activities, community initiatives, and welfare support.', rulesBoxY + 140);
+  drawNumberedRule('3.', `If found, please return to ${orgShortDisplay} Administration Office or`, `hand over to any authorized ${portalConfig.unitTerm || 'Unit'} Coordinator.`, rulesBoxY + 230);
 
   // 5. Emergency Contacts & Head Office Box
   const contactBoxY = 460;
@@ -600,12 +695,12 @@ export async function generateDirectBackCardPng(
   ctx.fillStyle = '#0f172a';
   ctx.font = '700 28px "Arial", sans-serif';
   ctx.fillText(
-    `${member.emergencyContactName || 'KCA Helpline'} (${member.emergencyContactRelation || 'Relation'})`,
+    `${member.emergencyContactName || orgShortDisplay + ' Helpline'} (${member.emergencyContactRelation || 'Relation'})`,
     75,
     contactBoxY + 90
   );
 
-  ctx.fillStyle = '#b91c1c';
+  ctx.fillStyle = orgColor;
   ctx.font = '700 28px "Courier New", monospace';
   ctx.fillText(member.emergencyContactPhone || member.phoneUAE || '+971 50 000 0000', 75, contactBoxY + 135);
 
@@ -617,11 +712,11 @@ export async function generateDirectBackCardPng(
 
   ctx.fillStyle = '#0f172a';
   ctx.font = '700 26px "Arial", sans-serif';
-  ctx.fillText('Fujairah • Kalba • Khorfakhan • Dibba', rightColX, contactBoxY + 90);
+  ctx.fillText(portalConfig.jurisdiction || 'United Arab Emirates', rightColX, contactBoxY + 90);
 
-  ctx.fillStyle = '#b91c1c';
+  ctx.fillStyle = orgColor;
   ctx.font = '700 24px "Arial", sans-serif';
-  ctx.fillText('NORKA Roots Affiliated Association', rightColX, contactBoxY + 135);
+  ctx.fillText(portalConfig.affiliationText || portalConfig.subtitle || '', rightColX, contactBoxY + 135);
 
   // 6. Signatures & Bottom Bar
   ctx.strokeStyle = '#94a3b8';
@@ -638,7 +733,7 @@ export async function generateDirectBackCardPng(
 
   ctx.fillStyle = '#334155';
   ctx.font = '700 24px "Arial", sans-serif';
-  ctx.fillText('President / General Secretary', 105, 825);
+  ctx.fillText('Authorized Signatory', 110, 825);
 
   // Member ID & Central Committee label
   ctx.textAlign = 'right';
@@ -646,9 +741,9 @@ export async function generateDirectBackCardPng(
   ctx.font = '700 24px "Courier New", monospace';
   ctx.fillText(`ID: ${member.membershipId}`, width - 75, 775);
 
-  ctx.fillStyle = '#b91c1c';
+  ctx.fillStyle = orgColor;
   ctx.font = '700 26px "Arial", sans-serif';
-  ctx.fillText('KCA Fujairah • Central Committee', width - 75, 825);
+  ctx.fillText(`${orgShortDisplay} • Central Committee`, width - 75, 825);
   ctx.textAlign = 'left';
 
   // Outer Border

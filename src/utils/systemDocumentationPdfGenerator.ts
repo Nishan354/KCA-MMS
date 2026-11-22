@@ -285,6 +285,165 @@ export async function downloadSystemDocumentationPdf(generatedBy: string = 'KCA 
     currentY += 4.2;
   });
 
+  // =========================================================================
+  // PAGE 3: WINDOWS PC COMMAND-LINE INSTALLATION & LOCAL DEPLOYMENT GUIDE
+  // =========================================================================
+  doc.addPage();
+  currentY = 15;
+
+  // Header Title on Page 3
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
+  doc.text('6. WINDOWS PC INSTALLATION BY COMMAND & LOCAL WORKSTATION SETUP', 14, currentY);
+  currentY += 5;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.2);
+  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+  const winIntro =
+    'The KCA Fujairah Management Portal is designed to operate completely offline on any Windows 10/11 or Windows Server PC. ' +
+    'The application requires Node.js (v18.x or v20.x+) and standard Windows command line tools (Command Prompt `cmd.exe` or PowerShell). ' +
+    'Follow the exact step-by-step commands below to install, compile, and run the portal locally with zero cloud dependencies.';
+
+  const splitWinIntro = doc.splitTextToSize(winIntro, pageWidth - 28);
+  doc.text(splitWinIntro, 14, currentY);
+  currentY += splitWinIntro.length * 4.2 + 4;
+
+  // Step-by-Step Command Table
+  autoTable(doc, {
+    startY: currentY,
+    head: [['Step', 'Deployment Stage', 'Windows Command Prompt (cmd) / PowerShell Command', 'Description & Output']],
+    body: [
+      [
+        'Step 1',
+        'Verify Node.js\n& NPM Environment',
+        'node -v\nnpm -v',
+        'Check that Node.js v18 or v20+ is installed. If not installed, download the Windows Installer (.msi) from https://nodejs.org'
+      ],
+      [
+        'Step 2',
+        'Create Application\nDirectory on PC',
+        'mkdir C:\\KCA-Fujairah\ncd /d C:\\KCA-Fujairah',
+        'Creates the local root folder on drive C: and switches current command terminal into the workspace directory.'
+      ],
+      [
+        'Step 3',
+        'Clone Repository or\nExtract Release Files',
+        'git clone <repository-url> .\nREM Alternatively, extract downloaded project ZIP here',
+        'Clones or copies all portal codebase files, assets, package.json, and configuration into C:\\KCA-Fujairah.'
+      ],
+      [
+        'Step 4',
+        'Install All Package\nDependencies',
+        'npm install',
+        'Downloads and configures React, Vite, Tailwind CSS, Lucide icons, jsPDF, and offline storage engines in node_modules.'
+      ],
+      [
+        'Step 5',
+        'Compile Production\nOptimized Bundle',
+        'npm run build',
+        'Runs TypeScript compiler (`tsc -b`) and Vite production builder to generate optimized, hardened assets inside dist\\ directory.'
+      ],
+      [
+        'Step 6',
+        'Launch Offline Server\non Port 3000',
+        'npx serve -s dist -l 3000\nREM Or Development Mode: npm run dev -- --port 3000',
+        'Spins up local high-speed web server on http://localhost:3000. Serves all modules with offline cache and instant response.'
+      ],
+      [
+        'Step 7',
+        'Run as Standalone\nWindows Desktop App',
+        'start msedge --app=http://localhost:3000\nREM Or Chrome: start chrome --app=http://localhost:3000',
+        'Launches the application in borderless desktop application mode (PWA) with native window framing and zero browser URL clutter.'
+      ],
+    ],
+    theme: 'grid',
+    headStyles: {
+      fillColor: primaryRed,
+      textColor: [255, 255, 255],
+      fontSize: 7.5,
+      fontStyle: 'bold',
+      halign: 'left',
+    },
+    bodyStyles: {
+      fontSize: 6.8,
+      textColor: slateDark,
+      cellPadding: 2,
+    },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 16 },
+      1: { cellWidth: 36 },
+      2: { fontStyle: 'bold', cellWidth: 72 },
+      3: { cellWidth: 58 },
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  // @ts-expect-error autoTable adds lastAutoTable to jsPDF instance
+  currentY = doc.lastAutoTable.finalY + 6;
+
+  // Section 7: 1-Click Windows Auto-Start Batch Script
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
+  doc.text('7. AUTOMATED WINDOWS 1-CLICK LAUNCH SCRIPT (start-kca.bat)', 14, currentY);
+  currentY += 4;
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.8);
+  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+  const scriptDesc =
+    'Create a Windows batch file at C:\\KCA-Fujairah\\start-kca.bat to launch the application and open the desktop window in one double-click:';
+  doc.text(scriptDesc, 14, currentY);
+  currentY += 4;
+
+  const batCode = [
+    '@echo off',
+    'title KCA Fujairah Management Portal',
+    'echo Starting KCA Fujairah Central Register System...',
+    'cd /d C:\\KCA-Fujairah',
+    'start "" msedge --app=http://localhost:3000',
+    'npx serve -s dist -l 3000',
+  ];
+
+  doc.setFillColor(241, 245, 249);
+  doc.setDrawColor(203, 213, 225);
+  doc.roundedRect(14, currentY, pageWidth - 28, batCode.length * 4.2 + 3, 2, 2, 'FD');
+
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(7.2);
+  doc.setTextColor(15, 23, 42);
+  let codeY = currentY + 3.8;
+  batCode.forEach((line) => {
+    doc.text(line, 18, codeY);
+    codeY += 4.2;
+  });
+  currentY = codeY + 4;
+
+  // Section 8: LAN Access & Windows Firewall Command
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(primaryRed[0], primaryRed[1], primaryRed[2]);
+  doc.text('8. OFFICE LAN ACCESS & WINDOWS FIREWALL COMMANDS', 14, currentY);
+  currentY += 4;
+
+  const lanPoints = [
+    '• Share Across Local Network: Run command: npx serve -s dist -l 3000 --listen tcp://0.0.0.0:3000',
+    '• Allow Through Windows Defender Firewall (Run in Administrator Command Prompt):',
+    '  netsh advfirewall firewall add rule name="KCA Portal" dir=in action=allow protocol=TCP localport=3000',
+    '• Client Connection: Open any browser on office tablets or laptops and visit: http://<HOST-PC-IP>:3000',
+    '• Find Host IP Command: Type `ipconfig` in Command Prompt and note the IPv4 Address (e.g. 192.168.1.150).'
+  ];
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(slateDark[0], slateDark[1], slateDark[2]);
+  lanPoints.forEach((point) => {
+    doc.text(point, 14, currentY);
+    currentY += 3.8;
+  });
+
   // Footer on all pages
   const totalPages = doc.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {

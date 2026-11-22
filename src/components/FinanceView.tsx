@@ -309,20 +309,20 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Top Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-5 sm:p-6 rounded-xl border border-slate-200 shadow-xs">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-[#881337] text-white shadow-xs">
-              <DirhamIcon className="w-5 h-5 text-amber-300" />
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-[#8b0000] shadow-2xs">
+              <DirhamIcon className="w-5 h-5 text-[#8b0000]" />
             </div>
             <div>
-              <h2 className="font-display font-bold text-xl text-slate-900 dark:text-white tracking-tight">
+              <h2 className="font-display font-black text-xl sm:text-2xl text-slate-900 tracking-tight">
                 Finance &amp; Treasury Ledger (AED)
               </h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5">
                 {isUnitScopedUser && assignedUnit ? (
                   <span>
-                    <strong>{assignedUnit} Unit Scope</strong>: Managing vouchers, receipts &amp; petty cash for {assignedUnit}.
+                    <strong className="text-[#8b0000]">{assignedUnit} Unit Scope</strong>: Managing vouchers, receipts &amp; petty cash for {assignedUnit}.
                   </span>
                 ) : (
                   <span>
@@ -335,21 +335,21 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
 
         {/* Action Controls & Modal Triggers */}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* Master Particulars Creator */}
           <button
             onClick={() => setShowParticularsModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all border border-slate-300 dark:border-slate-700 shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all border border-slate-200 shadow-2xs cursor-pointer"
             title="Configure Master Particulars Hierarchy"
           >
-            <FolderTree className="w-4 h-4 text-[#881337] dark:text-rose-400" />
+            <FolderTree className="w-4 h-4 text-slate-600" />
             <span>Particulars Creator</span>
           </button>
 
           {/* Unit Cash-in-Balance Management */}
           <button
             onClick={() => setShowUnitLedgerModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition-all border border-slate-300 dark:border-slate-700 shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-all border border-slate-200 shadow-2xs cursor-pointer"
             title={isUnitScopedUser && assignedUnit ? `Manage ${assignedUnit} Cash-in-Hand & Balance` : "Manage Unit Cash-in-Hand & Balances"}
           >
             <Wallet className="w-4 h-4 text-emerald-600" />
@@ -359,17 +359,17 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           {/* New Income Receipt */}
           <button
             onClick={() => onOpenNewTransaction('INCOME')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
             title="Record New Income (Official Receipt)"
           >
-            <PlusCircle className="w-4 h-4 text-emerald-200" />
+            <PlusCircle className="w-4 h-4" />
             <span>+ Official Receipt</span>
           </button>
 
           {/* New Expense Payment */}
           <button
             onClick={() => onOpenNewTransaction('EXPENSE')}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#881337] hover:bg-[#700f2b] text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer active:scale-95"
             title="Record New Expense (Payment Voucher)"
           >
             <PlusCircle className="w-4 h-4 text-rose-200" />
@@ -381,16 +381,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       {/* Top 3 Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {/* Total Income */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               {isUnitScopedUser && assignedUnit ? `${assignedUnit} Total Income` : 'Total Income Received'}
             </span>
-            <span className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+            <span className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200">
               <TrendingUp className="w-4 h-4" />
             </span>
           </div>
-          <div className="font-mono font-black text-2xl text-emerald-700 dark:text-emerald-400 mt-2">
+          <div className="font-mono font-black text-2xl text-emerald-600 mt-2">
             {formatAED(totalIncome)}
           </div>
           <div className="text-[11px] text-slate-500 mt-1">
@@ -399,16 +399,16 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
 
         {/* Total Expense */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               {isUnitScopedUser && assignedUnit ? `${assignedUnit} Total Expenses` : 'Total Expenses Disbursed'}
             </span>
-            <span className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+            <span className="p-2 rounded-xl bg-rose-50 text-rose-600 border border-rose-200">
               <TrendingDown className="w-4 h-4" />
             </span>
           </div>
-          <div className="font-mono font-black text-2xl text-rose-700 dark:text-rose-400 mt-2">
+          <div className="font-mono font-black text-2xl text-rose-600 mt-2">
             {formatAED(totalExpense)}
           </div>
           <div className="text-[11px] text-slate-500 mt-1">
@@ -417,18 +417,18 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         </div>
 
         {/* Net Treasury Balance */}
-        <div className="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
               {isUnitScopedUser && assignedUnit ? `${assignedUnit} Net Balance` : 'Net Surplus / Treasury Balance'}
             </span>
-            <span className="p-2 rounded-xl bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-              <DirhamIcon className="w-4 h-4 text-blue-700 dark:text-blue-300" />
+            <span className="p-2 rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
+              <DirhamIcon className="w-4 h-4 text-slate-700" />
             </span>
           </div>
           <div
             className={`font-mono font-black text-2xl mt-2 ${
-              netBalance >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-700'
+              netBalance >= 0 ? 'text-slate-900' : 'text-rose-600'
             }`}
           >
             {formatAED(netBalance)}
@@ -444,14 +444,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
       </div>
 
       {/* Primary Tab Switcher: Full Ledger vs Cashflow Drill-down */}
-      <div className="flex items-center justify-between bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-700">
+      <div className="flex items-center justify-between bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
         <div className="flex items-center gap-1">
           <button
             onClick={() => setActiveFinanceTab('ledger')}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeFinanceTab === 'ledger'
-                ? 'bg-white dark:bg-slate-900 text-[#881337] dark:text-rose-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
@@ -466,8 +466,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
             onClick={() => setActiveFinanceTab('cashflow_drilldown')}
             className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
               activeFinanceTab === 'cashflow_drilldown'
-                ? 'bg-white dark:bg-slate-900 text-[#881337] dark:text-rose-400 shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
             }`}
           >
             <BarChart3 className="w-3.5 h-3.5" />
@@ -478,15 +478,15 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowReportModal(true)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 text-slate-800 dark:text-slate-200 text-xs font-bold border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 shadow-xs cursor-pointer"
           >
-            <Printer className="w-3.5 h-3.5 text-[#881337]" />
+            <Printer className="w-3.5 h-3.5 text-slate-500" />
             <span>Export Statement</span>
           </button>
 
           <button
             onClick={() => exportFinanceCsv(filteredTransactions)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-50 text-slate-800 dark:text-slate-200 text-xs font-bold border border-slate-200 dark:border-slate-700 shadow-2xs cursor-pointer"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold border border-slate-200 shadow-xs cursor-pointer"
           >
             <Download className="w-3.5 h-3.5 text-emerald-600" />
             <span>CSV</span>
@@ -499,18 +499,18 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
         <div className="space-y-4">
           {/* Unit-Wise Summary Ribbon for Admins Only */}
           {!isUnitScopedUser && (
-            <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+            <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-[#881337]" />
-                  <h3 className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase tracking-wide">
+                  <Building2 className="w-4 h-4 text-[#8b0000]" />
+                  <h3 className="font-bold text-xs text-slate-700 uppercase tracking-wide">
                     Unit-Wise Balance Strip
                   </h3>
                 </div>
                 {selectedUnit !== 'ALL' && (
                   <button
                     onClick={() => setSelectedUnit('ALL')}
-                    className="text-[11px] text-[#881337] dark:text-rose-400 font-bold hover:underline"
+                    className="text-[11px] text-[#8b0000] font-bold hover:underline cursor-pointer"
                   >
                     Reset to All Units
                   </button>
@@ -529,8 +529,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       onClick={() => setSelectedUnit(isSelected ? 'ALL' : u)}
                       className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                         isSelected
-                          ? 'bg-slate-900 text-white border-slate-900 dark:bg-rose-950 dark:border-rose-800 shadow-xs'
-                          : 'bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                          ? 'bg-rose-50 text-slate-900 border-[#8b0000] shadow-xs'
+                          : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -538,8 +538,8 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                         <span
                           className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold ${
                             isSelected
-                              ? 'bg-white/20 text-white'
-                              : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                              ? 'bg-[#8b0000] text-white'
+                              : 'bg-white text-slate-600 border border-slate-200'
                           }`}
                         >
                           {summary.count} txns
@@ -547,22 +547,20 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                       </div>
                       <div className="mt-2 space-y-0.5 text-[10px]">
                         <div className="flex justify-between">
-                          <span className={isSelected ? 'text-white/70' : 'text-slate-500'}>In:</span>
-                          <span className="font-bold font-mono text-emerald-500">{formatAED(summary.income)}</span>
+                          <span className={isSelected ? 'text-slate-600' : 'text-slate-500'}>In:</span>
+                          <span className="font-bold font-mono text-emerald-600">{formatAED(summary.income)}</span>
                         </div>
                         <div className="flex justify-between">
-                          <span className={isSelected ? 'text-white/70' : 'text-slate-500'}>Out:</span>
-                          <span className="font-bold font-mono text-rose-400">{formatAED(summary.expense)}</span>
+                          <span className={isSelected ? 'text-slate-600' : 'text-slate-500'}>Out:</span>
+                          <span className="font-bold font-mono text-rose-600">{formatAED(summary.expense)}</span>
                         </div>
-                        <div className="flex justify-between pt-1 border-t border-slate-200/40">
-                          <span className={isSelected ? 'text-white/70' : 'text-slate-500'}>Net:</span>
+                        <div className="flex justify-between pt-1 border-t border-slate-200">
+                          <span className={isSelected ? 'text-slate-600' : 'text-slate-500'}>Net:</span>
                           <span
                             className={`font-bold font-mono ${
                               unitNet >= 0
-                                ? isSelected
-                                  ? 'text-amber-300'
-                                  : 'text-emerald-600 dark:text-emerald-400'
-                                : 'text-rose-400'
+                                ? 'text-slate-900'
+                                : 'text-rose-600'
                             }`}
                           >
                             {formatAED(unitNet)}
@@ -577,7 +575,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
           )}
 
           {/* Filter Bar with Main & Sub Particulars Selector */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+          <div className="bg-white p-4 sm:p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
               {/* Search Box */}
               <div className="sm:col-span-4 relative">
@@ -587,7 +585,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search receipt #, party, details, notes..."
-                  className="w-full pl-9 pr-8 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-[#881337]"
+                  className="w-full pl-9 pr-8 py-2 border border-slate-200 rounded-xl text-xs bg-slate-50 text-slate-900 placeholder-slate-400 outline-none focus:bg-white focus:border-[#8b0000] focus:ring-1 focus:ring-[#8b0000]"
                 />
                 {searchQuery && (
                   <button
@@ -752,7 +750,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
                           {/* Unit */}
                           <td className="p-3.5 whitespace-nowrap font-bold text-slate-800 dark:text-slate-200">
                             <span className="inline-flex items-center gap-1">
-                              <Building2 className="w-3.5 h-3.5 text-[#881337]" />
+                              <Building2 className="w-3.5 h-3.5 text-slate-400" />
                               <span>{t.unit}</span>
                             </span>
                           </td>
@@ -813,10 +811,10 @@ export const FinanceView: React.FC<FinanceViewProps> = ({
 
                               <button
                                 onClick={() => onViewReceipt(t)}
-                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#881337] hover:bg-[#700f2b] text-white text-[11px] font-bold transition-all cursor-pointer shadow-2xs active:scale-95"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-[#8b0000] border border-rose-200 text-[11px] font-bold transition-all cursor-pointer shadow-xs active:scale-95"
                                 title="View & Print Official Document"
                               >
-                                <FileText className="w-3 h-3 text-amber-300" />
+                                <FileText className="w-3 h-3 text-[#8b0000]" />
                                 <span>{isInvoice ? 'Invoice' : 'Receipt'}</span>
                               </button>
 

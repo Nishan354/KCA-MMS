@@ -229,7 +229,7 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
         {/* Modal Header */}
         <div
           className="px-6 py-4 flex items-center justify-between text-white"
-          style={{ backgroundColor: 'var(--color-primary, #881337)' }}
+          style={{ backgroundColor: 'var(--color-primary, #0ea5e9)' }}
         >
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-white/10 text-white">
@@ -548,7 +548,7 @@ export const DocumentFormModal: React.FC<DocumentFormModalProps> = ({
             <button
               type="submit"
               className="px-5 py-2.5 rounded-xl text-white text-xs font-bold shadow-md hover:opacity-95 transition-all cursor-pointer flex items-center gap-2"
-              style={{ backgroundColor: 'var(--color-primary, #881337)' }}
+              style={{ backgroundColor: 'var(--color-primary, #0ea5e9)' }}
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>{editingDocument ? 'Save Changes' : 'Archive Document'}</span>

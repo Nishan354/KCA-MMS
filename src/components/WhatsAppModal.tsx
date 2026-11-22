@@ -278,7 +278,8 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
     switch (templateKey) {
       case 'id_card': {
-        content = `*KAIRALI CULTURAL ASSOCIATION FUJAIRAH*\n*OFFICIAL DIGITAL MEMBERSHIP ID CARD*\n\nDear *${m.fullName}*,\n\nYour official KCA Fujairah Membership ID Card has been updated and active in our central register.\n\n📋 *Membership Summary:*\n• *Member ID:* ${m.membershipId}\n• *Full Name:* ${m.fullName}\n• *Unit:* ${m.unit} Unit\n• *Blood Group:* ${m.bloodGroup}\n• *Validity:* ${formatCardDate(m.expiryDate)}\n${m.joinDate ? `• *Join Date:* ${formatDate(m.joinDate)}\n` : ''}`;
+        const bloodLine = m.bloodGroup ? `• *Blood Group:* ${m.bloodGroup}\n` : '';
+        content = `*KAIRALI CULTURAL ASSOCIATION FUJAIRAH*\n*OFFICIAL DIGITAL MEMBERSHIP ID CARD*\n\nDear *${m.fullName}*,\n\nYour official KCA Fujairah Membership ID Card has been updated and active in our central register.\n\n📋 *Membership Summary:*\n• *Member ID:* ${m.membershipId}\n• *Full Name:* ${m.fullName}\n• *Unit:* ${m.unit} Unit\n${bloodLine}• *Validity:* ${formatCardDate(m.expiryDate)}\n${m.joinDate ? `• *Join Date:* ${formatDate(m.joinDate)}\n` : ''}`;
 
         if (includeAttachmentInBody && attachDesc && attachmentType !== 'id_card_png') {
           content += `\n${attachDesc}\n`;
@@ -367,7 +368,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
           .replace(/\{(?:first[\s_]?name)\}/gi, firstName)
           .replace(/\{(?:id|member[\s_]?id|membership[\s_]?id)\}/gi, m.membershipId)
           .replace(/\{(?:unit|unit[\s_]?name)\}/gi, `${m.unit} Unit`)
-          .replace(/\{(?:blood|blood[\s_]?group)\}/gi, m.bloodGroup)
+          .replace(/\{(?:blood|blood[\s_]?group)\}/gi, m.bloodGroup || '—')
           .replace(/\{(?:dob|date[\s_]?of[\s_]?birth)\}/gi, formatDate(m.dateOfBirth))
           .replace(/\{(?:validity|expiry|expiry[\s_]?date)\}/gi, formatCardDate(m.expiryDate))
           .replace(/\{(?:join|join[\s_]?date)\}/gi, m.joinDate ? formatDate(m.joinDate) : '')
@@ -489,12 +490,15 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-sm overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[94vh] flex flex-col overflow-hidden my-auto animate-fadeIn">
         {/* Top Header */}
-        <div className="px-6 py-4 bg-[#128C7E] text-white flex items-center justify-between border-b border-[#0e6f64]">
+        <div
+          className="px-6 py-4 text-white flex items-center justify-between"
+          style={{ backgroundColor: 'var(--color-primary, #8b0000)' }}
+        >
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-white p-1 flex items-center justify-center shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-white/15 p-1 flex items-center justify-center border border-white/25 shadow-xs">
               <KcaLogo size={32} />
             </div>
             <div>
@@ -502,11 +506,11 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 <h3 className="font-display font-bold text-lg text-white">
                   WhatsApp Message Center &amp; Dispatcher
                 </h3>
-                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/20 text-white uppercase tracking-wider">
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-white/20 text-white border border-white/30 uppercase tracking-wider">
                   KCA Fujairah
                 </span>
               </div>
-              <p className="text-xs text-emerald-100">
+              <p className="text-xs text-rose-100">
                 Customizable message templates, multi-member selection &amp; attachment dispatch
               </p>
             </div>
@@ -514,26 +518,26 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 text-white/80 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+            className="p-1.5 text-white/80 hover:text-white rounded-lg transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Verification Link Policy & Domain Bar */}
-        <div className="bg-emerald-50 px-6 py-2 border-b border-emerald-200 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 text-emerald-950 font-medium">
-            <Globe className="w-4 h-4 text-[#128C7E] shrink-0" />
+        <div className="bg-slate-50 px-6 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center gap-2 text-slate-700 font-medium">
+            <Globe className="w-4 h-4 text-[#8b0000] shrink-0" />
             <span>
               Published Verification Base URL:{' '}
-              <strong className="font-mono text-emerald-900">{portalUrl}</strong>
+              <strong className="font-mono text-[#8b0000]">{portalUrl}</strong>
             </span>
           </div>
 
           <button
             type="button"
             onClick={() => setShowUrlSettings(!showUrlSettings)}
-            className="text-xs font-bold text-[#128C7E] hover:text-[#0e6f64] underline inline-flex items-center gap-1 cursor-pointer"
+            className="text-xs font-bold text-[#8b0000] hover:text-[#700000] underline inline-flex items-center gap-1 cursor-pointer"
           >
             <Settings2 className="w-3.5 h-3.5" />
             <span>{showUrlSettings ? 'Hide URL Config' : 'Configure Base URL'}</span>
@@ -542,11 +546,11 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
         {/* URL Configuration Panel */}
         {showUrlSettings && (
-          <div className="bg-white p-4 border-b border-slate-200 space-y-2 text-xs animate-fadeIn">
-            <div className="font-bold text-slate-800 flex items-center justify-between">
+          <div className="bg-slate-50 p-4 border-b border-slate-200 space-y-2 text-xs animate-fadeIn">
+            <div className="font-bold text-slate-700 flex items-center justify-between">
               <span>Production Verification Domain (Default: https://kca-fuj-mms.ai.studio)</span>
               {urlSaveSuccess && (
-                <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                <span className="text-emerald-600 font-semibold flex items-center gap-1">
                   <Check className="w-3.5 h-3.5" /> Domain Saved!
                 </span>
               )}
@@ -557,19 +561,19 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 value={portalUrl}
                 onChange={(e) => setPortalUrl(e.target.value)}
                 placeholder="https://kca-fuj-mms.ai.studio"
-                className="flex-1 px-3 py-1.5 border border-slate-300 rounded-md font-mono text-xs text-slate-900 bg-slate-50 focus:bg-white outline-none"
+                className="flex-1 px-3 py-1.5 border border-slate-200 rounded-xl font-mono text-xs text-slate-900 bg-white outline-none focus:border-[#8b0000]"
               />
               <button
                 type="button"
                 onClick={handleSavePortalUrl}
-                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md font-bold transition-colors cursor-pointer"
+                className="px-3 py-1.5 bg-[#8b0000] hover:bg-[#700000] text-white rounded-xl font-bold transition-colors cursor-pointer"
               >
                 Save
               </button>
               <button
                 type="button"
                 onClick={handleResetPortalUrl}
-                className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-medium transition-colors cursor-pointer flex items-center gap-1"
+                className="px-2.5 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-xl font-medium transition-colors cursor-pointer flex items-center gap-1 border border-slate-200"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reset Default</span>
@@ -579,11 +583,11 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
         )}
 
         {/* Modal Scrollable Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50">
+        <div className="p-6 overflow-y-auto space-y-6 flex-1 bg-slate-50/50">
           {/* Top 3 Columns: 1. Template Choice | 2. Custom Message & Options | 3. Attachments */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* 1. Template Choice */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-2.5">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2.5">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                 1. Message Template
               </label>
@@ -592,17 +596,17 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setTemplateKey('id_card')}
-                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition-all cursor-pointer ${
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     templateKey === 'id_card'
-                      ? 'bg-emerald-50 border-[#128C7E] text-emerald-950 font-bold shadow-xs'
+                      ? 'bg-rose-50 border-rose-200 text-[#8b0000] font-bold shadow-2xs'
                       : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <IdCard className="w-4 h-4 text-[#128C7E]" />
+                    <IdCard className={`w-4 h-4 ${templateKey === 'id_card' ? 'text-[#8b0000]' : 'text-slate-500'}`} />
                     <span>Digital Membership Card</span>
                   </div>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono">
+                  <span className="text-[10px] bg-rose-50 text-[#8b0000] px-1.5 py-0.5 rounded font-mono border border-rose-200">
                     With Link
                   </span>
                 </button>
@@ -610,17 +614,17 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setTemplateKey('receipt')}
-                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition-all cursor-pointer ${
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     templateKey === 'receipt'
-                      ? 'bg-emerald-50 border-[#128C7E] text-emerald-950 font-bold shadow-xs'
+                      ? 'bg-rose-50 border-rose-200 text-[#8b0000] font-bold shadow-2xs'
                       : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-[#128C7E]" />
+                    <FileText className={`w-4 h-4 ${templateKey === 'receipt' ? 'text-[#8b0000]' : 'text-slate-500'}`} />
                     <span>Official Payment Receipt</span>
                   </div>
-                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-mono">
+                  <span className="text-[10px] bg-rose-50 text-[#8b0000] px-1.5 py-0.5 rounded font-mono border border-rose-200">
                     With Link
                   </span>
                 </button>
@@ -628,17 +632,17 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setTemplateKey('renewal')}
-                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition-all cursor-pointer ${
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     templateKey === 'renewal'
-                      ? 'bg-emerald-50 border-[#128C7E] text-emerald-950 font-bold shadow-xs'
+                      ? 'bg-rose-50 border-rose-200 text-[#8b0000] font-bold shadow-2xs'
                       : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-[#128C7E]" />
+                    <Clock className={`w-4 h-4 ${templateKey === 'renewal' ? 'text-[#8b0000]' : 'text-slate-500'}`} />
                     <span>Renewal Reminder</span>
                   </div>
-                  <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+                  <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono border border-slate-200">
                     Notice Only
                   </span>
                 </button>
@@ -646,17 +650,17 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setTemplateKey('announcement')}
-                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition-all cursor-pointer ${
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     templateKey === 'announcement'
-                      ? 'bg-emerald-50 border-[#128C7E] text-emerald-950 font-bold shadow-xs'
+                      ? 'bg-rose-50 border-rose-200 text-[#8b0000] font-bold shadow-2xs'
                       : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <MessageSquare className="w-4 h-4 text-[#128C7E]" />
+                    <MessageSquare className={`w-4 h-4 ${templateKey === 'announcement' ? 'text-[#8b0000]' : 'text-slate-500'}`} />
                     <span>General Announcement</span>
                   </div>
-                  <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+                  <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono border border-slate-200">
                     No Link
                   </span>
                 </button>
@@ -664,17 +668,17 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setTemplateKey('welcome')}
-                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition-all cursor-pointer ${
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     templateKey === 'welcome'
-                      ? 'bg-emerald-50 border-[#128C7E] text-emerald-950 font-bold shadow-xs'
+                      ? 'bg-rose-50 border-rose-200 text-[#8b0000] font-bold shadow-2xs'
                       : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-[#128C7E]" />
+                    <Sparkles className={`w-4 h-4 ${templateKey === 'welcome' ? 'text-[#8b0000]' : 'text-slate-500'}`} />
                     <span>Welcome New Member</span>
                   </div>
-                  <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono">
+                  <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-mono border border-slate-200">
                     No Link
                   </span>
                 </button>
@@ -682,17 +686,17 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setTemplateKey('custom')}
-                  className={`p-2.5 rounded-lg border text-left flex items-center justify-between transition-all cursor-pointer ${
+                  className={`p-2.5 rounded-xl border text-left flex items-center justify-between transition-all cursor-pointer ${
                     templateKey === 'custom'
-                      ? 'bg-emerald-50 border-[#128C7E] text-emerald-950 font-bold shadow-xs'
+                      ? 'bg-rose-50 border-rose-200 text-[#8b0000] font-bold shadow-2xs'
                       : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <Paperclip className="w-4 h-4 text-[#128C7E]" />
+                    <Paperclip className={`w-4 h-4 ${templateKey === 'custom' ? 'text-[#8b0000]' : 'text-slate-500'}`} />
                     <span>Custom Message &amp; Text</span>
                   </div>
-                  <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded font-mono font-bold">
+                  <span className="text-[10px] bg-[#8b0000] text-white px-1.5 py-0.5 rounded font-mono font-bold">
                     Custom
                   </span>
                 </button>
@@ -700,13 +704,13 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             </div>
 
             {/* 2. Custom Message Content & Token Insertions */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                   2. Customize Message Text
                 </label>
                 {templateKey === 'custom' && (
-                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                  <span className="text-[10px] font-semibold text-[#8b0000] bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">
                     Freeform Mode
                   </span>
                 )}
@@ -722,7 +726,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                     value={customTitle}
                     onChange={(e) => setCustomTitle(e.target.value)}
                     placeholder="e.g. Monthly General Meeting / Cultural Fest / Emergency Notice"
-                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-900 outline-none focus:ring-1 focus:ring-[#128C7E]"
+                    className="w-full px-3 py-1.5 border border-slate-200 rounded-xl text-xs font-medium text-slate-900 bg-white outline-none focus:border-[#8b0000]"
                   />
                 </div>
               )}
@@ -756,8 +760,8 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                       onClick={() => insertTokenIntoTextarea(btn.token)}
                       className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-medium transition-colors cursor-pointer border ${
                         btn.highlight
-                          ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300 font-bold'
-                          : 'bg-slate-100 hover:bg-emerald-100 hover:text-emerald-900 text-slate-700 border-slate-200'
+                          ? 'bg-rose-50 hover:bg-rose-100 text-[#8b0000] border-rose-200 font-bold'
+                          : 'bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200'
                       }`}
                     >
                       {btn.label}
@@ -777,19 +781,19 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                       ? 'Write your custom WhatsApp message here... (use tokens like {Name}, {Member ID}, {Unit})'
                       : 'Add any optional personal note or instruction...'
                   }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-900 outline-none focus:ring-1 focus:ring-[#128C7E] font-sans"
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-900 bg-white outline-none focus:border-[#8b0000] font-sans"
                 />
               </div>
 
               {/* Header/Footer & Verification Link Toggles */}
-              <div className="pt-2 border-t border-slate-100 space-y-2">
+              <div className="pt-2 border-t border-slate-200 space-y-2">
                 {templateKey === 'custom' && (
                   <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={includeHeaderFooter}
                       onChange={(e) => setIncludeHeaderFooter(e.target.checked)}
-                      className="h-3.5 w-3.5 rounded text-[#128C7E] focus:ring-[#128C7E] border-slate-300"
+                      className="h-3.5 w-3.5 rounded text-[#8b0000] focus:ring-[#8b0000] border-slate-300"
                     />
                     <span className="font-semibold text-[11px]">
                       Include Official KCA Header &amp; Signature
@@ -797,15 +801,15 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                   </label>
                 )}
 
-                <label className="flex items-start gap-2.5 p-2 rounded-lg bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                <label className="flex items-start gap-2.5 p-2 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
                   <input
                     type="checkbox"
                     checked={includeVerificationLink}
                     onChange={(e) => setIncludeVerificationLink(e.target.checked)}
-                    className="mt-0.5 h-3.5 w-3.5 rounded text-[#128C7E] focus:ring-[#128C7E] border-slate-300 cursor-pointer"
+                    className="mt-0.5 h-3.5 w-3.5 rounded text-[#8b0000] focus:ring-[#8b0000] border-slate-300 cursor-pointer"
                   />
                   <div>
-                    <div className="font-bold text-[11px] text-slate-800">
+                    <div className="font-bold text-[11px] text-slate-900">
                       Include Digital Verification / Download Link
                     </div>
                     <div className="text-[10px] text-slate-500 leading-normal">
@@ -819,7 +823,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             </div>
 
             {/* 3. Attachments: Universal File Upload, Digital ID Card, or Receipt */}
-            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-3">
+            <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                 3. Attachments &amp; Documents
               </label>
@@ -827,10 +831,10 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
               <div className="space-y-1.5 text-xs">
                 {/* 1. Custom File Upload Option */}
                 <label
-                  className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                  className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
                     attachmentType === 'custom_file'
-                      ? 'bg-emerald-50 border-[#128C7E] font-bold text-emerald-950 shadow-xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                      ? 'bg-rose-50 border-rose-200 font-bold text-[#8b0000] shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <input
@@ -838,18 +842,18 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                     name="wa_attachment"
                     checked={attachmentType === 'custom_file'}
                     onChange={() => setAttachmentType('custom_file')}
-                    className="text-[#128C7E] focus:ring-[#128C7E]"
+                    className="text-[#8b0000] focus:ring-[#8b0000]"
                   />
-                  <FileUp className="w-4 h-4 text-[#128C7E]" />
+                  <FileUp className="w-4 h-4 text-[#8b0000]" />
                   <span>Custom File (Upload Any Image/PDF/Doc)</span>
                 </label>
 
                 {/* 2. Digital ID Card */}
                 <label
-                  className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                  className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
                     attachmentType === 'id_card_png'
-                      ? 'bg-emerald-50 border-[#128C7E] font-bold text-emerald-950 shadow-xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                      ? 'bg-rose-50 border-rose-200 font-bold text-[#8b0000] shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <input
@@ -857,18 +861,18 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                     name="wa_attachment"
                     checked={attachmentType === 'id_card_png'}
                     onChange={() => setAttachmentType('id_card_png')}
-                    className="text-[#128C7E] focus:ring-[#128C7E]"
+                    className="text-[#8b0000] focus:ring-[#8b0000]"
                   />
-                  <IdCard className="w-4 h-4 text-[#128C7E]" />
+                  <IdCard className="w-4 h-4 text-[#8b0000]" />
                   <span>Digital ID Card (PNG Image)</span>
                 </label>
 
                 {/* 3. Payment Receipt */}
                 <label
-                  className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                  className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
                     attachmentType === 'receipt_pdf'
-                      ? 'bg-emerald-50 border-[#128C7E] font-bold text-emerald-950 shadow-xs'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                      ? 'bg-rose-50 border-rose-200 font-bold text-[#8b0000] shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <input
@@ -876,18 +880,18 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                     name="wa_attachment"
                     checked={attachmentType === 'receipt_pdf'}
                     onChange={() => setAttachmentType('receipt_pdf')}
-                    className="text-[#128C7E] focus:ring-[#128C7E]"
+                    className="text-[#8b0000] focus:ring-[#8b0000]"
                   />
-                  <FileText className="w-4 h-4 text-[#128C7E]" />
+                  <FileText className="w-4 h-4 text-[#8b0000]" />
                   <span>Payment Receipt (PDF Document)</span>
                 </label>
 
                 {/* 4. None */}
                 <label
-                  className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                  className={`flex items-center gap-2 p-2 rounded-xl border cursor-pointer transition-all ${
                     attachmentType === 'none'
-                      ? 'bg-emerald-50 border-[#128C7E] font-bold text-emerald-950'
-                      : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                      ? 'bg-rose-50 border-rose-200 font-bold text-[#8b0000]'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
                   }`}
                 >
                   <input
@@ -895,28 +899,28 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                     name="wa_attachment"
                     checked={attachmentType === 'none'}
                     onChange={() => setAttachmentType('none')}
-                    className="text-[#128C7E] focus:ring-[#128C7E]"
+                    className="text-[#8b0000] focus:ring-[#8b0000]"
                   />
-                  <MessageSquare className="w-4 h-4 text-slate-500" />
+                  <MessageSquare className="w-4 h-4 text-slate-400" />
                   <span>Text Message Only (No File)</span>
                 </label>
               </div>
 
               {/* Attachment in Message Options */}
               {attachmentType !== 'none' && (
-                <div className="pt-2 border-t border-slate-100 space-y-2">
-                  <label className="flex items-start gap-2 p-2 rounded-lg bg-emerald-50/60 border border-emerald-200 cursor-pointer">
+                <div className="pt-2 border-t border-slate-200 space-y-2">
+                  <label className="flex items-start gap-2 p-2 rounded-xl bg-slate-50 border border-slate-200 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={includeAttachmentInBody}
                       onChange={(e) => setIncludeAttachmentInBody(e.target.checked)}
-                      className="mt-0.5 h-3.5 w-3.5 rounded text-[#128C7E] focus:ring-[#128C7E] border-slate-300 cursor-pointer"
+                      className="mt-0.5 h-3.5 w-3.5 rounded text-[#8b0000] focus:ring-[#8b0000] border-slate-300 cursor-pointer"
                     />
                     <div className="text-xs">
-                      <span className="font-bold text-emerald-950 block">
+                      <span className="font-bold text-slate-800 block">
                         Include Attachment Note in Message Body
                       </span>
-                      <span className="text-[10px] text-emerald-800">
+                      <span className="text-[10px] text-slate-500">
                         Automatically embeds the attached file name into the WhatsApp text.
                       </span>
                     </div>
@@ -926,10 +930,10 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                     <button
                       type="button"
                       onClick={() => insertTokenIntoTextarea('{Attachment}')}
-                      className="w-full py-1.5 px-2.5 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-900 border border-slate-300 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                      className="w-full py-1.5 px-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
                     >
-                      <Paperclip className="w-3.5 h-3.5 text-emerald-700" />
-                      <span>Insert <code className="text-emerald-800 font-mono font-bold">{'{Attachment}'}</code> Tag into Message Text</span>
+                      <Paperclip className="w-3.5 h-3.5 text-slate-500" />
+                      <span>Insert <code className="text-[#8b0000] font-mono font-bold">{'{Attachment}'}</code> Tag into Message Text</span>
                     </button>
                   )}
                 </div>
@@ -937,7 +941,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
               {/* Custom File Upload Box */}
               {attachmentType === 'custom_file' && (
-                <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2 animate-fadeIn text-xs">
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2 animate-fadeIn text-xs">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -948,7 +952,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
                   {customFile ? (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2 p-2 bg-white rounded-lg border border-emerald-200">
+                      <div className="flex items-center justify-between gap-2 p-2 bg-white rounded-lg border border-slate-200">
                         <div className="flex items-center gap-2 min-w-0">
                           {customFile.type.startsWith('image/') ? (
                             <img
@@ -957,10 +961,10 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                               className="w-7 h-7 object-cover rounded border border-slate-200 shrink-0"
                             />
                           ) : (
-                            <File className="w-6 h-6 text-emerald-700 shrink-0" />
+                            <File className="w-6 h-6 text-slate-500 shrink-0" />
                           )}
                           <div className="min-w-0">
-                            <div className="font-bold text-slate-800 truncate text-[11px]">
+                            <div className="font-bold text-slate-900 truncate text-[11px]">
                               {customFile.name}
                             </div>
                             <div className="text-[10px] text-slate-500">
@@ -973,7 +977,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                           <button
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="p-1 text-slate-600 hover:text-slate-900 bg-slate-100 rounded hover:bg-slate-200 text-[10px] font-semibold cursor-pointer"
+                            className="p-1 text-slate-600 hover:text-slate-900 bg-slate-100 rounded hover:bg-slate-200 text-[10px] font-semibold cursor-pointer border border-slate-200"
                             title="Change File"
                           >
                             Change
@@ -981,7 +985,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                           <button
                             type="button"
                             onClick={() => setCustomFile(null)}
-                            className="p-1 text-rose-600 hover:text-rose-800 bg-rose-50 rounded hover:bg-rose-100 text-[10px] cursor-pointer"
+                            className="p-1 text-rose-600 hover:text-rose-700 bg-rose-50 rounded hover:bg-rose-100 text-[10px] cursor-pointer border border-rose-200"
                             title="Remove File"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -992,9 +996,9 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                       <button
                         type="button"
                         onClick={downloadCustomUploadedFile}
-                        className="w-full py-1.5 px-3 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                        className="w-full py-1.5 px-3 bg-[#8b0000] hover:bg-[#700000] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
                       >
-                        <Download className="w-3.5 h-3.5" />
+                        <Download className="w-3.5 h-3.5 text-white" />
                         <span>Download Attached File</span>
                       </button>
                     </div>
@@ -1003,10 +1007,10 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="w-full py-3 px-3 border-2 border-dashed border-emerald-300 hover:border-emerald-500 rounded-xl bg-white hover:bg-emerald-50/50 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer text-center"
+                        className="w-full py-3 px-3 border-2 border-dashed border-slate-300 hover:border-slate-400 rounded-xl bg-white flex flex-col items-center justify-center gap-1 transition-all cursor-pointer text-center"
                       >
-                        <Upload className="w-5 h-5 text-emerald-700" />
-                        <span className="font-bold text-emerald-950 text-xs">
+                        <Upload className="w-5 h-5 text-slate-400" />
+                        <span className="font-bold text-slate-800 text-xs">
                           Click to Attach Any File
                         </span>
                         <span className="text-[10px] text-slate-500">
@@ -1021,14 +1025,14 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
               {/* ID Card / Receipt Download Preview */}
               {(attachmentType === 'id_card_png' || attachmentType === 'receipt_pdf') &&
                 currentPreviewMember && (
-                  <div className="pt-2 border-t border-slate-100">
+                  <div className="pt-2 border-t border-slate-200">
                     <button
                       type="button"
                       onClick={() => handleDownloadAttachmentForMember(currentPreviewMember)}
                       disabled={preparingAttachment}
-                      className="w-full py-2 px-3 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+                      className="w-full py-2 px-3 bg-white hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs border border-slate-200 disabled:opacity-50"
                     >
-                      <Download className="w-3.5 h-3.5" />
+                      <Download className="w-3.5 h-3.5 text-slate-500" />
                       <span>
                         {preparingAttachment
                           ? 'Preparing Document...'
@@ -1048,26 +1052,26 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
           </div>
 
           {/* Live Message Preview Box */}
-          <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs space-y-2">
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-xs space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
                   Live Message Preview
                 </span>
-                <span className="text-xs font-mono text-[#128C7E] bg-emerald-50 px-2 py-0.5 rounded font-semibold">
+                <span className="text-xs font-mono text-[#8b0000] bg-rose-50 px-2 py-0.5 rounded-lg border border-rose-200 font-semibold shadow-xs">
                   For: {currentPreviewMember?.fullName} ({currentPreviewMember?.membershipId})
                 </span>
               </div>
 
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-slate-500">Previewing recipient:</span>
+                <span className="text-slate-500 font-medium">Previewing recipient:</span>
                 <select
                   value={previewMemberId}
                   onChange={(e) => setPreviewMemberId(e.target.value)}
-                  className="px-2 py-1 border border-slate-300 rounded text-xs bg-slate-50 font-medium outline-none"
+                  className="px-2.5 py-1 border border-slate-300 rounded-xl text-xs bg-white text-slate-800 font-medium outline-none cursor-pointer focus:border-[#8b0000]"
                 >
                   {selectedMembers.map((m) => (
-                    <option key={m.id} value={m.id}>
+                    <option key={m.id} value={m.id} className="bg-white text-slate-800">
                       {m.fullName} ({m.membershipId})
                     </option>
                   ))}
@@ -1076,24 +1080,24 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             </div>
 
             {/* WhatsApp Bubble Preview */}
-            <div className="bg-[#EFEAE2] p-4 rounded-xl border border-[#e0dad0] text-xs text-slate-900 font-sans whitespace-pre-wrap leading-relaxed shadow-inner max-h-56 overflow-y-auto">
+            <div className="bg-[#efeae2] p-4 rounded-xl border border-slate-300/80 text-slate-800 text-xs font-sans whitespace-pre-wrap leading-relaxed shadow-inner max-h-56 overflow-y-auto">
               {currentPreviewMember && generateMessageText(currentPreviewMember)}
             </div>
           </div>
 
           {/* Recipients Selection Table with Multi-Select */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
             {/* Table Header Bar with Unit Filter and Select All */}
-            <div className="px-5 py-3.5 bg-slate-100 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-3">
                 <button
                   type="button"
                   onClick={handleSelectAllFiltered}
-                  className="flex items-center gap-1.5 text-xs font-bold text-slate-800 hover:text-[#128C7E] cursor-pointer"
+                  className="flex items-center gap-1.5 text-xs font-bold text-slate-800 hover:text-[#8b0000] cursor-pointer"
                 >
                   {filteredMembers.length > 0 &&
                   filteredMembers.every((m) => selectedMemberIds.includes(m.id)) ? (
-                    <CheckSquare className="w-4 h-4 text-[#128C7E]" />
+                    <CheckSquare className="w-4 h-4 text-[#8b0000]" />
                   ) : (
                     <Square className="w-4 h-4 text-slate-400" />
                   )}
@@ -1112,7 +1116,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search member, ID, mobile..."
-                    className="pl-8 pr-3 py-1 border border-slate-300 rounded-md text-xs bg-white text-slate-800 outline-none w-48 focus:w-56 transition-all"
+                    className="pl-8 pr-3 py-1 border border-slate-300 rounded-xl text-xs bg-white text-slate-800 placeholder-slate-400 outline-none w-48 focus:w-56 focus:border-[#8b0000] transition-all"
                   />
                 </div>
 
@@ -1122,11 +1126,11 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                   <select
                     value={unitFilter}
                     onChange={(e) => setUnitFilter(e.target.value)}
-                    className="px-2 py-1 border border-slate-300 rounded-md text-xs bg-white text-slate-800 outline-none"
+                    className="px-2.5 py-1 border border-slate-300 rounded-xl text-xs bg-white text-slate-800 outline-none focus:border-[#8b0000] cursor-pointer"
                   >
-                    <option value="all">All Units ({members.length})</option>
+                    <option value="all" className="bg-white text-slate-800">All Units ({members.length})</option>
                     {unitsList.map((u) => (
-                      <option key={u} value={u}>
+                      <option key={u} value={u} className="bg-white text-slate-800">
                         {u} Unit ({members.filter((m) => m.unit.toLowerCase() === u.toLowerCase()).length})
                       </option>
                     ))}
@@ -1138,7 +1142,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
             {/* Recipients List Table */}
             <div className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
               {filteredMembers.length === 0 ? (
-                <div className="p-8 text-center text-xs text-slate-500">
+                <div className="p-8 text-center text-xs text-slate-500 font-medium">
                   No members matched your search or unit filter.
                 </div>
               ) : (
@@ -1151,7 +1155,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                     <div
                       key={m.id}
                       className={`px-5 py-3 flex items-center justify-between transition-colors gap-3 ${
-                        isSelected ? 'bg-emerald-50/40' : 'hover:bg-slate-50'
+                        isSelected ? 'bg-rose-50/70' : 'hover:bg-slate-50'
                       }`}
                     >
                       {/* Checkbox and Member Info */}
@@ -1159,16 +1163,16 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                         <button
                           type="button"
                           onClick={() => toggleSelectMember(m.id)}
-                          className="text-slate-400 hover:text-[#128C7E] cursor-pointer shrink-0"
+                          className="text-slate-400 hover:text-[#8b0000] cursor-pointer shrink-0"
                         >
                           {isSelected ? (
-                            <CheckSquare className="w-4.5 h-4.5 text-[#128C7E]" />
+                            <CheckSquare className="w-4.5 h-4.5 text-[#8b0000]" />
                           ) : (
-                            <Square className="w-4.5 h-4.5" />
+                            <Square className="w-4.5 h-4.5 text-slate-300" />
                           )}
                         </button>
 
-                        <div className="w-9 h-9 rounded-full overflow-hidden border border-slate-200 shrink-0 bg-slate-100 flex items-center justify-center">
+                        <div className="w-9 h-9 rounded-xl overflow-hidden border border-slate-200 shrink-0 bg-slate-100 flex items-center justify-center">
                           {m.photoUrl ? (
                             <img
                               src={m.photoUrl}
@@ -1186,17 +1190,17 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                         <div className="min-w-0">
                           <div className="font-bold text-xs text-slate-900 truncate flex items-center gap-2">
                             <span>{m.fullName}</span>
-                            <span className="font-mono text-[10px] text-[#128C7E] bg-emerald-50 px-1.5 py-0.5 rounded font-semibold border border-emerald-200">
+                            <span className="font-mono text-[10px] text-[#8b0000] bg-rose-50 px-1.5 py-0.5 rounded font-semibold border border-rose-200">
                               {m.membershipId}
                             </span>
-                            <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-1.5 rounded">
+                            <span className="text-[10px] font-medium text-slate-600 bg-slate-100 border border-slate-200 px-1.5 rounded">
                               {m.unit} Unit
                             </span>
                           </div>
 
                           <div className="text-[11px] text-slate-500 flex items-center gap-3 mt-0.5">
-                            <span className="flex items-center gap-1 font-mono">
-                              <Phone className="w-3 h-3 text-slate-400" />
+                            <span className="flex items-center gap-1 font-mono text-slate-600">
+                              <Phone className="w-3 h-3 text-emerald-600" />
                               {m.whatsapp || m.phoneUAE || 'No Phone'}
                             </span>
                             {m.joinDate && (
@@ -1214,10 +1218,10 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                           <button
                             type="button"
                             onClick={() => handleDownloadAttachmentForMember(m)}
-                            className="p-1.5 text-slate-600 hover:text-slate-900 rounded bg-slate-100 hover:bg-slate-200 text-xs flex items-center gap-1 cursor-pointer font-medium"
+                            className="p-1.5 text-slate-600 hover:text-slate-900 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs flex items-center gap-1 cursor-pointer font-medium transition-colors"
                             title="Download Attachment File"
                           >
-                            <Download className="w-3.5 h-3.5" />
+                            <Download className="w-3.5 h-3.5 text-slate-600" />
                             <span className="hidden xl:inline">
                               {attachmentType === 'custom_file' ? 'Download File' : 'Download'}
                             </span>
@@ -1229,13 +1233,13 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                           <button
                             type="button"
                             onClick={() => handleCopyLink(m)}
-                            className="p-1.5 text-slate-600 hover:text-slate-900 rounded bg-slate-100 hover:bg-slate-200 text-xs flex items-center gap-1 cursor-pointer font-medium"
+                            className="p-1.5 text-slate-600 hover:text-slate-900 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs flex items-center gap-1 cursor-pointer font-medium transition-colors"
                             title="Copy Verification Link"
                           >
                             {copiedLinkId === m.id ? (
                               <Check className="w-3.5 h-3.5 text-emerald-600" />
                             ) : (
-                              <Globe className="w-3.5 h-3.5" />
+                              <Globe className="w-3.5 h-3.5 text-[#8b0000]" />
                             )}
                             <span className="hidden sm:inline">
                               {copiedLinkId === m.id ? 'Copied' : 'Link'}
@@ -1247,13 +1251,13 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleCopyMessage(m)}
-                          className="p-1.5 text-slate-600 hover:text-slate-900 rounded bg-slate-100 hover:bg-slate-200 text-xs flex items-center gap-1 cursor-pointer font-medium"
+                          className="p-1.5 text-slate-600 hover:text-slate-900 rounded-lg bg-slate-100 hover:bg-slate-200 border border-slate-200 text-xs flex items-center gap-1 cursor-pointer font-medium transition-colors"
                           title="Copy Full Message to Clipboard"
                         >
                           {copiedId === m.id ? (
                             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
                           ) : (
-                            <Copy className="w-3.5 h-3.5" />
+                            <Copy className="w-3.5 h-3.5 text-slate-600" />
                           )}
                           <span className="hidden sm:inline">
                             {copiedId === m.id ? 'Copied' : 'Copy'}
@@ -1265,9 +1269,9 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
                           type="button"
                           onClick={() => handleOpenWhatsAppForMember(m)}
                           disabled={!hasPhone}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold rounded-lg shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#25D366] hover:bg-[#20bd5a] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 disabled:opacity-50"
                         >
-                          <Send className="w-3.5 h-3.5" />
+                          <Send className="w-3.5 h-3.5 text-white" />
                           <span>Send WhatsApp</span>
                         </button>
                       </div>
@@ -1280,15 +1284,15 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
         </div>
 
         {/* Modal Footer with Batch Dispatch Assistant */}
-        <div className="px-6 py-3.5 bg-slate-100 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-3">
             <span className="font-bold text-slate-800">
-              Selected: {selectedMembers.length} {selectedMembers.length === 1 ? 'member' : 'members'}
+              Selected: <strong className="text-[#8b0000]">{selectedMembers.length}</strong> {selectedMembers.length === 1 ? 'member' : 'members'}
             </span>
             {selectedMembers.length > 1 && (
-              <span className="text-slate-500">
+              <span className="text-slate-600">
                 (Recipient #{activeBatchIndex + 1}:{' '}
-                <strong className="text-slate-800">
+                <strong className="text-[#8b0000]">
                   {selectedMembers[activeBatchIndex]?.fullName || 'Ready'}
                 </strong>
                 )
@@ -1301,9 +1305,9 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
               <button
                 type="button"
                 onClick={handleSendNextBatch}
-                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-lg shadow-sm transition-colors cursor-pointer text-xs"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#25D366] hover:bg-[#20bd5a] text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer text-xs"
               >
-                <Send className="w-3.5 h-3.5" />
+                <Send className="w-3.5 h-3.5 text-white" />
                 <span>
                   Send Next ({activeBatchIndex + 1}/{selectedMembers.length})
                 </span>
@@ -1312,7 +1316,7 @@ export const WhatsAppModal: React.FC<WhatsAppModalProps> = ({
 
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-semibold transition-colors cursor-pointer text-xs"
+              className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-xl font-semibold transition-colors cursor-pointer text-xs"
             >
               Close
             </button>

@@ -5,6 +5,7 @@ import { formatAED, formatDate } from '../utils/idGenerator';
 import { downloadReceiptPdf } from '../utils/pdfGenerator';
 import { amountToWordsAED } from '../utils/financeVoucherGenerator';
 import { OFFICIAL_AFFILIATION } from '../config/constants';
+import { usePortalConfig } from '../hooks/usePortalConfig';
 import {
   X,
   Printer,
@@ -32,6 +33,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
   onClose,
   onOpenWhatsApp,
 }) => {
+  const { portalConfig } = usePortalConfig();
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -121,7 +123,10 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-800 w-full max-w-2xl max-h-[94vh] flex flex-col overflow-hidden my-auto"
       >
         {/* Modal Top Control Bar */}
-        <div className="no-print px-5 py-3.5 bg-[#881337] text-white flex items-center justify-between shadow-xs shrink-0">
+        <div
+          className="no-print px-5 py-3.5 text-white flex items-center justify-between shadow-xs shrink-0"
+          style={{ backgroundColor: portalConfig.primaryColor || '#881337' }}
+        >
           <div>
             <h3 className="font-display font-bold text-base text-white flex items-center gap-2">
               <span>{docTitle}</span>
@@ -129,7 +134,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
                 {receiptNo}
               </span>
             </h3>
-            <p className="text-xs text-rose-100 mt-0.5">
+            <p className="text-xs text-white/90 mt-0.5">
               Unit: <strong>{unitDisplay}</strong> &bull; Member: <strong>{member.fullName}</strong> ({member.membershipId})
             </p>
           </div>
@@ -156,25 +161,34 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
             id="kca-official-receipt-print"
             className="bg-white p-6 sm:p-8 rounded-xl border border-slate-300 shadow-md w-full max-w-xl text-slate-900 font-sans relative"
           >
-            {/* Header with KCA Logo & Title */}
-            <div className="flex items-center gap-4 pb-4 border-b-2 border-[#881337]">
+            {/* Header with Organization Logo & Title */}
+            <div
+              className="flex items-center gap-4 pb-4 border-b-2"
+              style={{ borderColor: portalConfig.primaryColor || '#881337' }}
+            >
               <div className="shrink-0 drop-shadow-xs">
                 <KcaLogo size={52} />
               </div>
               <div className="flex-1">
-                <h1 className="font-display font-black text-base sm:text-lg text-[#881337] uppercase tracking-tight leading-tight">
-                  KAIRALI CULTURAL ASSOCIATION FUJAIRAH
+                <h1
+                  className="font-display font-black text-base sm:text-lg uppercase tracking-tight leading-tight"
+                  style={{ color: portalConfig.primaryColor || '#881337' }}
+                >
+                  {portalConfig.portalName}
                 </h1>
                 <div className="text-xs font-bold text-slate-700 uppercase tracking-wide mt-0.5">
-                  FUJAIRAH &bull; UNITED ARAB EMIRATES
+                  {portalConfig.jurisdiction}
                 </div>
                 <div className="text-[11px] text-amber-800 font-bold uppercase tracking-wide mt-0.5">
-                  {OFFICIAL_AFFILIATION}
+                  {portalConfig.affiliationText || portalConfig.subtitle}
                 </div>
                 {/* Mandatory Permanent Contact Block */}
                 <div className="text-[11px] text-slate-600 font-semibold mt-1 flex items-center gap-1.5">
-                  <Mail className="w-3 h-3 text-[#881337]" />
-                  <span>Email: kairalicaf@gmail.com</span>
+                  <Mail className="w-3 h-3 text-slate-500" />
+                  <span>Email: {portalConfig.contactEmail}</span>
+                  {portalConfig.contactPhone && (
+                    <span className="ml-2 font-mono">• Tel: {portalConfig.contactPhone}</span>
+                  )}
                 </div>
               </div>
             </div>

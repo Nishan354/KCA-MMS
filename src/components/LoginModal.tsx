@@ -16,6 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { OFFICIAL_ORG_NAME } from '../config/constants';
+import { usePortalConfig } from '../hooks/usePortalConfig';
 
 interface LoginModalProps {
   isOpen: boolean;
@@ -40,6 +41,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   onClose,
   canClose = false,
 }) => {
+  const { portalConfig } = usePortalConfig();
   const [activeTab, setActiveTab] = useState<'member_portal' | 'admin_login'>('admin_login');
 
   // Member Search Portal State
@@ -171,19 +173,22 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg overflow-hidden my-auto">
         {/* Header Branding */}
-        <div className="bg-[#8b0000] p-5 sm:p-6 text-white text-center relative border-b border-[#730000]">
+        <div
+          className="p-5 sm:p-6 text-white text-center relative border-b border-black/10"
+          style={{ backgroundColor: portalConfig.primaryColor || '#8b0000' }}
+        >
           <div className="w-16 h-16 mx-auto mb-3 bg-white p-1 rounded-full shadow-md border-2 border-white/60 flex items-center justify-center">
             <KcaLogo size={52} />
           </div>
 
           <h1 className="font-display font-black text-lg tracking-tight uppercase leading-tight text-white">
-            {OFFICIAL_ORG_NAME}
+            {portalConfig.portalName}
           </h1>
           <div className="font-display font-bold text-xs tracking-wider text-amber-300 mt-0.5">
-            FUJAIRAH &bull; UNITED ARAB EMIRATES
+            {portalConfig.jurisdiction}
           </div>
-          <div className="text-xs text-red-100 font-medium mt-1">
-            Official Member Verification &amp; Staff Access
+          <div className="text-xs text-white/90 font-medium mt-1">
+            {portalConfig.subtitle || 'Official Member Verification & Staff Access'}
           </div>
         </div>
 

@@ -2,13 +2,17 @@ import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   CERTIFICATE_TEMPLATES,
   CertificateData,
-  CertificateTemplate,
   SealStyle,
   generateCertificatePdf,
   generateBulkCertificatesPdf,
 } from '../utils/certificateGenerator';
-import { OFFICIAL_AFFILIATION, OFFICIAL_LOCATION } from '../config/constants';
-import { KcaLogo, useCustomLogo, getActiveLogoDataUrl } from './Logo';
+import { KcaLogo } from './Logo';
+import { BrandTitleLockup } from './BrandTitleLockup';
+import { HeaderTitleStyle } from '../types/portal';
+import { usePortalConfig } from '../hooks/usePortalConfig';
+import { savePortalConfig } from '../utils/storage';
+import { pushCloudEntity } from '../utils/cloudSync';
+import { resolveEffectiveTitleStyle } from '../utils/titleGraphic';
 import { UserSession, isUnitOperatorRole, Member } from '../types/member';
 import {
   loadStoredSignatures,
@@ -24,22 +28,14 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   Sparkles,
-  Layers,
-  FileCheck,
-  RefreshCw,
-  Eye,
-  Check,
-  Building2,
-  Stamp,
-  ShieldCheck,
-  Sliders,
   BookmarkCheck,
   PenTool,
-  Image,
+  Stamp,
+  Check,
+  Type,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import QRCode from 'qrcode';
-import jsPDF from 'jspdf';
 
 interface CertificateGeneratorModalProps {
   isOpen: boolean;
@@ -66,6 +62,16 @@ interface PresetOption {
 }
 
 const PRESET_CERTIFICATES: PresetOption[] = [
+  {
+    id: 'royal_crimson_prestige',
+    label: '🎖️ Royal Ruby & Gold Prestige',
+    icon: '🎖️',
+    title: 'CERTIFICATE OF APPRECIATION',
+    courseOrEvent: 'KCA Fujairah Cultural & Community Excellence Jubilee 2026',
+    citation: 'in grateful appreciation for outstanding dedication, exemplary contributions, and distinguished service to the community',
+    suggestedTemplateId: 'crimson_gold_luxury',
+    sealType: 'luxury_gold_rosette',
+  },
   {
     id: 'kalolsavam_winner',
     label: '🏆 Arts / Kalolsavam Winner',
@@ -140,13 +146,17 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
   selectedMembersForBulk = [],
   userSession,
 }) => {
-  const { customLogo } = useCustomLogo();
+  const { portalConfig } = usePortalConfig();
   const isUnitOp = !!userSession && isUnitOperatorRole(userSession.role);
   const defaultUnit = isUnitOp && userSession.unit ? userSession.unit : (initialUnit || units[0] || 'Fujairah');
 
   const [activeMode, setActiveMode] = useState<'single' | 'bulk'>('single');
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('classic_formal');
-  const [selectedSealType, setSelectedSealType] = useState<SealStyle>('gold_guilloche');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('crimson_gold_luxury');
+  const [selectedSealType, setSelectedSealType] = useState<SealStyle>('luxury_gold_rosette');
+  const [selectedTitleStyle, setSelectedTitleStyle] = useState<HeaderTitleStyle>(() =>
+    resolveEffectiveTitleStyle(portalConfig, 'certificate')
+  );
+  const [titleDefaultSaved, setTitleDefaultSaved] = useState(false);
   const [showWatermark, setShowWatermark] = useState<boolean>(true);
   const [numSignatories, setNumSignatories] = useState<2 | 3>(2);
 
@@ -156,9 +166,9 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
   // Single Certificate State (Ad-Hoc Manual Custom Generation)
   const [recipientName, setRecipientName] = useState(initialRecipientName || 'Smt. Ananya Nair');
   const [memberOrStudentId, setMemberOrStudentId] = useState(initialMemberId || 'KCA-FU-2026');
-  const [certTitle, setCertTitle] = useState('CERTIFICATE OF EXCELLENCE');
-  const [courseOrEvent, setCourseOrEvent] = useState(initialCourse || 'Annual Kerala Kalolsavam & Arts Festival');
-  const [citation, setCitation] = useState(initialCitation);
+  const [certTitle, setCertTitle] = useState('CERTIFICATE OF APPRECIATION');
+  const [courseOrEvent, setCourseOrEvent] = useState(initialCourse || 'KCA Fujairah Cultural & Community Excellence Jubilee 2026');
+  const [citation, setCitation] = useState(initialCitation || 'in grateful appreciation for outstanding dedication, exemplary contributions, and distinguished service to the community');
   const [unit, setUnit] = useState(defaultUnit);
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split('T')[0]);
   const [certNumber, setCertNumber] = useState(`KCA-CERT-${Date.now().toString().slice(-6)}`);
@@ -199,9 +209,23 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
       if (initialUnit) setUnit(initialUnit);
       if (initialCourse) setCourseOrEvent(initialCourse);
       if (initialCitation) setCitation(initialCitation);
+      setSelectedTitleStyle(resolveEffectiveTitleStyle(portalConfig, 'certificate'));
       setStoredSignatures(loadStoredSignatures());
     }
-  }, [isOpen, initialRecipientName, initialMemberId, initialUnit, initialCourse, initialCitation]);
+  }, [isOpen, initialRecipientName, initialMemberId, initialUnit, initialCourse, initialCitation, portalConfig]);
+
+  const handleApplyTitleDefault = () => {
+    const updated = {
+      ...portalConfig,
+      headerTitleStyle: selectedTitleStyle,
+      applyTitleToCertificates: selectedTitleStyle !== 'standard',
+      updatedAt: new Date().toISOString(),
+    };
+    savePortalConfig(updated);
+    pushCloudEntity('portalConfig', updated, userSession?.username || 'Admin');
+    setTitleDefaultSaved(true);
+    setTimeout(() => setTitleDefaultSaved(false), 2600);
+  };
 
   // If selectedMembersForBulk is provided, populate bulk rows
   useEffect(() => {
@@ -309,6 +333,7 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
     signatory3SignatureUrl: numSignatories === 3 ? signatory3SignatureUrl : undefined,
     sealType: selectedSealType,
     showWatermark,
+    titleStyle: selectedTitleStyle,
   };
 
   const handleDownloadSinglePdf = async () => {
@@ -325,9 +350,18 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
     try {
       const pdf = await generateCertificatePdf(currentCertificateData);
       pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
-    } catch (err) {
-      console.error('Error printing certificate:', err);
+      const blobUrl = pdf.output('bloburl');
+      const win = window.open(blobUrl, '_blank');
+      if (!win) {
+        pdf.save(`${(currentCertificateData.recipientName || 'Certificate').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+      }
+    } catch {
+      try {
+        const pdf = await generateCertificatePdf(currentCertificateData);
+        pdf.save(`${(currentCertificateData.recipientName || 'Certificate').replace(/[^a-zA-Z0-9]/g, '_')}.pdf`);
+      } catch (err) {
+        console.error('Error generating certificate PDF:', err);
+      }
     }
   };
 
@@ -426,45 +460,36 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
     setBulkProgress(0);
 
     try {
-      let combinedDoc: jsPDF | null = null;
+      const batchStamp = Date.now().toString().slice(-4);
+      const idPrefix = portalConfig.idPrefix || 'KCA';
+      const records: CertificateData[] = bulkCsvRows.map((row, i) => ({
+        certNumber: `${idPrefix}-BULK-${batchStamp}-${i + 1}`,
+        templateId: selectedTemplateId,
+        recipientName: row.recipientName || 'Candidate',
+        memberOrStudentId: row.memberOrStudentId || '',
+        title: row.title || certTitle,
+        courseOrEvent: row.courseOrEvent || courseOrEvent,
+        citation: row.citation || citation,
+        unit: row.unit || unit,
+        issueDate: row.issueDate || issueDate,
+        norkaRegNumber: row.norkaRegNumber || norkaRegNumber,
+        signatory1Name: row.signatory1Name || signatory1Name,
+        signatory1Title: row.signatory1Title || signatory1Title,
+        signatory1SignatureUrl,
+        signatory2Name: row.signatory2Name || signatory2Name,
+        signatory2Title: row.signatory2Title || signatory2Title,
+        signatory2SignatureUrl,
+        signatory3Name: numSignatories === 3 ? signatory3Name : undefined,
+        signatory3Title: numSignatories === 3 ? signatory3Title : undefined,
+        signatory3SignatureUrl: numSignatories === 3 ? signatory3SignatureUrl : undefined,
+        sealType: selectedSealType,
+        showWatermark,
+        titleStyle: selectedTitleStyle,
+      }));
 
-      for (let i = 0; i < bulkCsvRows.length; i++) {
-        const row = bulkCsvRows[i];
-        const certData: CertificateData = {
-          certNumber: `KCA-BULK-${Date.now().toString().slice(-4)}-${i + 1}`,
-          templateId: selectedTemplateId,
-          recipientName: row.recipientName || 'Candidate',
-          memberOrStudentId: row.memberOrStudentId || '',
-          title: row.title || certTitle,
-          courseOrEvent: row.courseOrEvent || courseOrEvent,
-          citation: row.citation || citation,
-          unit: row.unit || unit,
-          issueDate: row.issueDate || issueDate,
-          norkaRegNumber: row.norkaRegNumber || norkaRegNumber,
-          signatory1Name: row.signatory1Name || signatory1Name,
-          signatory1Title: row.signatory1Title || signatory1Title,
-          signatory2Name: row.signatory2Name || signatory2Name,
-          signatory2Title: row.signatory2Title || signatory2Title,
-          signatory3Name: numSignatories === 3 ? signatory3Name : undefined,
-          signatory3Title: numSignatories === 3 ? signatory3Title : undefined,
-          sealType: selectedSealType,
-          showWatermark,
-        };
-
-        const singlePdf = await generateCertificatePdf(certData);
-        if (i === 0) {
-          combinedDoc = singlePdf;
-        } else if (combinedDoc) {
-          combinedDoc.addPage('a4', 'landscape');
-        }
-
-        setBulkProgress(Math.round(((i + 1) / bulkCsvRows.length) * 100));
-      }
-
-      if (combinedDoc) {
-        combinedDoc.save(`KCA_Bulk_${bulkCsvRows.length}_Certificates.pdf`);
-      }
-      setBulkDoneMessage(`Successfully exported ${bulkCsvRows.length} certificates in official NORKA format!`);
+      const combinedDoc = await generateBulkCertificatesPdf(records, (pct) => setBulkProgress(pct));
+      combinedDoc.save(`${idPrefix}_Bulk_${bulkCsvRows.length}_Certificates.pdf`);
+      setBulkDoneMessage(`Successfully exported ${bulkCsvRows.length} certificates!`);
       confetti({ particleCount: 70, spread: 80 });
     } catch (err) {
       console.error('Error during bulk generation:', err);
@@ -618,6 +643,59 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
             </div>
           </div>
 
+          {/* Organization Title Lockup Controls (Applies to Single & Bulk Certificates) */}
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs flex flex-wrap items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2">
+              <Type className="w-4 h-4 text-rose-700 dark:text-rose-400 shrink-0" />
+              <div>
+                <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                  Organization Header Title Style
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Choose Official KCA Title Lockup, Uploaded Title Graphic, or Classic Header
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(
+                [
+                  { id: 'official_lockup', label: 'Official KCA Title' },
+                  { id: 'title_graphic', label: 'Title Graphic Image' },
+                  { id: 'standard', label: 'Standard Text Header' },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setSelectedTitleStyle(opt.id)}
+                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold border transition-all cursor-pointer ${
+                    selectedTitleStyle === opt.id
+                      ? 'bg-[#881337] text-white border-[#881337] shadow-xs'
+                      : 'bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-600 hover:border-slate-400'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+
+              <button
+                type="button"
+                onClick={handleApplyTitleDefault}
+                className="px-2.5 py-1.5 rounded-lg text-[11px] font-bold border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1"
+              >
+                {titleDefaultSaved ? (
+                  <>
+                    <Check className="w-3 h-3 text-emerald-600" />
+                    <span>Default Saved!</span>
+                  </>
+                ) : (
+                  <span>Set Default for All Certificates</span>
+                )}
+              </button>
+            </div>
+          </div>
+
           {/* SINGLE MODE */}
           {activeMode === 'single' && (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -646,8 +724,9 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
                     </label>
                   </div>
 
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                     {[
+                      { id: 'luxury_gold_rosette', label: 'Ruby Rosette' },
                       { id: 'gold_guilloche', label: 'Gold Guilloche' },
                       { id: 'royal_ribbon', label: 'Royal Ribbon' },
                       { id: 'association_crest', label: 'Embossed Crest' },
@@ -1003,6 +1082,69 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
                       style={{ borderColor: selectedTemplate.accentColor }}
                     />
 
+                    {/* Low-Poly Faceted Ruby Geometric Frame & Corner Brackets for crimson_gold_luxury */}
+                    {selectedTemplate.id === 'crimson_gold_luxury' && (
+                      <>
+                        {/* Top-Left Facets */}
+                        <svg className="absolute top-0 left-0 w-24 h-24 sm:w-28 sm:h-28 pointer-events-none z-0" viewBox="0 0 100 100" fill="none">
+                          <polygon points="0,0 70,0 30,28" fill="#7f1d1d" opacity="0.95" />
+                          <polygon points="0,0 30,28 0,70" fill="#881337" opacity="0.95" />
+                          <polygon points="70,0 100,0 55,30" fill="#450a0a" opacity="0.9" />
+                          <polygon points="0,70 0,100 30,55" fill="#991b1b" opacity="0.9" />
+                          <polygon points="30,28 55,30 30,55" fill="#be123c" opacity="0.85" />
+                          <polygon points="55,30 75,20 78,0" fill="#d97706" opacity="0.95" />
+                          <polygon points="30,55 20,75 0,78" fill="#f59e0b" opacity="0.95" />
+                          <line x1="0" y1="0" x2="30" y2="28" stroke="#f59e0b" strokeWidth="0.8" />
+                          <line x1="30" y1="28" x2="55" y2="30" stroke="#f59e0b" strokeWidth="0.8" />
+                        </svg>
+
+                        {/* Top-Right Facets */}
+                        <svg className="absolute top-0 right-0 w-24 h-24 sm:w-28 sm:h-28 pointer-events-none z-0" viewBox="0 0 100 100" fill="none">
+                          <polygon points="100,0 30,0 70,28" fill="#7f1d1d" opacity="0.95" />
+                          <polygon points="100,0 70,28 100,70" fill="#881337" opacity="0.95" />
+                          <polygon points="30,0 0,0 45,30" fill="#450a0a" opacity="0.9" />
+                          <polygon points="100,70 100,100 70,55" fill="#991b1b" opacity="0.9" />
+                          <polygon points="70,28 45,30 70,55" fill="#be123c" opacity="0.85" />
+                          <polygon points="45,30 25,20 22,0" fill="#d97706" opacity="0.95" />
+                          <polygon points="70,55 80,75 100,78" fill="#f59e0b" opacity="0.95" />
+                          <line x1="100" y1="0" x2="70" y2="28" stroke="#f59e0b" strokeWidth="0.8" />
+                          <line x1="70" y1="28" x2="45" y2="30" stroke="#f59e0b" strokeWidth="0.8" />
+                        </svg>
+
+                        {/* Bottom-Left Facets */}
+                        <svg className="absolute bottom-0 left-0 w-24 h-24 sm:w-28 sm:h-28 pointer-events-none z-0" viewBox="0 0 100 100" fill="none">
+                          <polygon points="0,100 70,100 30,72" fill="#881337" opacity="0.95" />
+                          <polygon points="0,100 30,72 0,30" fill="#7f1d1d" opacity="0.95" />
+                          <polygon points="70,100 100,100 55,70" fill="#450a0a" opacity="0.9" />
+                          <polygon points="0,30 0,0 30,45" fill="#991b1b" opacity="0.9" />
+                          <polygon points="30,72 55,70 30,45" fill="#be123c" opacity="0.85" />
+                          <polygon points="55,70 75,80 78,100" fill="#d97706" opacity="0.95" />
+                          <polygon points="30,45 20,25 0,22" fill="#f59e0b" opacity="0.95" />
+                          <line x1="0" y1="100" x2="30" y2="72" stroke="#f59e0b" strokeWidth="0.8" />
+                          <line x1="30" y1="72" x2="55" y2="70" stroke="#f59e0b" strokeWidth="0.8" />
+                        </svg>
+
+                        {/* Bottom-Right Facets */}
+                        <svg className="absolute bottom-0 right-0 w-24 h-24 sm:w-28 sm:h-28 pointer-events-none z-0" viewBox="0 0 100 100" fill="none">
+                          <polygon points="100,100 30,100 70,72" fill="#881337" opacity="0.95" />
+                          <polygon points="100,100 70,72 100,30" fill="#7f1d1d" opacity="0.95" />
+                          <polygon points="30,100 0,100 45,70" fill="#450a0a" opacity="0.9" />
+                          <polygon points="100,30 100,0 70,45" fill="#991b1b" opacity="0.9" />
+                          <polygon points="70,72 45,70 70,45" fill="#be123c" opacity="0.85" />
+                          <polygon points="45,70 25,80 22,100" fill="#d97706" opacity="0.95" />
+                          <polygon points="70,45 80,25 100,22" fill="#f59e0b" opacity="0.95" />
+                          <line x1="100" y1="100" x2="70" y2="72" stroke="#f59e0b" strokeWidth="0.8" />
+                          <line x1="70" y1="72" x2="45" y2="70" stroke="#f59e0b" strokeWidth="0.8" />
+                        </svg>
+
+                        {/* Gold Corner Brackets */}
+                        <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 border-amber-500 pointer-events-none" />
+                        <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 border-amber-500 pointer-events-none" />
+                        <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 border-amber-500 pointer-events-none" />
+                        <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 border-amber-500 pointer-events-none" />
+                      </>
+                    )}
+
                     {/* Watermark Background Graphic (if enabled - calibrated ultra-subtle ~3.5% opacity) */}
                     {showWatermark && (
                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.035]">
@@ -1029,10 +1171,10 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
                       </div>
                     )}
 
-                    {/* Top Row: QR, Header, Logo */}
-                    <div className="flex items-start justify-between relative z-10">
+                    {/* Top Row: QR, Header, Logo/Meta */}
+                    <div className="flex items-start justify-between relative z-10 gap-2">
                       {/* Left: QR code */}
-                      <div className="flex flex-col items-center">
+                      <div className="flex flex-col items-center shrink-0">
                         {qrCodeDataUrl ? (
                           <img
                             src={qrCodeDataUrl}
@@ -1048,32 +1190,74 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
                       </div>
 
                       {/* Center: Title & Org Header */}
-                      <div className="text-center flex-1 px-3">
-                        <div className="flex items-center justify-center gap-1.5 mb-0.5">
-                          <span
-                            className="font-display font-black text-sm sm:text-base tracking-tight uppercase"
-                            style={{ color: selectedTemplate.primaryColor }}
-                          >
-                            KAIRALI CULTURAL ASSOCIATION FUJAIRAH
-                          </span>
-                        </div>
-                        <div
-                          className="font-bold text-[9.5px] sm:text-[10.5px] tracking-wide"
-                          style={{ color: selectedTemplate.accentColor }}
-                        >
-                          A Norka affiliated Organisation
-                        </div>
-                        <div className="text-[8.5px] text-slate-500 font-medium">
-                          {unit === 'Central' ? 'Central Committee' : `${unit} Unit`} • {OFFICIAL_LOCATION}
-                        </div>
+                      <div className="text-center flex-1 px-2 flex flex-col items-center justify-center min-w-0">
+                        {selectedTitleStyle !== 'standard' ? (
+                          <>
+                            <BrandTitleLockup
+                              styleMode={selectedTitleStyle}
+                              portalConfig={portalConfig}
+                              variant="certificate"
+                              logoSize={40}
+                              primaryColor={selectedTemplate.primaryColor}
+                            />
+                            <div
+                              className="font-bold text-[9px] sm:text-[10px] tracking-wide mt-0.5 truncate max-w-full"
+                              style={{ color: selectedTemplate.accentColor }}
+                            >
+                              {portalConfig.affiliationText || portalConfig.subtitle} •{' '}
+                              {unit === 'Central'
+                                ? 'Central Committee'
+                                : `${unit} ${portalConfig.unitTerm || 'Unit'}`}
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center justify-center gap-1.5 mb-0.5">
+                              <span
+                                className="font-display font-black text-sm sm:text-base tracking-tight uppercase"
+                                style={{ color: selectedTemplate.primaryColor }}
+                              >
+                                {portalConfig.portalName}
+                              </span>
+                            </div>
+                            <div
+                              className="font-bold text-[9.5px] sm:text-[10.5px] tracking-wide"
+                              style={{ color: selectedTemplate.accentColor }}
+                            >
+                              {portalConfig.affiliationText || portalConfig.subtitle}
+                            </div>
+                            <div className="text-[8.5px] text-slate-500 font-medium">
+                              {unit === 'Central'
+                                ? 'Central Committee'
+                                : `${unit} ${portalConfig.unitTerm || 'Unit'}`}{' '}
+                              • {portalConfig.jurisdiction}
+                            </div>
+                          </>
+                        )}
                       </div>
 
-                      {/* Right: Official Logo / Emblem (Clean, no stray number) */}
-                      <div className="flex flex-col items-center">
-                        <div className="w-12 h-12 p-0.5 bg-white rounded-full shadow-xs border border-slate-200 flex items-center justify-center overflow-hidden">
-                          <KcaLogo size={42} />
+                      {/* Right: Metadata Box (Lockup/Graphic modes already embed circular emblem) or Right Logo */}
+                      {selectedTitleStyle !== 'standard' ? (
+                        <div className="flex flex-col items-end text-right shrink-0 pt-0.5">
+                          <span className="text-[7.5px] font-mono font-bold text-slate-600">
+                            CERT: {certNumber}
+                          </span>
+                          <span className="text-[7.5px] font-mono font-bold text-slate-500">
+                            DATE: {issueDate}
+                          </span>
+                          {norkaRegNumber && (
+                            <span className="text-[6.5px] font-mono text-slate-400">
+                              REG: {norkaRegNumber}
+                            </span>
+                          )}
                         </div>
-                      </div>
+                      ) : (
+                        <div className="flex flex-col items-center shrink-0">
+                          <div className="w-12 h-12 p-0.5 bg-white rounded-full shadow-xs border border-slate-200 flex items-center justify-center overflow-hidden">
+                            <KcaLogo size={42} />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Middle: Recipient & Citation */}
@@ -1095,14 +1279,14 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
 
                       {memberOrStudentId && (
                         <div className="text-[8.5px] font-mono font-bold text-slate-600 mb-0.5">
-                          ID / REG: {memberOrStudentId} • {unit === 'Central' ? 'Central Committee' : `${unit} Unit`}
+                          ID / REG: {memberOrStudentId} • {unit === 'Central' ? 'Central Committee' : `${unit} ${portalConfig.unitTerm || 'Unit'}`}
                         </div>
                       )}
 
                       <p className="text-[10.5px] sm:text-xs text-slate-700 italic max-w-xl mx-auto leading-relaxed mt-1">
                         {citation} during the{' '}
-                        <span className="font-bold not-italic text-slate-900">{courseOrEvent}</span> conducted by
-                        Kairali Cultural Association Fujairah.
+                        <span className="font-bold not-italic text-slate-900">{courseOrEvent}</span> conducted by{' '}
+                        {portalConfig.portalName}.
                       </p>
 
                       {/* Graphic Seal Stamp in Live Preview */}
@@ -1121,6 +1305,19 @@ export const CertificateGeneratorModal: React.FC<CertificateGeneratorModalProps>
                               className="absolute inset-1 rounded-full border border-dashed pointer-events-none"
                               style={{ borderColor: selectedTemplate.accentColor }}
                             />
+
+                            {selectedSealType === 'luxury_gold_rosette' && (
+                              <div className="relative flex flex-col items-center">
+                                <span className="text-[6.5px] font-black uppercase tracking-tight text-amber-700 leading-none">KAIRALI</span>
+                                <span className="text-[9px] font-black text-amber-600 my-0.5 leading-none">★ ★ ★</span>
+                                <span className="text-[5.5px] font-black uppercase tracking-wider text-rose-950 leading-none">HONOR</span>
+                                {/* Rosette Ribbon Tails */}
+                                <div className="absolute -bottom-3 flex justify-center gap-1 pointer-events-none">
+                                  <div className="w-2.5 h-3.5 bg-[#881337] border-b border-l border-amber-400 -rotate-12 shadow-2xs" />
+                                  <div className="w-2.5 h-3.5 bg-[#881337] border-b border-r border-amber-400 rotate-12 shadow-2xs" />
+                                </div>
+                              </div>
+                            )}
 
                             {selectedSealType === 'gold_guilloche' && (
                               <>

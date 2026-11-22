@@ -1,7 +1,8 @@
 import QRCode from 'qrcode';
-import { Member } from '../types/member';
+import { Member, BloodGroup } from '../types/member';
 import { PUBLISHED_PORTAL_URL } from '../config/constants';
 import { transliterateEnglishToMalayalam } from './malayalamTransliterate';
+import { loadPortalConfig } from './storage';
 
 /**
  * Returns the public base URL for member verification and card downloads.
@@ -173,7 +174,7 @@ export function createFullMemberFromPartial(emb: Partial<Member>, fallbackId: st
     gender: emb.gender || 'Male',
     dateOfBirth: emb.dateOfBirth || '1990-01-01',
     joinDate: emb.joinDate || '2024-01-01',
-    bloodGroup: emb.bloodGroup || 'O+',
+    bloodGroup: (emb.bloodGroup as BloodGroup) || '',
     unit: emb.unit || 'Fujairah',
     photoUrl: emb.photoUrl || '',
     expiryDate: emb.expiryDate || '2026-12-31',
@@ -291,9 +292,18 @@ export function getUnitCode(unitName?: string): string {
  * Dibba             -> KCA-DB-
  * Central Committee -> KCA-CC-
  */
-export function getUnitIdPrefix(unitName?: string): string {
+export function getUnitIdPrefix(unitName?: string, customPrefix?: string): string {
+  let orgPrefix = customPrefix;
+  if (!orgPrefix) {
+    try {
+      const cfg = loadPortalConfig();
+      orgPrefix = cfg.idPrefix || 'KCA';
+    } catch {
+      orgPrefix = 'KCA';
+    }
+  }
   const code = getUnitCode(unitName);
-  return `KCA-${code}-`;
+  return `${orgPrefix.trim().toUpperCase()}-${code}-`;
 }
 
 /**
@@ -398,7 +408,7 @@ export async function generateMemberQrCode(member: Member): Promise<string> {
     `Member ID: ${member.membershipId}`,
     `Unit: ${member.unit} Unit`,
     `Membership Type: ${member.membershipType}`,
-    `Blood Group: ${formatCardBloodGroup(member.bloodGroup)}`,
+    member.bloodGroup ? `Blood Group: ${formatCardBloodGroup(member.bloodGroup)}` : '',
     `DOB: ${member.dateOfBirth}`,
     `Valid Thru: ${formatCardDate(member.expiryDate)}`,
     member.emiratesId ? `Emirates ID: ${member.emiratesId}` : '',
@@ -433,7 +443,7 @@ export async function generateMemberQrCode(member: Member): Promise<string> {
  * Format blood group for card: 'A+' -> 'A+ve', 'O-' -> 'O-ve'
  */
 export function formatCardBloodGroup(bg?: string): string {
-  if (!bg) return 'N/A';
+  if (!bg || !bg.trim()) return '—';
   if (bg.endsWith('+') && !bg.endsWith('+ve')) return `${bg}ve`;
   if (bg.endsWith('-') && !bg.endsWith('-ve')) return `${bg}ve`;
   return bg;
@@ -615,10 +625,13 @@ export function getExpiryStatus(expiryDate: string): {
  */
 export function isMemberEffectivelyActive(member: Member): boolean {
   if (!member) return false;
-  if (member.status === 'Inactive' || member.status === 'Suspended' || member.status === 'Expired') {
-    return false;
-  }
-  if (member.status === 'Pending') {
+  const normalizedStatus = String(member.status || '').trim().toLowerCase();
+  if (
+    normalizedStatus === 'inactive' ||
+    normalizedStatus === 'suspended' ||
+    normalizedStatus === 'expired' ||
+    normalizedStatus === 'pending'
+  ) {
     return false;
   }
   if (member.expiryDate) {
@@ -626,11 +639,11 @@ export function isMemberEffectivelyActive(member: Member): boolean {
     today.setHours(0, 0, 0, 0);
     const exp = new Date(member.expiryDate);
     exp.setHours(0, 0, 0, 0);
-    if (exp.getTime() < today.getTime()) {
+    if (!isNaN(exp.getTime()) && exp.getTime() < today.getTime()) {
       return false; // Unrenewed / expired membership is Inactive
     }
   }
-  return member.status === 'Active';
+  return normalizedStatus === 'active';
 }
 
 /**
@@ -638,7 +651,8 @@ export function isMemberEffectivelyActive(member: Member): boolean {
  */
 export function getEffectiveMemberStatus(member: Member): 'Active' | 'Inactive' | 'Pending' {
   if (!member) return 'Inactive';
-  if (member.status === 'Pending') return 'Pending';
+  const normalizedStatus = String(member.status || '').trim().toLowerCase();
+  if (normalizedStatus === 'pending') return 'Pending';
   return isMemberEffectivelyActive(member) ? 'Active' : 'Inactive';
 }
 

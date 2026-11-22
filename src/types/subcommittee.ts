@@ -51,7 +51,7 @@ export const PREDEFINED_SUBCOMMITTEES: SubcommitteeDefinition[] = [
     scope: 'Both',
     iconName: 'Globe',
     colorScheme: 'cyan',
-    description: 'Pravasi Raksha, NRI ID card liaison, emergency repatriation & welfare helpdesk',
+    description: 'Pravasi Raksha, NRI ID card services, emergency repatriation & welfare helpdesk',
     isSystem: true,
   },
   {
@@ -85,6 +85,18 @@ export const SUBCOMMITTEE_DESIGNATIONS = [
   'Coordinator',
   'Advisor',
   'Team Lead',
+];
+
+// Designations for Central & Executive Coordination Committees
+export const COORDINATION_COMMITTEE_DESIGNATIONS = [
+  'Chief Coordinator',
+  'Central Coordinator',
+  'Executive Coordinator',
+  'Convener',
+  'Joint Coordinator',
+  'Unit Coordinator',
+  'Operations Coordinator',
+  'Committee Member',
 ];
 
 export const STORAGE_KEY_CUSTOM_SUBCOMMITTEES = 'kca_fujairah_custom_subcommittees_v1';

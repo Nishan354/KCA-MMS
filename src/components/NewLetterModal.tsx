@@ -41,7 +41,7 @@ export const NewLetterModal: React.FC<NewLetterModalProps> = ({
   onCreateLetter,
 }) => {
   const [selectedUnit, setSelectedUnit] = useState<string>(currentUnit || 'Central');
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('tpl_general');
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('tpl_custom');
   const [customSubject, setCustomSubject] = useState<string>('');
   const [customToAddress, setCustomToAddress] = useState<string>('');
 
@@ -51,25 +51,25 @@ export const NewLetterModal: React.FC<NewLetterModalProps> = ({
   const refPreview = getNextReferenceNumber(selectedUnit);
 
   const templateIcons: Record<string, React.FC<{ className?: string }>> = {
-    tpl_general: FileText,
-    tpl_noc: ShieldCheck,
-    tpl_embassy: Globe,
-    tpl_sponsorship: HeartHandshake,
-    tpl_notice: BellRing,
-    tpl_appointment: UserPlus,
+    tpl_custom: FileText,
+    tpl_blank: PenTool,
+    tpl_general_noc: ShieldCheck,
+    tpl_embassy_repatriation: Globe,
+    tpl_sponsorship_appeal: HeartHandshake,
+    tpl_appointment_letter: UserPlus,
   };
 
   const selectedTemplate = DEFAULT_LETTER_TEMPLATES.find((t) => t.id === selectedTemplateId);
 
   const handleStartDraft = () => {
-    if (selectedTemplateId === 'blank') {
+    if (selectedTemplateId === 'tpl_blank' || selectedTemplateId === 'blank') {
       onCreateLetter({
         unit: selectedUnit,
         category: 'General',
-        subject: customSubject.trim() || 'OFFICIAL COMMUNICATION',
-        toAddress: customToAddress.trim() || 'To Whom It May Concern,\nRelevant Authorities,\nUnited Arab Emirates.',
+        subject: customSubject.trim(),
+        toAddress: customToAddress.trim(),
         salutation: 'Respected Sir / Madam,',
-        bodyHtml: '<p>Please write the official letter content here...</p>',
+        bodyHtml: '<p></p>',
       });
     } else if (selectedTemplate) {
       onCreateLetter({
@@ -191,50 +191,12 @@ export const NewLetterModal: React.FC<NewLetterModalProps> = ({
                         {isSelected && <Check className="w-3.5 h-3.5 text-[#881337] dark:text-rose-400 shrink-0" />}
                       </div>
                       <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
-                        {tpl.subject}
+                        {tpl.subject || 'Clean blank letterhead ready for custom typing or direct print'}
                       </p>
                     </div>
                   </button>
                 );
               })}
-
-              {/* Blank Custom Option */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedTemplateId('blank');
-                  setCustomSubject('');
-                  setCustomToAddress('');
-                }}
-                className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-3 sm:col-span-2 ${
-                  selectedTemplateId === 'blank'
-                    ? 'border-[#881337] bg-rose-50/50 dark:bg-rose-950/40 shadow-xs ring-1 ring-[#881337]/30'
-                    : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:border-slate-300 dark:hover:border-slate-600'
-                }`}
-              >
-                <div
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
-                    selectedTemplateId === 'blank'
-                      ? 'bg-[#881337] text-white'
-                      : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                  }`}
-                >
-                  <PenTool className="w-4 h-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-slate-900 dark:text-white">
-                      Blank Custom Letter
-                    </span>
-                    {selectedTemplateId === 'blank' && (
-                      <Check className="w-3.5 h-3.5 text-[#881337] dark:text-rose-400 shrink-0" />
-                    )}
-                  </div>
-                  <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                    Start from an empty official letterhead canvas with custom subject and body
-                  </p>
-                </div>
-              </button>
             </div>
           </div>
         </div>

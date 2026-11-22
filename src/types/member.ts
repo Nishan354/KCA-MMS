@@ -1,10 +1,17 @@
+import { IdCardDesignId } from './cardDesign';
+
 export type MembershipType = 'General Member' | 'Executive Member' | 'Central Committee Member';
+
+export type CoordinationCommitteeType =
+  | 'Central Coordination Committee'
+  | 'Executive Coordination Committee'
+  | '';
 
 export type RegistrationCategory = 'New' | 'Renewal';
 
 export type MemberStatus = 'Active' | 'Inactive' | 'Expired' | 'Pending' | 'Suspended';
 
-export type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'O+' | 'O-' | 'AB+' | 'AB-';
+export type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'O+' | 'O-' | 'AB+' | 'AB-' | '';
 
 export type UnitName = 'Fujairah' | 'Kalba' | 'Khorfakhan' | 'Dibba' | string;
 
@@ -83,6 +90,7 @@ export interface Member {
   unit: string; // "Fujairah", "Kalba", "Khorfakhan", "Dibba", etc.
   photoUrl: string; // Base64 or URL
   expiryDate: string; // Manually settable YYYY-MM-DD
+  cardDesign?: IdCardDesignId; // Custom ID card design override
   
   // Registration and Type tracking
   membershipType: MembershipType;
@@ -92,16 +100,27 @@ export interface Member {
   status: MemberStatus;
 
   // Committee & Subcommittee Framework
-  committeeTier?: 'Central' | 'Unit' | 'General';
+  committeeTier?: 'Central' | 'Unit' | 'General' | 'Central Coordination' | 'Executive Coordination';
   subcommittee?: string; // e.g. 'Ladies Wing', 'Bala Kairali', 'Sports Wing', etc.
   designation?: string; // e.g. 'President', 'General Secretary', 'Convener', etc.
+
+  // Coordination Committee Layer (Between Central Committee & Unit Committees)
+  coordinationCommittee?: CoordinationCommitteeType;
+  coordinationDesignation?: string; // e.g. 'Chief Coordinator', 'Central Coordinator', 'Executive Coordinator', 'Unit Coordinator'
+  coordinationAssignedDate?: string; // YYYY-MM-DD
+  coordinationNotes?: string;
 
   // Contact details
   phoneUAE: string; // e.g. +971 50 123 4567
   whatsapp?: string;
   email: string;
+  poBox?: string; // P.O. Box No in UAE
+  facebookId?: string; // Facebook ID
+  instagramId?: string; // Instagram ID
   emiratesId?: string; // 784-XXXX-XXXXXXX-X
+  emiratesIdExpiry?: string; // YYYY-MM-DD
   passportNumber?: string;
+  passportExpiry?: string; // YYYY-MM-DD
   norkaId?: string; // NORKA Pravasi ID / Reg Number
   norkaCardNumber?: string; // Physical NORKA Smart Card Serial
   norkaRegDate?: string; // NORKA Registration Date
@@ -109,11 +128,15 @@ export interface Member {
   norkaCategory?: 'Pravasi Raksha' | 'Pravasi Bhadratha' | 'NRK Identity Card' | 'General Member' | string;
   profession?: string;
   companyName?: string;
+  applicationNumber?: string; // Application Form No.
   
   // Addresses
   uaeAddress: string;
+  uaeArea?: string;
   keralaAddress: string;
   keralaDistrict: string; // e.g. Kozhikode, Kannur, Thrissur, Ernakulam, etc.
+  indiaMobile?: string;
+  indiaLandline?: string;
   
   // Emergency Contact
   emergencyContactName: string;
@@ -132,11 +155,16 @@ export interface Member {
 
   // Proposer / Introduced By (Reference Member)
   introducedBy?: {
+    type?: 'existing' | 'manual' | 'none' | string;
     memberId?: string; // e.g. internal ID
     membershipId?: string; // e.g. KCA-FU-1001
     name?: string;
     phone?: string;
   } | string;
+
+  // Signatures for Membership Application Form
+  applicantSignatureUrl?: string;
+  proposerSignatureUrl?: string;
 
   // Dynamic Custom Fields Store (key: customFieldId -> value)
   customFields?: Record<string, any>;

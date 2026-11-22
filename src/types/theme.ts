@@ -34,7 +34,7 @@ export const THEME_PRESETS: ThemePreset[] = [
     primaryLight: '#ecfdf5',
     primaryBorder: '#6ee7b7',
     accent: '#34d399',
-    description: 'Fresh evergreen and rainforest hues of God\'s own country',
+    description: "Fresh evergreen and rainforest hues of God's own country",
   },
   {
     id: 'gulf_sapphire',

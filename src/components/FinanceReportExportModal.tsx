@@ -151,9 +151,22 @@ export const FinanceReportExportModal: React.FC<FinanceReportExportModalProps> =
         userSession?.fullName || 'Finance Coordinator'
       );
       pdf.autoPrint();
-      window.open(pdf.output('bloburl'), '_blank');
-    } catch (err) {
-      console.error('Error printing finance report:', err);
+      const blobUrl = pdf.output('bloburl');
+      const win = window.open(blobUrl, '_blank');
+      if (!win) {
+        pdf.save(`KCA_Finance_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      }
+    } catch {
+      try {
+        const pdf = await generateFinanceReportPdf(
+          transactions,
+          reportFilter,
+          userSession?.fullName || 'Finance Coordinator'
+        );
+        pdf.save(`KCA_Finance_Report_${new Date().toISOString().split('T')[0]}.pdf`);
+      } catch (err) {
+        console.error('Error generating finance report PDF:', err);
+      }
     } finally {
       setIsGenerating(false);
     }

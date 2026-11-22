@@ -33,7 +33,10 @@ export interface KcaCloudState {
   lastUpdated: string;
   updatedBy: string;
   members: any[];
+  studentsWing?: any[];
   financeTransactions: any[];
+  financialParticulars?: any[];
+  unitCashBalances?: any[];
   inventoryItems: any[];
   inventoryLogs: any[];
   classes: any[];
@@ -43,6 +46,11 @@ export interface KcaCloudState {
   auditLogs: any[];
   units: string[];
   customFields: any[];
+  generalDocuments?: any[];
+  officialLetters?: any[];
+  letterSeriesConfig?: any;
+  contactBank?: any[];
+  storedSignatures?: any[];
   customLogoUrl?: string;
   portalTheme?: any;
 }
@@ -328,7 +336,10 @@ function extractStateFromRow(row: any): KcaCloudState | null {
       lastUpdated: row.updated_at || p.lastUpdated || row.lastUpdated || new Date().toISOString(),
       updatedBy: row.updated_by || p.updatedBy || row.lastUpdatedBy || 'Remote User',
       members: resolvedMembers,
+      studentsWing: Array.isArray(p.studentsWing) ? p.studentsWing : Array.isArray(row.studentsWing) ? row.studentsWing : [],
       financeTransactions: Array.isArray(p.financeTransactions) ? p.financeTransactions : Array.isArray(row.financeTransactions) ? row.financeTransactions : [],
+      financialParticulars: Array.isArray(p.financialParticulars) ? p.financialParticulars : Array.isArray(row.financialParticulars) ? row.financialParticulars : [],
+      unitCashBalances: Array.isArray(p.unitCashBalances) ? p.unitCashBalances : Array.isArray(row.unitCashBalances) ? row.unitCashBalances : [],
       inventoryItems: Array.isArray(p.inventoryItems) ? p.inventoryItems : Array.isArray(row.inventoryItems) ? row.inventoryItems : [],
       inventoryLogs: Array.isArray(p.inventoryLogs) ? p.inventoryLogs : Array.isArray(row.inventoryLogs) ? row.inventoryLogs : [],
       classes: Array.isArray(p.classes) ? p.classes : Array.isArray(row.classes) ? row.classes : [],
@@ -338,6 +349,11 @@ function extractStateFromRow(row: any): KcaCloudState | null {
       auditLogs: Array.isArray(p.auditLogs) ? p.auditLogs : Array.isArray(row.auditLogs) ? row.auditLogs : [],
       units: Array.isArray(p.units) && p.units.length > 0 ? p.units : Array.isArray(row.units) && row.units.length > 0 ? row.units : INITIAL_UNITS,
       customFields: Array.isArray(p.customFields) && p.customFields.length > 0 ? p.customFields : Array.isArray(row.customFields) && row.customFields.length > 0 ? row.customFields : INITIAL_CUSTOM_FIELDS,
+      generalDocuments: Array.isArray(p.generalDocuments) ? p.generalDocuments : Array.isArray(row.generalDocuments) ? row.generalDocuments : [],
+      officialLetters: Array.isArray(p.officialLetters) ? p.officialLetters : Array.isArray(row.officialLetters) ? row.officialLetters : [],
+      letterSeriesConfig: p.letterSeriesConfig || row.letterSeriesConfig || undefined,
+      contactBank: Array.isArray(p.contactBank) ? p.contactBank : Array.isArray(row.contactBank) ? row.contactBank : [],
+      storedSignatures: Array.isArray(p.storedSignatures) ? p.storedSignatures : Array.isArray(row.storedSignatures) ? row.storedSignatures : [],
       customLogoUrl: p.customLogoUrl || branding?.customLogo || row.customLogoUrl || undefined,
       portalTheme: p.portalTheme || branding?.portalTheme || undefined,
     };
@@ -523,7 +539,10 @@ export async function pushCloudEntity(
   const payloadBundle = {
     appData: {
       members: cachedCloudState.members,
+      studentsWing: cachedCloudState.studentsWing,
       financeTransactions: cachedCloudState.financeTransactions,
+      financialParticulars: cachedCloudState.financialParticulars,
+      unitCashBalances: cachedCloudState.unitCashBalances,
       inventoryItems: cachedCloudState.inventoryItems,
       inventoryLogs: cachedCloudState.inventoryLogs,
       classes: cachedCloudState.classes,
@@ -533,6 +552,11 @@ export async function pushCloudEntity(
       auditLogs: cachedCloudState.auditLogs,
       units: cachedCloudState.units,
       customFields: cachedCloudState.customFields,
+      generalDocuments: cachedCloudState.generalDocuments,
+      officialLetters: cachedCloudState.officialLetters,
+      letterSeriesConfig: cachedCloudState.letterSeriesConfig,
+      contactBank: cachedCloudState.contactBank,
+      storedSignatures: cachedCloudState.storedSignatures,
       customLogoUrl: cachedCloudState.customLogoUrl,
       portalTheme: cachedCloudState.portalTheme,
     },
